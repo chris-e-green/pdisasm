@@ -20,7 +20,7 @@ final class SmokeTests: XCTestCase {
 
     func testDecodeEmptyProcedures() throws {
         // ensure we can construct and inspect a Procedure without crashing
-        var proc = Procedure()
+        let proc = Procedure()
         XCTAssertEqual(proc.instructions.count, 0)
         XCTAssertEqual(proc.entryPoints.count, 0)
         // set some values and ensure they persist

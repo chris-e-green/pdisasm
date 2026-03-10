@@ -22,7 +22,7 @@ final class SkippedProcedureTests: XCTestCase {
 
         // Run the minimal processing loop: build codeSeg and ensure procedure pointer is skipped
         let codeBlock = code
-        var codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: []), procedures: [])
+        let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: []), procedures: [])
         codeSeg.procedureDictionary = ProcedureDictionary(segment: Int(codeBlock[codeBlock.endIndex - 2]), procedureCount: Int(codeBlock[codeBlock.endIndex - 1]), procedurePointers: [])
         for i in 1...codeSeg.procedureDictionary.procedureCount {
             let ptrIndex = codeBlock.endIndex - i * 2 - 2
@@ -47,8 +47,7 @@ final class SkippedProcedureTests: XCTestCase {
             let maxNeededIndex = addr + 1
             if minNeededIndex < 0 || maxNeededIndex >= inCode.count { continue }
 
-            var allLabels: Set<Location> = []
-            decodePascalProcedure(currSeg: seg, proc: &proc, code: inCode, addr: addr, callers: &allCallers, allLocations: &allLocations, allProcedures: &allProcedures, allLabels: &allLabels)
+            decodePascalProcedure(currSeg: seg, procedureNumber: 1, proc: &proc, code: inCode, addr: addr, callers: &allCallers, allLocations: &allLocations, allProcedures: &allProcedures)
         }
 
         // No procedures should have been decoded for the out-of-range pointer

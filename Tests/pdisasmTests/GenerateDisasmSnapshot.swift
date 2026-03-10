@@ -67,13 +67,12 @@ final class GenerateDisasmSnapshot: XCTestCase {
         // Prepare empty contexts to call outputResults
         let codeSegs: [Int: CodeSegment] = [:]
         let allLocations: Set<Location> = []
-        let allLabels: Set<Location> = []
         let allProcedures: [ProcIdentifier] = []
         let allCallers: Set<Call> = []
 
         // Redirect stdout to the output file
         freopen(outPath, "w", stdout)
-        outputResults(sourceFilename: fileURL.lastPathComponent, segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allLabels: allLabels, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: fileURL.lastPathComponent, segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
         fflush(stdout)
     }
 }

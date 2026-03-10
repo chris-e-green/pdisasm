@@ -4,8 +4,7 @@ import Foundation
 
 final class NoCrashIntegrationTests: XCTestCase {
     func testProcessRealFixtureDoesNotCrash() throws {
-        let fixturePath = "Tests/Fixtures/sample.bin"
-        let fileURL = URL(fileURLWithPath: fixturePath)
+        let fileURL = Bundle.module.url(forResource: "sample", withExtension: "bin", subdirectory: "Fixtures")!
         let data = try Data(contentsOf: fileURL)
 
         // Reuse logic from main: build segDict and iterate segments, but don't assert output.
@@ -75,7 +74,7 @@ final class NoCrashIntegrationTests: XCTestCase {
                 }
             }
 
-            var codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: []), procedures: [])
+            let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: []), procedures: [])
             // Build pointers safely
             if code.count >= 2 {
                 codeSeg.procedureDictionary = ProcedureDictionary(segment: Int(code[code.endIndex - 2]), procedureCount: Int(code[code.endIndex - 1]), procedurePointers: [])
@@ -102,8 +101,7 @@ final class NoCrashIntegrationTests: XCTestCase {
                 if minNeededIndex < 0 || maxNeededIndex >= inCode.count { continue }
 
                 // call decoder; should not crash due to prior guards
-                var allLabels: Set<Location> = []
-                decodePascalProcedure(currSeg: seg, proc: &proc, code: inCode, addr: addr, callers: &allCallers, allLocations: &allLocations, allProcedures: &allProcedures, allLabels: &allLabels)
+                decodePascalProcedure(currSeg: seg, procedureNumber: 1, proc: &proc, code: inCode, addr: addr, callers: &allCallers, allLocations: &allLocations, allProcedures: &allProcedures)
             }
 
             allCodeSegs[Int(seg.segNum)] = codeSeg

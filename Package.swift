@@ -40,7 +40,8 @@ let package = Package(
         ),
         .testTarget(
             name: "pdisasmTests",
-            dependencies: ["pdisasm"]
+            dependencies: ["pdisasm"],
+            resources: [.copy("Fixtures")],
         ),
     ],
     swiftLanguageModes: [.v6]

@@ -3,15 +3,15 @@ import XCTest
 
 final class CallReturnNonDenseTests: XCTestCase {
     func testCallPushesReturnIPAndCreatesFrameNonDense() throws {
-        var proc = Procedure()
+        let proc = Procedure()
         proc.enterIC = 100
         proc.exitIC = 120
         proc.procType = ProcIdentifier(isFunction: false, segment: 0, segmentName: "PASCALSY", procedure: 1)
 
         // Non-dense caller: 100,110,120
-        proc.instructions[100] = Instruction(mnemonic: "SLDC", params: [7], stackState: [])
-        proc.instructions[110] = Instruction(mnemonic: "CIP", params: [2], stackState: []) // call proc #2
-        proc.instructions[120] = Instruction(mnemonic: "RNP", params: [], stackState: [])
+        proc.instructions[100] = Instruction(opcode: 7, mnemonic: "SLDC", params: [7], stackState: [])
+        proc.instructions[110] = Instruction(opcode: 0xae, mnemonic: "CIP", params: [2], stackState: []) // call proc #2
+        proc.instructions[120] = Instruction(opcode: 0xad, mnemonic: "RNP", params: [], stackState: [])
 
         let insns = simInsns(from: proc)
         let sortedICs = insns.map { $0.ic }.sorted()
@@ -41,13 +41,13 @@ final class CallReturnNonDenseTests: XCTestCase {
     }
 
     func testCalleeRNPSignalsReturn() throws {
-        var proc = Procedure()
+        let proc = Procedure()
         proc.enterIC = 200
         proc.exitIC = 210
         proc.procType = ProcIdentifier(isFunction: false, segment: 0, segmentName: "PASCALSY", procedure: 2)
 
-        proc.instructions[200] = Instruction(mnemonic: "SLDC", params: [3], stackState: [])
-        proc.instructions[210] = Instruction(mnemonic: "RNP", params: [], stackState: [])
+        proc.instructions[200] = Instruction(opcode: 3, mnemonic: "SLDC", params: [3], stackState: [])
+        proc.instructions[210] = Instruction(opcode: 0xad, mnemonic: "RNP", params: [], stackState: [])
 
         let insns = simInsns(from: proc)
         let sortedICs = insns.map { $0.ic }.sorted()

@@ -53,19 +53,19 @@ final class PCIncrementTests: XCTestCase {
 
     func testSimulateProcedureCallsAndReturns() throws {
         // Caller procedure (procNumber 1) in segment 1
-        var caller = Procedure()
+        let caller = Procedure()
         caller.enterIC = 0
         caller.procType = ProcIdentifier(isFunction: false, isAssembly: false, segment: 1, segmentName: nil, procedure: 1, procName: nil)
-        caller.instructions[0] = Instruction(mnemonic: "SLDC", params: [7], stackState: [])
+        caller.instructions[0] = Instruction(opcode: 7, mnemonic: "SLDC", params: [7], stackState: [])
         // CIP uses a procedure number (2) which simulateProcedure will resolve via procMap
-        caller.instructions[10] = Instruction(mnemonic: "CIP", params: [2], stackState: [])
-        caller.instructions[20] = Instruction(mnemonic: "RNP", stackState: [])
+        caller.instructions[10] = Instruction(opcode: 0xae, mnemonic: "CIP", params: [2], stackState: [])
+        caller.instructions[20] = Instruction(opcode: 0xad, mnemonic: "RNP", stackState: [])
 
         // Callee procedure (procNumber 2) simply returns immediately
-        var callee = Procedure()
+        let callee = Procedure()
         callee.enterIC = 0
         callee.procType = ProcIdentifier(isFunction: false, isAssembly: false, segment: 1, segmentName: nil, procedure: 2, procName: nil)
-        callee.instructions[0] = Instruction(mnemonic: "RNP", stackState: [])
+        callee.instructions[0] = Instruction(opcode: 0xad, mnemonic: "RNP", stackState: [])
 
         // Build procMap keyed by (segment<<16)|procNumber using caller's segment
         let key = (caller.procType!.segment << 16) | 2

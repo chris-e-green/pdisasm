@@ -8,7 +8,6 @@ final class SnapshotTests: XCTestCase {
         let segDict = SegDictionary(segTable: [:], intrinsics: Set<UInt8>(), comment: "")
         let codeSegs: [Int: CodeSegment] = [:]
         let allLocations: Set<Location> = []
-        let allLabels: Set<Location> = []
         let allProcedures: [ProcIdentifier] = []
         let allCallers: Set<Call> = []
 
@@ -20,7 +19,7 @@ final class SnapshotTests: XCTestCase {
         dup2(pipefds[1], STDOUT_FILENO)
 
         // call the function
-        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allLabels: allLabels, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
 
         // restore stdout and read pipe
         fflush(stdout)

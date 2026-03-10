@@ -94,7 +94,7 @@ func decodePascalProcedure(
             var finalMnemonic = decoded.mnemonic
             var finalComment = decoded.comment
             var bytesConsumed = decoded.bytesConsumed
-            var params = decoded.params
+            let params = decoded.params
             var comparatorDataType: String = ""
 
             if decoded.requiresComparator {

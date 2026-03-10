@@ -3,16 +3,16 @@ import XCTest
 
 final class RunSimNonDenseICTests: XCTestCase {
     func testNonDenseICStepping() throws {
-        var proc = Procedure()
+        let proc = Procedure()
         proc.enterIC = 100
         proc.exitIC = 130
         proc.procType = ProcIdentifier(isFunction: false, segment: 0, segmentName: "PASCALSY", procedure: 1)
 
         // Non-dense instruction layout: 100, 110, 120, 130
-        proc.instructions[100] = Instruction(mnemonic: "SLDC", params: [1], stackState: [])
-        proc.instructions[110] = Instruction(mnemonic: "SLDC", params: [2], stackState: [])
-        proc.instructions[120] = Instruction(mnemonic: "ADI", params: [], stackState: [])
-        proc.instructions[130] = Instruction(mnemonic: "RNP", params: [], stackState: [])
+        proc.instructions[100] = Instruction(opcode: 1, mnemonic: "SLDC", params: [1], stackState: [])
+        proc.instructions[110] = Instruction(opcode: 2, mnemonic: "SLDC", params: [2], stackState: [])
+        proc.instructions[120] = Instruction(opcode: 0x82, mnemonic: "ADI", params: [], stackState: [])
+        proc.instructions[130] = Instruction(opcode: 0xad, mnemonic: "RNP", params: [], stackState: [])
 
         let insns = simInsns(from: proc)
         let sortedICs = insns.map { $0.ic }.sorted()

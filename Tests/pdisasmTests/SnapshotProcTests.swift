@@ -14,7 +14,6 @@ final class SnapshotProcTests: XCTestCase {
         codeSegs[0] = cs
 
         let allLocations: Set<Location> = []
-        let allLabels: Set<Location> = []
         let allProcedures: [ProcIdentifier] = []
         let allCallers: Set<Call> = []
 
@@ -25,7 +24,7 @@ final class SnapshotProcTests: XCTestCase {
         fflush(stdout)
         dup2(pipefds[1], STDOUT_FILENO)
 
-        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allLabels: allLabels, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
 
         fflush(stdout)
         dup2(originalStdout, STDOUT_FILENO)
@@ -46,7 +45,7 @@ final class SnapshotProcTests: XCTestCase {
         }
 
         // load fixture and check for key markers
-        let _ = try String(contentsOf: URL(fileURLWithPath: "Tests/Fixtures/sample_snapshot_proc.txt"))
+        let _ = try String(contentsOf: Bundle.module.url(forResource:"sample_snapshot_proc", withExtension: "txt", subdirectory: "Fixtures")!, encoding: .ascii)
         XCTAssertTrue(outStr.contains("## Segment Unknown (0)"), "Missing segment header")
         XCTAssertTrue(outStr.contains("###  (* P="), "Missing procedure header")
     }
