@@ -389,6 +389,15 @@ public func runPdisasm(
             }
             continue
         }
+        
+        if seg.segkind == .dataseg  {
+            // for the moment, ignore data segments. Need to work out how to parse.
+            if verbose {
+                print("Skipping segment \(seg.name) (segNum=\(seg.segNum)): segment kind is .dataseg")
+            }
+            continue
+        }
+            
 
         // This applies to the core pascal operating system file (SYSTEM.PASCAL).
         // Segment 0 (the PASCALSYSTEM segment) is actually split between
@@ -494,6 +503,14 @@ public func runPdisasm(
                 $0.segment == seg.segNum && $0.procedure == procNumber
             }) {
                 proc.procType = predefinedProc
+            } else {
+                proc.procType = ProcIdentifier(
+                    isFunction: false,
+                    isAssembly: isAssembler,
+                    segment: seg.segNum,
+                    procedure: procNumber
+                )
+                    
             }
 
             // go through the parameters/function return and set the

@@ -34,7 +34,7 @@ let package = Package(
                 .swiftLanguageMode(.v6)
             ]
         ),
-        .executableTarget(
+        .testTarget(
             name: "run-sim",
             dependencies: ["pdisasm"]
         ),
