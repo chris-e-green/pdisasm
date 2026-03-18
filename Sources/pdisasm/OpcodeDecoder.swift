@@ -269,13 +269,20 @@ struct OpcodeDecoder {
         case lde:
             let seg = Int(try cd.readByte(at: ic + 1))
             let (val, inc) = try cd.readBig(at: ic + 2)
+            let loc = Location(
+                segment: seg,
+                procedure: 0,
+                lexLevel: 0,
+                addr: val
+                )
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "LDE",
                 params: [seg, val],
                 bytesConsumed: 2 + inc,
                 comment:
-                    "Load extended word (word offset \(val) in data seg \(seg))"
+                    "Load extended word (word offset \(val) in data seg \(seg))",
+                memLocation: loc
             )
         case csp:
             let procNum = Int(try cd.readByte(at: ic + 1))

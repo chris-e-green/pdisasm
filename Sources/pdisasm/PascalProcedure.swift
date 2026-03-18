@@ -903,9 +903,10 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.push(("\(maxLen)", "INTEGER"))
         case lde:
             // Load extended word (pushes value onto stack)
-            let seg = inst.params[0]
-            let val = inst.params[1]
-            simulator.push(("LDE[\(seg):\(val)]", "INTEGER"))
+            if let loc = inst.memLocation {
+                simulator.push(findStackLabel(loc))
+                allLocations.insert(loc)
+            }
         case csp:
             // Call standard procedure
             let procNum = inst.params[0]
@@ -913,10 +914,11 @@ func simulateStackandGeneratePseudocodeForProcedure(
                 var callParms: [String] = []
                 for p in parms {
                     var parm: String = ""
+                    var t: String? 
                     if p.type == "REAL" {
                         (parm, _) = simulator.popReal()
                     } else {
-                        let (parm, t) = simulator.pop(p.type)
+                        (parm, t) = simulator.pop(p.type)
                             // check if we were operating on an un-typed location and
                             // if so, set the type to be INTEGER
                             if parm.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
@@ -1114,7 +1116,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             // Load address
             if let loc = inst.memLocation {
                 simulator.push(findStackLabel(loc))
-            }
+                allLocations.insert(loc)
+}
         case ldc:
             // Load multiple-word constant
             // LDC is special: needs manual size calculation due to variable-length word-aligned data
@@ -1133,7 +1136,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             // Load intermediate word
             if let loc = inst.memLocation {
                 simulator.push(findStackLabel(loc))
-            }
+                allLocations.insert(loc)
+}
         case neq:
             // Not equal (TOS-1 <> TOS)
             handleComparison(inst.comparatorDataType, &simulator, "<>")
@@ -1145,7 +1149,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
                     stack: &simulator,
                     loc: loc
                 )
-            }
+                allLocations.insert(loc)
+}
         case ujp:
             if ujpToSkipSet.contains(idx) {
                 // This UJP was already handled as part of an IF/ELSE structure
@@ -1372,7 +1377,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             // Load local address
             if let loc = inst.memLocation {
                 simulator.push(findStackLabel(loc))
-            }
+                allLocations.insert(loc)
+}
         case ldci:
             // Load one-word constant
             let val = inst.params[0]
@@ -1431,7 +1437,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             // Load local word
             if let loc = inst.memLocation {
                 simulator.push(findStackLabel(loc))
-            }
+                allLocations.insert(loc)
+}
         case neqi:
             // Integer TOS-1 <> TOS
             let (a, ta) = simulator.pop()

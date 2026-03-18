@@ -188,6 +188,14 @@ func decodeAssemblerProcedure(
     code: Data,
     addr: Int
 ) throws {
+
+    proc.procType = ProcIdentifier(
+        isFunction: false,
+        isAssembly: true,
+        segment: segmentNumber,
+        procedure: procedureNumber
+    )
+
     let cd = CodeData(data: code, ipc: 0, header: 0)
     proc.enterIC = try cd.getSelfRefPointer(at: addr - 2)
     proc.entryPoints.insert(proc.enterIC)
@@ -289,7 +297,7 @@ func decodeAssemblerProcedure(
         }
         op = code[ipc]
     } while !done
-    
+
     var s = ""
     var sh = ""
     var i = ipc
