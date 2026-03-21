@@ -145,7 +145,7 @@
    12db: 48      PHA
    12dc: a5 7e   LDA $7e {ReturnLow}
    12de: 48      PHA
-   12df: 60      RTS {TODO:why/how is this being inserted at $12d0...}
+   12df: 60      RTS 
 
    12e0:  {A} *1317 {B} *132c {C} *1337 {D} *134c - {E} *136b {F} *138a {G} *13b3 {H} *1314 
    12f0:  {I} *13be {J} *1314 {K} *1314 {L} *13e7 - {M} *13f2 {N} *13fd {O} *1408 {P} *1427

@@ -6,6 +6,7 @@ import Foundation
 struct PseudoCodeGenerator {
     let procLookup: [String: ProcIdentifier]
     let labelLookup: [String: Location]
+    var allLocations: Set<Location>
 
     // Helper to lookup label by Location
     func findLabel(_ loc: Location) -> (String?, String?) {
@@ -128,6 +129,11 @@ struct PseudoCodeGenerator {
                 } else {
                     aParams.append(a)
                 }
+                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
+                    // convert string location to Location
+                    let l = Location(from: a)
+                    allLocations.first(where: { $0 == l })?.type = "CHAR"
+                }
                 i -= 1
             case "BOOLEAN":
                 let (a, _) = stack.pop()
@@ -135,6 +141,13 @@ struct PseudoCodeGenerator {
                     aParams.append("FALSE")
                 } else if a == "1" {
                     aParams.append("TRUE")
+                } else {
+                    aParams.append(a)
+                }
+                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
+                    // convert string location to Location
+                    let l = Location(from: a)
+                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
                 }
                 i -= 1
             case let pfx where pfx.hasPrefix("SET"):
@@ -155,6 +168,11 @@ struct PseudoCodeGenerator {
             default:
                 let (a, _) = stack.pop()
                 aParams.append(a)
+                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
+                    // convert string location to Location
+                    let l = Location(from: a)
+                    allLocations.first(where: { $0 == l })?.type = called.parameters[i].type
+                }
                 i -= 1
             }
         }

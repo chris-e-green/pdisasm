@@ -35,10 +35,6 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "run-sim",
-            dependencies: ["pdisasm"]
-        ),
-        .testTarget(
             name: "pdisasmTests",
             dependencies: ["pdisasm"],
             resources: [.copy("Fixtures")],

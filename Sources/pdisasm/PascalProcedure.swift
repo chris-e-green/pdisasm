@@ -453,15 +453,33 @@ func simulateStackandGeneratePseudocodeForProcedure(
             let (_, b) = simulator.popSet()
             simulator.push(("\(b) \(opString) \(a)", "BOOLEAN"))
         } else {
-            let (a, ta) = simulator.pop()
-            if ta != dataType {
-                _ = 0
-            }
-            let (b, tb) = simulator.pop()
-            if tb != dataType {
-                _ = 0
-            }
+            let (a, _) = simulator.pop()
+            setLocType(a, dataType)
+            let (b, _) = simulator.pop()
+            setLocType(b, dataType)
             simulator.push(("\(b) \(opString) \(a)", "BOOLEAN"))
+        }
+    }
+    
+    func setLocType(_ locStr: String, _ type: String) {
+        // if the location is a memory reference, set the type.
+        if locStr.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
+            // convert string location to Location
+            let l = Location(from: locStr)
+            // find in allLocations and set type
+            allLocations.first(where: { $0 == l })?.type = type
+        }
+    }
+    
+    func chkCharType(_ loc:String) -> String {
+        if let ch = Int(loc) {
+            if ch >= 0x20 && ch <= 0x7E {
+                return String(format: "'%c'", ch)
+            } else {
+                return String(format: "CHAR(%i)", ch)
+            }
+        } else {
+            return loc
         }
     }
 
@@ -493,7 +511,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
     var simulator = StackSimulator()
     let pseudoGen = PseudoCodeGenerator(
         procLookup: procLookup,
-        labelLookup: labelLookup
+        labelLookup: labelLookup,
+        allLocations: allLocations
     )
 
     // Alias for backward compatibility during refactoring
@@ -526,17 +545,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.push((String(inst.opcode), "INTEGER"))
         case abi:
             // Absolute value of integer (TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
             simulator.push(("ABI(\(a))", "INTEGER"))
         case abr:
             // Absolute value of real (TOS)
@@ -544,28 +554,10 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.pushReal("ABR(\(a))")
         case adi:
             // Add integers (TOS + TOS-1)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop("INTEGER")
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
+            let (b, _) = simulator.pop("INTEGER")
+            setLocType(b, "INTEGER")
             simulator.push(("\(b) + \(a)", "INTEGER"))
         case adr:
             // Add reals (TOS + TOS-1)
@@ -574,28 +566,10 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.pushReal("\(a) + \(b)")
         case land:
             // Logical AND (TOS & TOS-1)
-            let (a, ta) = simulator.pop("BOOLEAN")
-            if ta == "BOOLEAN" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be BOOLEAN
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                }
-            }
-            let (b, tb) = simulator.pop("BOOLEAN")
-            if tb == "BOOLEAN" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be BOOLEAN
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                }
-            }
+            let (a, _) = simulator.pop("BOOLEAN")
+            setLocType(a, "BOOLEAN")
+            let (b, _) = simulator.pop("BOOLEAN")
+            setLocType(b, "BOOLEAN")
             simulator.push(("\(b) AND \(a)", "BOOLEAN"))
         case dif:
             // Set difference (TOS-1 AND NOT TOS)
@@ -608,28 +582,10 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.push(("\(maxLen)", "INTEGER"))
         case dvi:
             // Divide integers (TOS-1 / TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop("INTEGER")
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
+            let (b, _) = simulator.pop("INTEGER")
+            setLocType(b, "INTEGER")
             simulator.push(("\(b) / \(a)", "INTEGER"))
         case dvr:
             // Divide reals (TOS-1 / TOS)
@@ -645,32 +601,14 @@ func simulateStackandGeneratePseudocodeForProcedure(
         case flo:
             // Float next to TOS (int TOS-1 to real TOS)
             let a = simulator.pop()  // TOS
-            let (b, tb) = simulator.pop()  // TOS-1
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (b, _) = simulator.pop()  // TOS-1
+            setLocType(b, "INTEGER")
             simulator.push(a)  // put previous TOS back
             simulator.pushReal(b)  // real(TOS-1)->TOS
         case flt:
             // Float TOS (int TOS to real TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
             simulator.pushReal(a)
         case inn:
             // Set membership (TOS-1 in set TOS)
@@ -688,78 +626,24 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.push(("\(maxLen)", "INTEGER"))
         case lor:
             // Logical OR (TOS | TOS-1)
-            let (a, ta) = simulator.pop("BOOLEAN")
-            if ta == "BOOLEAN" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be BOOLEAN
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                }
-            }
-            let (b, tb) = simulator.pop("BOOLEAN")
-            if tb == "BOOLEAN" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be BOOLEAN
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                }
-            }
+            let (a, _) = simulator.pop("BOOLEAN")
+            setLocType(a, "BOOLEAN")
+            let (b, _) = simulator.pop("BOOLEAN")
+            setLocType(b, "BOOLEAN")
             simulator.push(("\(b) OR \(a)", "BOOLEAN"))
         case modi:
             // Modulo integers (TOS-1 % TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop("INTEGER")
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
+            let (b, _) = simulator.pop("INTEGER")
+            setLocType(b, "INTEGER")
             simulator.push(("\(b) % \(a)", "INTEGER"))
         case mpi:
             // Multiply integers (TOS * TOS-1)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop("INTEGER")
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
+            let (b, _) = simulator.pop("INTEGER")
+            setLocType(b, "INTEGER")
             simulator.push(("\(b) * \(a)", "INTEGER"))
         case mpr:
             // Multiply reals (TOS * TOS-1)
@@ -768,17 +652,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.pushReal("\(b) * \(a)")
         case ngi:
             // Negate integer
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
             simulator.push(("-\(a)", "INTEGER"))
         case ngr:
             // Negate real
@@ -786,20 +661,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.pushReal("-\(a)")
         case lnot:
             // Logical NOT (~TOS)
-            let (a, t) = simulator.pop("BOOLEAN")
-            if t == "BOOLEAN" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be BOOLEAN
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                    if l.addr == 1356 {
-                        _ = 0
-                    }
-                }
-            }
+            let (a, _) = simulator.pop("BOOLEAN")
+            setLocType(a, "BOOLEAN")
             simulator.push(("NOT \(a)", "BOOLEAN"))
         case srs:
             // Subrange set [TOS-1..TOS] (creates set on stack)
@@ -818,28 +681,10 @@ func simulateStackandGeneratePseudocodeForProcedure(
             }
         case sbi:
             // Subtract integers (TOS-1 - TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop("INTEGER")
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
+            let (b, _) = simulator.pop("INTEGER")
+            setLocType(b, "INTEGER")
             simulator.push(("\(b) - \(a)", "INTEGER"))
         case sbr:
             // Subtract reals (TOS-1 - TOS)
@@ -861,17 +706,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
             }
         case sqi:
             // Square integer (TOS * TOS)
-            let (a, ta) = simulator.pop("INTEGER")
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
+            let (a, _) = simulator.pop("INTEGER")
+            setLocType(a, "INTEGER")
             simulator.push(("\(a) * \(a)", "INTEGER"))
         case sqr:
             // Square real (TOS * TOS)
@@ -910,31 +746,22 @@ func simulateStackandGeneratePseudocodeForProcedure(
         case csp:
             // Call standard procedure
             let procNum = inst.params[0]
-            if let (cspName, parms, ret) = cspProcs[procNum] {
+            if let (cspName, parms, returnType) = cspProcs[procNum] {
                 var callParms: [String] = []
                 for p in parms {
                     var parm: String = ""
-                    var t: String? 
                     if p.type == "REAL" {
                         (parm, _) = simulator.popReal()
                     } else {
-                        (parm, t) = simulator.pop(p.type)
-                            // check if we were operating on an un-typed location and
-                            // if so, set the type to be INTEGER
-                            if parm.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                                // convert string location to Location
-                                let l = Location(from: parm)
-                                // find in allLocations and set type
-                                allLocations.first(where: { $0 == l })?.type = t ?? ""
-                            
-                        }
+                        (parm, _) = simulator.pop(p.type)
+                        setLocType(parm, p.type)
                     }
                     callParms.append(parm)
                 }
                 // If there is a return value, push it onto the stack because it will be used
                 // by subsequent instructions.
-                if !ret.isEmpty {
-                    if ret == "REAL" {
+                if !returnType.isEmpty {
+                    if returnType == "REAL" {
                         simulator.pushReal(
                             "\(cspName)(\(callParms.reversed().joined(separator:", ")))"
                         )
@@ -942,7 +769,7 @@ func simulateStackandGeneratePseudocodeForProcedure(
                         simulator.push(
                             (
                                 "\(cspName)(\(callParms.reversed().joined(separator:", ")))",
-                                ret
+                                returnType
                             )
                         )
                     }
@@ -1095,6 +922,8 @@ func simulateStackandGeneratePseudocodeForProcedure(
                     loc: loc
                 )
             }
+        case xjp:
+            pseudoCode = "END (* CASE *)"
         case cip:
             // Call intermediate procedure
             if let loc = inst.destination {
@@ -1160,7 +989,7 @@ func simulateStackandGeneratePseudocodeForProcedure(
                 || ujpCaseDefaultDest.contains(inst.params[0])
             {
                 // This UJP is part of a CASE structure
-                pseudoCode = "END (* CASE *)"
+                pseudoCode = "END (* CASE n *)"
                 break
             }
             // Unconditional jump
@@ -1175,9 +1004,6 @@ func simulateStackandGeneratePseudocodeForProcedure(
                 if target.value.opcode == xjp {
                     let (index, _) = simulator.pop()  // get the case index value
                     pseudoCode = "CASE \(index) OF"
-                    // TODO: need to add the 'END' for the end of the case!
-                    // TODO: and also need to increase indent after CASE statement
-                    _ = 0
                     // it's a case.
                     let low = target.value.params[0]
                     let high = target.value.params[1]
@@ -1304,73 +1130,42 @@ func simulateStackandGeneratePseudocodeForProcedure(
             // Integer TOS-1 = TOS
             var (a, ta) = simulator.pop()
             var (b, tb) = simulator.pop()
-            if ta == "CHAR" {
-                if let ch = Int(b) {
-                    if ch >= 0x20 && ch <= 0x7E {
-                        b = String(format: "'%c'", ch)
-                    } else {
-                        b = String(format: "CHAR(%i)", ch)
-                    }
-                }
-            }
-            if tb == "CHAR" {
-                if let ch = Int(a) {
-                    if ch >= 0x20 && ch <= 0x7E {
-                        a = String(format: "'%c'", ch)
-                    } else {
-                        a = String(format: "CHAR(%i)", ch)
-                    }
-                }
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) = \(a)", "BOOLEAN"))
         case geqi:
             // Integer TOS-1 >= TOS
-            let (a, ta) = simulator.pop()
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop()
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
+            var (a, ta) = simulator.pop()
+            var (b, tb) = simulator.pop()
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) >= \(a)", "BOOLEAN"))
         case grti:
             // Integer TOS-1 > TOS
-            let (a, ta) = simulator.pop()
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop()
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
+            var (a, ta) = simulator.pop()
+            var (b, tb) = simulator.pop()
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) > \(a)", "BOOLEAN"))
         case lla:
@@ -1385,52 +1180,30 @@ func simulateStackandGeneratePseudocodeForProcedure(
             simulator.push(("\(val)", "INTEGER"))
         case leqi:
             // Integer TOS-1 <= TOS
-            let (a, ta) = simulator.pop()
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop()
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
+            var (a, ta) = simulator.pop()
+            var (b, tb) = simulator.pop()
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) <= \(a)", "BOOLEAN"))
         case lesi:
             // Integer TOS-1 < TOS
-            let (a, ta) = simulator.pop()
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop()
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
+            var (a, ta) = simulator.pop()
+            var (b, tb) = simulator.pop()
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) < \(a)", "BOOLEAN"))
         case ldl:
@@ -1441,27 +1214,16 @@ func simulateStackandGeneratePseudocodeForProcedure(
 }
         case neqi:
             // Integer TOS-1 <> TOS
-            let (a, ta) = simulator.pop()
-            if ta == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
-            }
-            let (b, tb) = simulator.pop()
-            if tb == "INTEGER" {
-                // check if we were operating on an un-typed location and
-                // if so, set the type to be INTEGER
-                if b.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: b)
-                    // find in allLocations and set type
-                    allLocations.first(where: { $0 == l })?.type = "INTEGER"
-                }
+            var (a, ta) = simulator.pop()
+            var (b, tb) = simulator.pop()
+            if ta == "CHAR" || tb == "CHAR" {
+                setLocType(a, "CHAR")
+                a = chkCharType(a)
+                setLocType(b, "CHAR")
+                b = chkCharType(b)
+            } else {
+                setLocType(a, "INTEGER")
+                setLocType(b, "INTEGER")
             }
             simulator.push(("\(b) <> \(a)", "BOOLEAN"))
         case stl:

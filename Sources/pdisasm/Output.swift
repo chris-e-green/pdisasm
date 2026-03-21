@@ -19,8 +19,10 @@ func outputResults(
 
     if showDot {
         print("digraph {")
-        allCallers.sorted(by: { $0.origin < $1.origin }).forEach{
-            if $0.target.segment == $0.origin.segment && $0.target.lexLevel ?? -999 < $0.origin.lexLevel ?? -999 {
+        allCallers.sorted(by: { $0.origin < $1.origin }).forEach {
+            if $0.target.segment == $0.origin.segment
+                && $0.target.lexLevel ?? -999 < $0.origin.lexLevel ?? -999
+            {
                 // ignore it
             } else {
                 print("\"\($0.origin)\" -> \"\($0.target)\"")
@@ -161,25 +163,40 @@ func outputResults(
                                 ),
                                 terminator: ""
                             )
-                            // TODO: need to deal with long parameter lists so that they wrap
-                            var ps = ""
+                            var paramStrings: [String] = [""]
+                            var paramStrIndex = 0
                             for p in inst.params {
                                 if p > 0xff {
-                                    ps += String(format: "%04x ", p)
+                                    if paramStrings[paramStrIndex].count > 12 {
+                                        paramStrings.append("")
+                                        paramStrIndex += 1
+                                    }
+                                    paramStrings[paramStrIndex] += String(
+                                        format: "%04x ",
+                                        p
+                                    )
                                 } else {
-                                    ps += String(format: "%02x ", p)
+                                    if paramStrings[paramStrIndex].count > 14 {
+                                        paramStrings.append("")
+                                        paramStrIndex += 1
+                                    }
+                                    paramStrings[paramStrIndex] += String(
+                                        format: "%02x ",
+                                        p
+                                    )
                                 }
                             }
+
                             print(
-                                ps.padding(
-                                    toLength: 15,
+                                paramStrings[0].padding(
+                                    toLength: 16,
                                     withPad: " ",
                                     startingAt: 0
                                 ),
                                 terminator: ""
                             )
                             if let c = inst.comment {
-                                print(" ; \(c)", terminator: "")
+                                print("; \(c)", terminator: "")
                             }
                             if let n = inst.memLocation {
                                 print(" \(n.name)", terminator: "")
@@ -198,6 +215,14 @@ func outputResults(
                                 }
                             }
                             print(" " + prettyStack(inst.stackState ?? []))
+                            if paramStrings.count > 1 {
+                                for i in 1..<paramStrings.count {
+                                    print(
+                                        String(repeating: " ", count: 17)
+                                            + paramStrings[i]
+                                    )
+                                }
+                            }
                         } else {
                             print(inst.mnemonic, terminator: "")
                             if inst.comment != nil {
@@ -220,6 +245,7 @@ func outputResults(
                             )
                             if pseudo.hasSuffix("BEGIN")
                                 || pseudo.starts(with: "REPEAT")
+                                || pseudo.starts(with: "CASE")
                             {
                                 indentLevel += 1
                             }
