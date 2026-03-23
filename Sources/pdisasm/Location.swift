@@ -9,12 +9,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
     public var type: String
 
     enum CodingKeys: String, CodingKey {
-        case segment = "segment"
-        case procedure = "procedure"
-        case lexLevel = "lexLevel"
-        case addr = "addr"
-        case name = "name"
-        case type = "type"
+        case segment, procedure, lexLevel, addr, name, type
     }
 
     public static func < (lhs: Location, rhs: Location) -> Bool {
@@ -135,26 +130,6 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
     }
 
     public var description: String {
-        var retval:String
-        
-        if !name.isEmpty {
-            retval = name
-        } else {
-            var locationString = "S\(segment)"
-            if let procedure = procedure {
-                locationString += "_P\(procedure)"
-            }
-            if let lexLevel = lexLevel {
-                locationString += "_L\(lexLevel)"
-            }
-            if let addr = addr {
-                locationString += "_A\(addr)"
-            }
-            retval = locationString
-        }
-        if !type.isEmpty {
-            retval += ":\(type)"
-        }
-        return retval
+        type.isEmpty ? displayName : "\(displayName):\(type)"
     }
 }

@@ -34,9 +34,9 @@ func simulateStackAndGeneratePseudocode(
         var (b, tb) = simulator.pop()
         if ta == "CHAR" || tb == "CHAR" {
             setLocType(a, "CHAR")
-            a = formatCharLiteral(a)
+            a = chkCharType(a)
             setLocType(b, "CHAR")
-            b = formatCharLiteral(b)
+            b = chkCharType(b)
         } else {
             setLocType(a, "INTEGER")
             setLocType(b, "INTEGER")
@@ -54,7 +54,7 @@ func simulateStackAndGeneratePseudocode(
         }
     }
     
-    func formatCharLiteral(_ loc:String) -> String {
+    func chkCharType(_ loc:String) -> String {
         if let ch = Int(loc) {
             if ch >= 0x20 && ch <= 0x7E {
                 return String(format: "'%c'", ch)
@@ -763,7 +763,7 @@ func simulateStackAndGeneratePseudocode(
             let (a, _) = simulator.pop()
             simulator.push(("*(\(a) + \(offs))", "POINTER"))
         default:
-            _ = 0  // nothing to do here really
+            break
         }
 
         inst.pseudoCode = pseudoCode

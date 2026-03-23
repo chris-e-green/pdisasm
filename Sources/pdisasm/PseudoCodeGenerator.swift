@@ -60,10 +60,7 @@ struct PseudoCodeGenerator {
             let (dst, _) = stack.pop()  // destination address
             return "\(dst) := \(src)"
         case sro, str, stl, ste:
-            let (src, srcType) = stack.pop(true)
-            if srcType == "UNKNOWN" {
-                _ = 0
-            }
+            let (src, _) = stack.pop(true)
             if let destLoc = inst.memLocation {
                 let (destName, destType) = findLabel(destLoc)
                 if let destType = destType {
@@ -80,15 +77,8 @@ struct PseudoCodeGenerator {
                             return "\(destName ?? destLoc.displayName) := TRUE"
                         }
                     default:
-                        _ = 0
                         break
                     }
-                } else {
-                    // destType is unknown.
-                    _ = 0
-                }
-                if destType != srcType {
-                    _ = 0
                 }
                 return "\(destName ?? destLoc.displayName) := \(src)"
             }

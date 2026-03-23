@@ -129,7 +129,7 @@ struct StackSimulator {
                 let exponent = (val2 & 0x7f80) < 7
                 let sign = (val2 & 0x8000) == 0x8000
                 return (
-                    "\(sign == true  ? "-" : "")\(fraction)e\(exponent)", "REAL"
+                    "\(sign ? "-" : "")\(fraction)e\(exponent)", "REAL"
                 )
             } else {
                 return ("\(a).\(b)", "REAL")
@@ -156,7 +156,7 @@ struct StackSimulator {
                 // we use '{' to indicate words within an array of elements
                 // eg. SETDATA{0}, SETDATA{1}, ... so that counting the words
                 // on the stack still works
-                if element.contains("{") == false {
+                if !element.contains("{") {
                     // if the element is an integer, we extract the bits set
                     // and add the corresponding values to the numeric set values
                     if let value = UInt64(element) {

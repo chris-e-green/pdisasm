@@ -68,9 +68,8 @@ func decodePascalProcedure(
         do {
             let opcode = try cd.readByte(at: ic)
 
-            // Decode the instruction using the new architecture
-            var decoded: OpcodeDecoder.DecodedInstruction
-            if let cachedDecoded = try? decoder.decode(
+            // Decode the instruction
+            guard let decoded = try? decoder.decode(
                 opcode: opcode,
                 at: ic,
                 currSeg: currSeg,
@@ -78,10 +77,7 @@ func decodePascalProcedure(
                 procedure: procedure,
                 proc: proc,
                 addr: addr
-            ) {
-                decoded = cachedDecoded
-            } else {
-                // Fallback for any decode errors
+            ) else {
                 if verbose {
                     print(
                         "Decode error at IC \(String(format: "%04x", ic)) in segment \(segment) proc \(procedure)"

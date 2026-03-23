@@ -239,7 +239,7 @@ func normaliseMemoryLocations(
     let missingDetail = proc.instructions.filter {
         $0.value.memLocation != nil && $0.value.memLocation?.procedure == nil
     }
-    if missingDetail.count > 0 {
+    if !missingDetail.isEmpty {
         missingDetail.forEach { (_, inst) in
 
             if let loc = inst.memLocation, let lexLevel = loc.lexLevel {
@@ -272,7 +272,7 @@ func normaliseMemoryLocations(
                                 == proc.identifier?.procedure
                     }.map(\.origin)
                     var foundMatch = false
-                    while parents.isEmpty == false && !foundMatch {
+                    while !parents.isEmpty && !foundMatch {
                         for parent in parents {
                             if parent.lexLevel == lexLevel {
                                 inst.memLocation?.procedure =
@@ -510,7 +510,7 @@ public func runPdisasm(
                 $0.segment == seg.segNum && $0.procedure == procNumber
             }) {
                 proc.identifier = predefinedProc
-            } 
+            }
 
             // go through the parameters/function return and set the
             // allLabels data for predeclared procedures.
