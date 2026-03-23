@@ -9,7 +9,7 @@ final class SnapshotProcTests: XCTestCase {
         var codeSegs: [Int: CodeSegment] = [:]
 
         let proc = Procedure()
-        let procDict = ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: [])
+        let procDict = ProcedureDictionary(procedureCount: 0, procedurePointers: [])
         let cs = CodeSegment(procedureDictionary: procDict, procedures: [proc])
         codeSegs[0] = cs
 

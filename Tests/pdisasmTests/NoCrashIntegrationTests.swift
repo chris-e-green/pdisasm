@@ -74,10 +74,10 @@ final class NoCrashIntegrationTests: XCTestCase {
                 }
             }
 
-            let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(segment: 0, procedureCount: 0, procedurePointers: []), procedures: [])
+            let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(procedureCount: 0, procedurePointers: []), procedures: [])
             // Build pointers safely
             if code.count >= 2 {
-                codeSeg.procedureDictionary = ProcedureDictionary(segment: Int(code[code.endIndex - 2]), procedureCount: Int(code[code.endIndex - 1]), procedurePointers: [])
+                codeSeg.procedureDictionary = ProcedureDictionary(procedureCount: Int(code[code.endIndex - 1]), procedurePointers: [])
                 for i in 1...codeSeg.procedureDictionary.procedureCount {
                     let ptrIndex = code.endIndex - i * 2 - 2
                     if let ptr = try? CodeData(data: code, ipc: 0, header: 0).getSelfRefPointer(at: ptrIndex) {
