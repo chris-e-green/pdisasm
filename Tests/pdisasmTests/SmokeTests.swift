@@ -6,15 +6,15 @@ final class SmokeTests: XCTestCase {
         // create a 4 byte data
         let arr: [UInt8] = [0x34, 0x12, 0x78, 0x56]
         let data = Data(arr)
-    let cd = CodeData(data: data, ipc: 0, header: 0)
+    let cd = CodeData(data: data, instructionPointer: 0, header: 0)
     XCTAssertEqual(try cd.readWord(at: 0), 0x1234)
     XCTAssertEqual(try cd.readWord(at: 2), 0x5678)
     }
 
     func testCodeDataReadByteAndWord() throws {
-        var data = CodeData(data: Data([0x01, 0x02, 0x03, 0x04]), ipc: 0, header: 0)
+        var data = CodeData(data: Data([0x01, 0x02, 0x03, 0x04]), instructionPointer: 0, header: 0)
         XCTAssertEqual(try data.readByte(), 0x01)
-        // after reading one byte, ipc==1 and the next word is bytes [0x02, 0x03] -> 0x0302
+        // after reading one byte, instructionPointer==1 and the next word is bytes [0x02, 0x03] -> 0x0302
         XCTAssertEqual(try data.readWord(), 0x0302)
     }
 
@@ -25,7 +25,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual(proc.entryPoints.count, 0)
         // set some values and ensure they persist
         proc.lexicalLevel = 1
-        proc.procType = ProcIdentifier(isFunction: false, isAssembly: false, segment: 1, procedure: 1, procName: "TEST")
-        XCTAssertEqual(proc.procType?.procedure, 1)
+        proc.identifier = ProcedureIdentifier(isFunction: false, isAssembly: false, segment: 1, procedure: 1, procName: "TEST")
+        XCTAssertEqual(proc.identifier?.procedure, 1)
     }
 }

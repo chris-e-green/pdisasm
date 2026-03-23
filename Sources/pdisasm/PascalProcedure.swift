@@ -8,7 +8,7 @@ func decodePascalProcedure(
     addr: Int,
     callers: inout Set<Call>,
     allLocations: inout Set<Location>,
-    allProcedures: inout [ProcIdentifier],
+    allProcedures: inout [ProcedureIdentifier],
     verbose: Bool = false
 ) {
     // Early validation: ensure addr and the procedure header bytes are present
@@ -20,7 +20,7 @@ func decodePascalProcedure(
     if addr - 8 < 0 { return }
 
     // Create a CodeData view for bounds-checked reads.
-    let cd = CodeData(data: code, ipc: 0, header: 0)
+    let cd = CodeData(data: code, instructionPointer: 0, header: 0)
 
     // Read header fields with bounds-checked reads.
     do {
@@ -61,7 +61,7 @@ func decodePascalProcedure(
     )
 
     // Initialize components for clean separation of concerns
-    let decoder = OpcodeDecoder(cd: cd)
+    let decoder = OpcodeDecoder(codeData: cd)
 
     // Decode loop: uses new architecture for clean separation of decoding, simulation, and generation
     while ic < addr && !done {
@@ -181,8 +181,8 @@ func decodePascalProcedure(
         }
     }
 
-    if proc.procType == nil {
-        proc.procType = ProcIdentifier(
+    if proc.identifier == nil {
+        proc.identifier = ProcedureIdentifier(
             isFunction: isFunction,
             isAssembly: false,
             segment: segment,
@@ -191,13 +191,13 @@ func decodePascalProcedure(
         )
         if proc.parameterSize > 0 {
             var paramCount = proc.parameterSize
-            if proc.procType?.isFunction == true {
+            if proc.identifier?.isFunction == true {
                 // functions have an extra two words for the return value
                 paramCount -= 2
             }
             if paramCount > 0 {
                 for parmnum in 1...paramCount {
-                    proc.procType?.parameters.append(
+                    proc.identifier?.parameters.append(
                         Identifier(name: "PARAM\(parmnum)", type: "UNKNOWN")
                     )
                 }
@@ -205,7 +205,7 @@ func decodePascalProcedure(
         }
     }
 
-    if let p = proc.procType {
+    if let p = proc.identifier {
         if !allProcedures.contains(where: {
             $0.procedure == p.procedure && $0.segment == p.segment
         }) {

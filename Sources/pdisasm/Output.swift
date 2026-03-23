@@ -5,7 +5,7 @@ func outputResults(
     segDictionary: SegDictionary,
     codeSegs: [Int: CodeSegment],
     allLocations: Set<Location>,
-    allProcedures: [ProcIdentifier],
+    allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
     verbose: Bool = false,
     showMarkup: Bool = true,
@@ -60,20 +60,20 @@ func outputResults(
             for proc in codeSeg.procedures {
                 // print proc/func header and procedure attributes
                 let procDesc = allProcedures.first(where: {
-                    $0.segment == s && $0.procedure == proc.procType?.procedure
+                    $0.segment == s && $0.procedure == proc.identifier?.procedure
                 })
                 print(
                     "### "
-                        + (procDesc?.description ?? proc.procType?.description
+                        + (procDesc?.description ?? proc.identifier?.description
                             ?? "")
-                        + " (* P=\(proc.procType?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
+                        + " (* P=\(proc.identifier?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
                 )
 
                 // print callers
                 var callerNames: [String] = []
                 allCallers.filter(
                     {
-                        $0.target.procedure == proc.procType?.procedure
+                        $0.target.procedure == proc.identifier?.procedure
                             && $0.target.segment == s
                     }
                 ).forEach(
@@ -96,7 +96,7 @@ func outputResults(
 
                 // print variables declared in this procedure
                 allLocations.filter({
-                    $0.procedure == proc.procType?.procedure && $0.segment == s
+                    $0.procedure == proc.identifier?.procedure && $0.segment == s
                         && $0.addr != nil
                 }).sorted().forEach({ loc in
                     print("L\(loc.addr ?? -1)=\(loc.description)")
@@ -107,7 +107,7 @@ func outputResults(
                 }
 
                 // Variable listing is generated from `allLocations` and `allLabels`.
-                if proc.procType?.isAssembly == false {
+                if proc.identifier?.isAssembly == false {
                     if showMarkup {
                         print("```pascal")
                     }
@@ -146,7 +146,7 @@ func outputResults(
                         }
                     }
 
-                    if showPCode || proc.procType?.isAssembly == true {
+                    if showPCode || proc.identifier?.isAssembly == true {
                         if proc.entryPoints.contains(address) {
                             print("->", terminator: " ")
                         } else {

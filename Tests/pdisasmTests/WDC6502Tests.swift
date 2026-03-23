@@ -40,9 +40,9 @@ final class WDC6502Tests: XCTestCase {
             addr: addr
         )
 
-        XCTAssertTrue(proc.procType?.isAssembly == true)
-        XCTAssertEqual(proc.procType?.segment, 1)
-        XCTAssertEqual(proc.procType?.procedure, 1)
+        XCTAssertTrue(proc.identifier?.isAssembly == true)
+        XCTAssertEqual(proc.identifier?.segment, 1)
+        XCTAssertEqual(proc.identifier?.procedure, 1)
         XCTAssertEqual(proc.enterIC, 0)
         XCTAssertFalse(proc.instructions.isEmpty)
         // Should have at least the RTS instruction
@@ -53,7 +53,7 @@ final class WDC6502Tests: XCTestCase {
 
     func testBranchForwardDestination() throws {
         // BNE (0xD0) with forward offset 0x02
-        // At ipc=0: BNE +2 -> dest = ipc + 2 + offset = 0 + 2 + 2 = 4
+        // At instructionPointer=0: BNE +2 -> dest = instructionPointer + 2 + offset = 0 + 2 + 2 = 4
         var bytes: [UInt8] = []
         bytes += [0xD0, 0x02]   // BNE +2
         bytes += [0xEA]         // NOP (filler at offset 2)

@@ -10,8 +10,8 @@ final class ProcedureHeaderEdgeCaseTests: XCTestCase {
         var proc = Procedure()
         var callers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "TEST", segkind: .dataseg, textaddr: 0, segNum: segment, mType: 0, version: 0)
+        var allProcedures: [ProcedureIdentifier] = []
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "TEST", segmentKind: .dataseg, textAddress: 0, segNum: segment, machineType: 0, version: 0)
         let addr = code.count - 2
 
         decodePascalProcedure(
@@ -97,8 +97,8 @@ final class ProcedureHeaderEdgeCaseTests: XCTestCase {
         var proc = Procedure()
         var callers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "T", segkind: .dataseg, textaddr: 0, segNum: 0, mType: 0, version: 0)
+        var allProcedures: [ProcedureIdentifier] = []
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "T", segmentKind: .dataseg, textAddress: 0, segNum: 0, machineType: 0, version: 0)
 
         decodePascalProcedure(
             currSeg: seg,

@@ -7,26 +7,26 @@ enum CodeDataError: Error {
 
 struct CodeData {
     let data: Data
-    var ipc: Int
+    var instructionPointer: Int
     var header: Int
 
-    init(data: Data, ipc: Int = 0, header: Int = 0) {
+    init(data: Data, instructionPointer: Int = 0, header: Int = 0) {
         self.data = data
-        self.ipc = ipc
+        self.instructionPointer = instructionPointer
         self.header = header
     }
 
-    /// Read a byte from `CodeData` at `ipc`, updating `ipc`.
+    /// Read a byte from `CodeData` at `instructionPointer`, updating `instructionPointer`.
     /// - Returns: The byte value as a UInt8.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
     mutating func readByte() throws -> UInt8 {
-        guard ipc < data.count else { throw CodeDataError.unexpectedEndOfData }
-        let retval = data[ipc]
-        ipc += 1
+        guard instructionPointer < data.count else { throw CodeDataError.unexpectedEndOfData }
+        let retval = data[instructionPointer]
+        instructionPointer += 1
         return retval
     }
 
-    /// Read and decode a 'BIG' value from `CodeData`, at `ipc`, updating `ipc`.
+    /// Read and decode a 'BIG' value from `CodeData`, at `instructionPointer`, updating `instructionPointer`.
     /// - Returns: The decoded value.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
     mutating func readBig() throws -> Int {
@@ -36,30 +36,30 @@ struct CodeData {
             return Int(firstByte)
         } else {
             // Check for the second byte before reading it.
-            guard ipc < data.count else {
+            guard instructionPointer < data.count else {
                 throw CodeDataError.unexpectedEndOfData
             }
             let high = Int(firstByte & 0x7F)
-            let low = data[ipc]
-            ipc += 1
+            let low = data[instructionPointer]
+            instructionPointer += 1
             return (high << 8) | Int(low)
         }
     }
 
-    /// Get a word from `CodeData` at `ipc`, updating `ipc`.
+    /// Get a word from `CodeData` at `instructionPointer`, updating `instructionPointer`.
     ///  - Returns: The little-endian word stored at the current location.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
     mutating func readWord() throws -> UInt16 {
-        guard ipc + 1 < data.count else {
+        guard instructionPointer + 1 < data.count else {
             throw CodeDataError.unexpectedEndOfData
         }
-        let low = UInt16(data[ipc])
-        let high = UInt16(data[ipc + 1])
-        ipc += 2
+        let low = UInt16(data[instructionPointer])
+        let high = UInt16(data[instructionPointer + 1])
+        instructionPointer += 2
         return (high << 8) | low
     }
 
-    /// Get an unsigned word from `CodeData` at a specific index without advancing `ipc`.
+    /// Get an unsigned word from `CodeData` at a specific index without advancing `instructionPointer`.
     ///  - Parameters:
     ///   - at: The position from which to read the word.
     ///  - Returns: The little-endian word stored at the index.
@@ -73,7 +73,7 @@ struct CodeData {
         return (high << 8) | low
     }
 
-    /// Get a signed word from `CodeData` at a specific index without advancing `ipc`.
+    /// Get a signed word from `CodeData` at a specific index without advancing `instructionPointer`.
     ///  - Parameters:
     ///   - at: The position from which to read the word.
     ///  - Returns: The little-endian word stored at the index.
@@ -136,7 +136,7 @@ struct CodeData {
             return jte - Int(jumpTableEntry)
         } else {
             // Forward jump: a simple relative offset from the current instruction pointer.
-            return ipc + Int(offset) + 1  // ipc is already advanced by readByte()
+            return instructionPointer + Int(offset) + 1  // instructionPointer is already advanced by readByte()
         }
     }
 
@@ -145,12 +145,12 @@ struct CodeData {
     /// - Throws: `CodeDataError` on failure.
     mutating func readString() throws -> String {
         let count = Int(try readByte())
-        guard ipc + count <= data.count else {
+        guard instructionPointer + count <= data.count else {
             throw CodeDataError.unexpectedEndOfData
         }
 
-        let stringData = data[ipc..<(ipc + count)]
-        ipc += count
+        let stringData = data[instructionPointer..<(instructionPointer + count)]
+        instructionPointer += count
 
         guard let result = String(data: stringData, encoding: .ascii) else {
             throw CodeDataError.stringDecodingFailed
@@ -161,17 +161,17 @@ struct CodeData {
     /// Reads a length-prefixed byte array.
     mutating func readByteArray() throws -> [UInt8] {
         let count = Int(try readByte())
-        guard ipc + count <= data.count else {
+        guard instructionPointer + count <= data.count else {
             throw CodeDataError.unexpectedEndOfData
         }
-        let byteArray = Array(data[ipc..<ipc + count])
-        ipc += count
+        let byteArray = Array(data[instructionPointer..<instructionPointer + count])
+        instructionPointer += count
         return byteArray
     }
 
     /// Reads a word-aligned array of `count` words.
     mutating func readWordArray(count: Int) throws -> [UInt16] {
-        guard ipc + (count * 2) <= data.count else {
+        guard instructionPointer + (count * 2) <= data.count else {
             throw CodeDataError.unexpectedEndOfData
         }
         var words: [UInt16] = []

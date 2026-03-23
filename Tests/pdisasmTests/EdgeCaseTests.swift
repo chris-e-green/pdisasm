@@ -14,20 +14,20 @@ final class EdgeCaseTests: XCTestCase {
 
     func testReadWordArrayMultipleWords() throws {
         // three words: 0x0102, 0x0304, 0x0506
-        var cd = CodeData(data: Data([0x02,0x01,0x04,0x03,0x06,0x05]), ipc: 0, header: 0)
+        var cd = CodeData(data: Data([0x02,0x01,0x04,0x03,0x06,0x05]), instructionPointer: 0, header: 0)
         let words = try cd.readWordArray(count: 3)
         XCTAssertEqual(words, [0x0102, 0x0304, 0x0506])
     }
 
     func testReadByteArrayOutOfBounds() throws {
-        var cd = CodeData(data: Data([0x05, 0x01, 0x02]), ipc: 0, header: 0)
+        var cd = CodeData(data: Data([0x05, 0x01, 0x02]), instructionPointer: 0, header: 0)
         XCTAssertThrowsError(try cd.readByteArray()) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
     }
 
     func testReadStringUnexpectedEnd() throws {
-        var cd = CodeData(data: Data([0x04, 0x61, 0x62]), ipc: 0, header: 0)
+        var cd = CodeData(data: Data([0x04, 0x61, 0x62]), instructionPointer: 0, header: 0)
         XCTAssertThrowsError(try cd.readString()) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
@@ -38,7 +38,7 @@ final class EdgeCaseTests: XCTestCase {
     // prepare data where offset byte is 0x90 -> jte = header + 0x90 - 256
     // choose header = 114 so jte = 114 + 144 - 256 = 2 (within bounds)
     let arr: [UInt8] = [0x90, 0x00, 0x02, 0x00]
-    var cd = CodeData(data: Data(arr), ipc: 0, header: 114)
+    var cd = CodeData(data: Data(arr), instructionPointer: 0, header: 114)
     let _ = try cd.readAddress()
         // if no exception was thrown, the test passes
     }

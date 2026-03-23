@@ -2,7 +2,7 @@
 
 ## Segment Table
 
-| slot | segNum | name | codeaddr | codeleng | kind | textAddr | mType | version |
+| slot | segNum | name | codeAddress | codeLength | kind | textAddr | machineType | version |
 |-----:|-------:|------|---------:|---------:|------|---------:|-------|--------:|
 | 0 | 1 | FORMATTE | 0001 | 2672 | linked | 0000 | 15 | 7 |
 

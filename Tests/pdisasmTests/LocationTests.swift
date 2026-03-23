@@ -82,29 +82,29 @@ final class LocationTests: XCTestCase {
 
     func testDispNameWithName() {
         let loc = Location(segment: 1, procedure: 2, addr: 3, name: "MYVAR")
-        XCTAssertEqual(loc.dispName, "MYVAR")
+        XCTAssertEqual(loc.displayName, "MYVAR")
     }
 
     func testDispNameWithoutName() {
         let loc = Location(segment: 1, procedure: 2, lexLevel: 3, addr: 4)
-        XCTAssertEqual(loc.dispName, "S1_P2_L3_A4")
+        XCTAssertEqual(loc.displayName, "S1_P2_L3_A4")
     }
 
     func testDispNameMinimal() {
         let loc = Location(segment: 0)
-        XCTAssertEqual(loc.dispName, "S0")
+        XCTAssertEqual(loc.displayName, "S0")
     }
 
     // MARK: - dispType
 
     func testDispTypeWithType() {
         let loc = Location(segment: 0, type: "INTEGER")
-        XCTAssertEqual(loc.dispType, "INTEGER")
+        XCTAssertEqual(loc.displayType, "INTEGER")
     }
 
     func testDispTypeEmpty() {
         let loc = Location(segment: 0)
-        XCTAssertEqual(loc.dispType, "UNKNOWN")
+        XCTAssertEqual(loc.displayType, "UNKNOWN")
     }
 
     // MARK: - description

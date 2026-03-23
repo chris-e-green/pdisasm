@@ -16,7 +16,7 @@ final class SkippedProcedureTests: XCTestCase {
         code[ptrIndex] = 0xFF
         code[ptrIndex + 1] = 0xFF
 
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "TST", segkind: .dataseg, textaddr: 0, segNum: 0, mType: 0, version: 0)
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "TST", segmentKind: .dataseg, textAddress: 0, segNum: 0, machineType: 0, version: 0)
 
     // segDict not needed for this unit test
 
@@ -26,7 +26,7 @@ final class SkippedProcedureTests: XCTestCase {
         codeSeg.procedureDictionary = ProcedureDictionary(procedureCount: Int(codeBlock[codeBlock.endIndex - 1]), procedurePointers: [])
         for i in 1...codeSeg.procedureDictionary.procedureCount {
             let ptrIndex = codeBlock.endIndex - i * 2 - 2
-            if let ptr = try? CodeData(data: codeBlock, ipc: 0, header: 0).getSelfRefPointer(at: ptrIndex) {
+            if let ptr = try? CodeData(data: codeBlock, instructionPointer: 0, header: 0).getSelfRefPointer(at: ptrIndex) {
                 codeSeg.procedureDictionary.procedurePointers.append(ptr)
             } else {
                 codeSeg.procedureDictionary.procedurePointers.append(0)
@@ -35,7 +35,7 @@ final class SkippedProcedureTests: XCTestCase {
 
         var allCallers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
+        var allProcedures: [ProcedureIdentifier] = []
 
         for (_, procPtr) in codeSeg.procedureDictionary.procedurePointers.enumerated() {
             var proc = Procedure()

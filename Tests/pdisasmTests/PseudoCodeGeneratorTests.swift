@@ -4,10 +4,10 @@ import XCTest
 final class PseudoCodeGeneratorTests: XCTestCase {
 
     private func makeGenerator(
-        procs: [ProcIdentifier] = [],
+        procs: [ProcedureIdentifier] = [],
         labels: [Location] = []
     ) -> PseudoCodeGenerator {
-        var procLookup: [String: ProcIdentifier] = [:]
+        var procLookup: [String: ProcedureIdentifier] = [:]
         for p in procs {
             procLookup["\(p.segment):\(p.procedure)"] = p
         }
@@ -125,7 +125,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
     func testCallProcedureGeneratesCallString() {
         var stack = StackSimulator()
         stack.push(("42", "INTEGER"))  // one argument
-        let calledProc = ProcIdentifier(
+        let calledProc = ProcedureIdentifier(
             isFunction: false, segment: 1, segmentName: "MYSEG",
             procedure: 5, procName: "DOWORK",
             parameters: [Identifier(name: "X", type: "INTEGER")]
@@ -143,7 +143,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         stack.push(("retspace", "INTEGER"))  // return space
         stack.push(("retspace2", "INTEGER")) // second return word
         stack.push(("10", "INTEGER"))        // argument
-        let calledFunc = ProcIdentifier(
+        let calledFunc = ProcedureIdentifier(
             isFunction: true, segment: 1, segmentName: "MYSEG",
             procedure: 3, procName: "CALC",
             parameters: [Identifier(name: "N", type: "INTEGER")],

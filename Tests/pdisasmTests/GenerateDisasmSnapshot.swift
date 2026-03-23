@@ -26,8 +26,8 @@ final class GenerateDisasmSnapshot: XCTestCase {
 
         var segTable: [Int: Segment] = [:]
         for i in 0...15 {
-            let codeaddr = try diskInfo.readWord(at: i * 4)
-            let codeleng = try diskInfo.readWord(at: i * 4 + 2)
+            let codeAddress = try diskInfo.readWord(at: i * 4)
+            let codeLength = try diskInfo.readWord(at: i * 4 + 2)
             var name = ""
             for j in 0...7 {
                 name.append(String(UnicodeScalar(Int(segName[i * 8 + j]))!))
@@ -36,17 +36,17 @@ final class GenerateDisasmSnapshot: XCTestCase {
             let kind = SegmentKind(rawValue: Int(try segKind.readWord(at: i * 2)))
             var segNum = Int(segInfo[i * 2])
             if segNum == 0 { segNum = i }
-            let mType = Int(segInfo[i * 2 + 1] & 0x0F)
+            let machineType = Int(segInfo[i * 2 + 1] & 0x0F)
             let version = Int((segInfo[i * 2 + 1] & 0xE0) >> 5)
             let text = try textAddr.readWord(at: i * 2)
-            if codeleng > 0 {
-                segTable[i] = Segment(codeaddr: Int(codeaddr), 
-                                      codeleng: Int(codeleng), 
+            if codeLength > 0 {
+                segTable[i] = Segment(codeAddress: Int(codeAddress), 
+                                      codeLength: Int(codeLength), 
                                       name: name, 
-                                      segkind: kind ?? .dataseg, 
-                                      textaddr: Int(text), 
+                                      segmentKind: kind ?? .dataseg, 
+                                      textAddress: Int(text), 
                                       segNum: segNum, 
-                                      mType: mType, 
+                                      machineType: machineType, 
                                       version: version)
             }
         }
@@ -67,7 +67,7 @@ final class GenerateDisasmSnapshot: XCTestCase {
         // Prepare empty contexts to call outputResults
         let codeSegs: [Int: CodeSegment] = [:]
         let allLocations: Set<Location> = []
-        let allProcedures: [ProcIdentifier] = []
+        let allProcedures: [ProcedureIdentifier] = []
         let allCallers: Set<Call> = []
 
         // Redirect stdout to the output file

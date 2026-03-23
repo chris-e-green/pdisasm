@@ -113,7 +113,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         hasher.combine(addr)
     }
 
-    public var dispName: String {
+    public var displayName: String {
         if !name.isEmpty {
             return name
         }
@@ -130,7 +130,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         return locationString
     }
 
-    public var dispType: String {
+    public var displayType: String {
         return type.isEmpty ? "UNKNOWN" : type
     }
 

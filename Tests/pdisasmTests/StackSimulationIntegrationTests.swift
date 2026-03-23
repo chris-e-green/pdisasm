@@ -5,14 +5,14 @@ import Foundation
 final class StackSimulationIntegrationTests: XCTestCase {
 
     /// Helper: builds a synthetic procedure from raw bytes, decodes it, then runs
-    /// simulateStackandGeneratePseudocodeForProcedure. Returns the Procedure.
+    /// simulateStackAndGeneratePseudocode. Returns the Procedure.
     private func buildAndSimulate(bytes: [UInt8], segment: Int = 1, procedureNumber: Int = 1) -> Procedure {
         let code = Data(bytes)
         var proc = Procedure()
         var callers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "TEST", segkind: .dataseg, textaddr: 0, segNum: segment, mType: 0, version: 0)
+        var allProcedures: [ProcedureIdentifier] = []
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "TEST", segmentKind: .dataseg, textAddress: 0, segNum: segment, machineType: 0, version: 0)
         let addr = code.count - 2
 
         decodePascalProcedure(
@@ -26,7 +26,7 @@ final class StackSimulationIntegrationTests: XCTestCase {
             allProcedures: &allProcedures
         )
 
-        simulateStackandGeneratePseudocodeForProcedure(
+        simulateStackAndGeneratePseudocode(
             proc: proc,
             allProcedures: &allProcedures,
             allLocations: &allLocations

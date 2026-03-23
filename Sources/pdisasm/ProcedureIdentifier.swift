@@ -1,10 +1,10 @@
-public class ProcIdentifier: CustomStringConvertible, Hashable, Codable {
+public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(segment)
         hasher.combine(procedure)
     }
 
-    public static func == (lhs: ProcIdentifier, rhs: ProcIdentifier) -> Bool {
+    public static func == (lhs: ProcedureIdentifier, rhs: ProcedureIdentifier) -> Bool {
         return lhs.segment == rhs.segment && lhs.procedure == rhs.procedure
     }
 

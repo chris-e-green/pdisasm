@@ -8,7 +8,7 @@ final class SnapshotTests: XCTestCase {
         let segDict = SegDictionary(segTable: [:], intrinsics: Set<UInt8>(), comment: "")
         let codeSegs: [Int: CodeSegment] = [:]
         let allLocations: Set<Location> = []
-        let allProcedures: [ProcIdentifier] = []
+        let allProcedures: [ProcedureIdentifier] = []
         let allCallers: Set<Call> = []
 
         // capture stdout

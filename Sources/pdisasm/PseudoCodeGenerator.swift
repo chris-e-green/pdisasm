@@ -4,7 +4,7 @@ import Foundation
 
 /// Generates high-level pseudo-code from decoded instructions and stack states
 struct PseudoCodeGenerator {
-    let procLookup: [String: ProcIdentifier]
+    let procLookup: [String: ProcedureIdentifier]
     let labelLookup: [String: Location]
     var allLocations: Set<Location>
 
@@ -12,7 +12,7 @@ struct PseudoCodeGenerator {
     func findLabel(_ loc: Location) -> (String?, String?) {
         let key = "\(loc.segment):\(loc.procedure ?? -1):\(loc.addr ?? -1)"
         if let ll = labelLookup[key] {
-            return (ll.dispName, ll.dispType)
+            return (ll.displayName, ll.displayType)
         } else {
             return (nil, nil)
         }
@@ -71,13 +71,13 @@ struct PseudoCodeGenerator {
                     case "CHAR":
                         if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
                             return
-                                "\(destName ?? destLoc.dispName) := '\(String(format: "%c", ch))'"
+                                "\(destName ?? destLoc.displayName) := '\(String(format: "%c", ch))'"
                         }
                     case "BOOLEAN":
                         if src == "0" {
-                            return "\(destName ?? destLoc.dispName) := FALSE"
+                            return "\(destName ?? destLoc.displayName) := FALSE"
                         } else if src == "1" {
-                            return "\(destName ?? destLoc.dispName) := TRUE"
+                            return "\(destName ?? destLoc.displayName) := TRUE"
                         }
                     default:
                         _ = 0
@@ -90,9 +90,9 @@ struct PseudoCodeGenerator {
                 if destType != srcType {
                     _ = 0
                 }
-                return "\(destName ?? destLoc.dispName) := \(src)"
+                return "\(destName ?? destLoc.displayName) := \(src)"
             }
-            return "\(inst.memLocation?.dispName ?? "unknown") := \(src)"
+            return "\(inst.memLocation?.displayName ?? "unknown") := \(src)"
         case cip, cbp, cxp, clp, cgp:
             if let dest = inst.destination {
                 return handleCallProcedure(dest, stack: &stack)

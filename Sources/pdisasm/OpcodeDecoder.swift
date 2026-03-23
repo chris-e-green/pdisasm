@@ -4,7 +4,7 @@ import Foundation
 
 /// Handles decoding of P-code opcodes and extracting instruction parameters
 struct OpcodeDecoder {
-    let cd: CodeData
+    let codeData: CodeData
 
     // MARK: - Trivial single-byte opcode table
     // Opcodes that decode to just a mnemonic and comment with bytesConsumed=1, no params/locations.
@@ -122,8 +122,8 @@ struct OpcodeDecoder {
                 comment: "Short load one-word constant \(opcode)"
             )
         case lde:
-            let seg = Int(try cd.readByte(at: ic + 1))
-            let (val, inc) = try cd.readBig(at: ic + 2)
+            let seg = Int(try codeData.readByte(at: ic + 1))
+            let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
                 procedure: 0,
@@ -140,7 +140,7 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case csp:
-            let procNum = Int(try cd.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "CSP",
@@ -150,7 +150,7 @@ struct OpcodeDecoder {
                     "Call standard procedure \(cspProcs[procNum]?.0 ?? String(procNum))"
             )
         case adj:
-            let count = Int(try cd.readByte(at: ic + 1))
+            let count = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "ADJ",
@@ -159,11 +159,11 @@ struct OpcodeDecoder {
                 comment: "Adjust set to \(count) words"
             )
         case fjp:
-            let offset = Int(try cd.readByte(at: ic + 1))
+            let offset = Int(try codeData.readByte(at: ic + 1))
             var dest: Int = 0
             if offset > 0x7f {
                 let jte = addr + offset - 256
-                dest = jte - Int(try cd.readWord(at: jte))
+                dest = jte - Int(try codeData.readWord(at: jte))
             } else {
                 dest = ic + offset + 2
             }
@@ -175,7 +175,7 @@ struct OpcodeDecoder {
                 comment: "Jump if TOS false to \(String(format: "%04x", dest))"
             )
         case inc:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "INC",
@@ -184,7 +184,7 @@ struct OpcodeDecoder {
                 comment: "Inc field ptr (TOS+\(val))"
             )
         case ind:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "IND",
@@ -193,7 +193,7 @@ struct OpcodeDecoder {
                 comment: "Static index and load word (TOS+\(val))"
             )
         case ixa:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "IXA",
@@ -202,7 +202,7 @@ struct OpcodeDecoder {
                 comment: "Index array (TOS-1 + TOS * \(val))"
             )
         case lao:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
@@ -213,11 +213,11 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case lsa:
-            let strLen = Int(try cd.readByte(at: ic + 1))
+            let strLen = Int(try codeData.readByte(at: ic + 1))
             var s: String = ""
             if strLen > 0 {
                 for i in 1...strLen {
-                    let ch = try cd.readByte(at: ic + 1 + Int(i))
+                    let ch = try codeData.readByte(at: ic + 1 + Int(i))
                     s += String(format: "%c", ch)
                 }
             }
@@ -230,8 +230,8 @@ struct OpcodeDecoder {
                 comment: "Load string address: '" + s + "'"
             )
         case lae:
-            let seg = Int(try cd.readByte(at: ic + 1))
-            let (val, inc) = try cd.readBig(at: ic + 2)
+            let seg = Int(try codeData.readByte(at: ic + 1))
+            let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
                 procedure: 0,
@@ -248,7 +248,7 @@ struct OpcodeDecoder {
             )
         case mov:
             // MOV
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "MOV",
@@ -258,7 +258,7 @@ struct OpcodeDecoder {
             )
         case ldo:
             // LDO
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
@@ -270,7 +270,7 @@ struct OpcodeDecoder {
             )
         case sas:
             // SAS
-            let sasCount = Int(try cd.readByte(at: ic + 1))
+            let sasCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "SAS",
@@ -280,7 +280,7 @@ struct OpcodeDecoder {
             )
         case sro:
             // SRO
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
@@ -295,19 +295,19 @@ struct OpcodeDecoder {
             var tempIC = ic + 1
             var tempParams: [Int] = []
             if tempIC % 2 != 0 { tempIC += 1 }
-            let first = Int(try cd.readInt(at: tempIC))
+            let first = Int(try codeData.readInt(at: tempIC))
             tempParams.append(first)
             tempIC += 2
-            let last = Int(try cd.readInt(at: tempIC))
+            let last = Int(try codeData.readInt(at: tempIC))
             tempParams.append(last)
             tempIC += 2
             tempParams.append(tempIC)
 
             var dest: Int = 0
-            let offset = Int(try cd.readByte(at: tempIC + 1))
+            let offset = Int(try codeData.readByte(at: tempIC + 1))
             if offset > 0x7f {
                 let jte = addr + offset - 256
-                dest = jte - Int(try cd.readWord(at: jte))
+                dest = jte - Int(try codeData.readWord(at: jte))
             } else {
                 dest = tempIC + offset + 2
             }
@@ -320,7 +320,7 @@ struct OpcodeDecoder {
                 exit(1)
             }
             for _ in first...last {
-                let caseDest = try cd.getSelfRefPointer(at: tempIC)
+                let caseDest = try codeData.getSelfRefPointer(at: tempIC)
                 tempParams.append(caseDest)
                 tempIC += 2
             }
@@ -333,7 +333,7 @@ struct OpcodeDecoder {
             )
         case rnp:
             // RNP
-            let retCount = Int(try cd.readByte(at: ic + 1))
+            let retCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "RNP",
@@ -343,7 +343,7 @@ struct OpcodeDecoder {
             )
         case cip:
             // CIP
-            let procNum = Int(try cd.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
                 opcode: opcode,
@@ -382,8 +382,8 @@ struct OpcodeDecoder {
             )
         case lda:
             // LDA
-            let (val, inc) = try cd.readBig(at: ic + 2)
-            let byte1 = try cd.readByte(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 2)
+            let byte1 = try codeData.readByte(at: ic + 1)
             let refLexLevel = proc.lexicalLevel - Int(byte1)
             let loc = Location(
                 segment: refLexLevel < 0 ? 0 : currSeg.segNum,
@@ -400,12 +400,12 @@ struct OpcodeDecoder {
             )
         case ldc:
             // LDC has variable-length data - just return count, actual size calculated in switch
-            let count = Int(try cd.readByte(at: ic + 1))
+            let count = Int(try codeData.readByte(at: ic + 1))
             var params: [Int] = [count]
             var tempIC = ic + 2
             if tempIC % 2 != 0 { tempIC += 1 }  // word aligned data
             for i in (0..<count).reversed() {  // words are in reverse order
-                let val = Int(try cd.readWord(at: tempIC + i * 2))
+                let val = Int(try codeData.readWord(at: tempIC + i * 2))
                 params.append(val)
             }
             return DecodedInstruction(
@@ -435,8 +435,8 @@ struct OpcodeDecoder {
             )
         case lod:
             // LOD
-            let (val, inc) = try cd.readBig(at: ic + 2)
-            let byte1 = try cd.readByte(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 2)
+            let byte1 = try codeData.readByte(at: ic + 1)
             let refLexLevel = proc.lexicalLevel - Int(byte1)
             let loc = Location(
                 segment: refLexLevel < 0 ? 0 : currSeg.segNum,
@@ -462,8 +462,8 @@ struct OpcodeDecoder {
             )
         case str:
             // STR
-            let (val, inc) = try cd.readBig(at: ic + 2)
-            let byte1 = try cd.readByte(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 2)
+            let byte1 = try codeData.readByte(at: ic + 1)
             let refLexLevel = proc.lexicalLevel - Int(byte1)
             let loc = Location(
                 segment: refLexLevel < 0 ? 0 : currSeg.segNum,
@@ -479,11 +479,11 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case ujp:
-            let offset = Int(try cd.readByte(at: ic + 1))
+            let offset = Int(try codeData.readByte(at: ic + 1))
             var dest: Int = 0
             if offset > 0x7f {
                 let jte = addr + offset - 256
-                dest = jte - Int(try cd.readWord(at: jte))
+                dest = jte - Int(try codeData.readWord(at: jte))
             } else {
                 dest = ic + offset + 2
             }
@@ -495,7 +495,7 @@ struct OpcodeDecoder {
                 comment: "Unconditional jump to \(String(format: "%04x", dest))"
             )
         case ldm:
-            let ldmCount = Int(try cd.readByte(at: ic + 1))
+            let ldmCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "LDM",
@@ -504,7 +504,7 @@ struct OpcodeDecoder {
                 comment: "Load \(ldmCount) words from (TOS)"
             )
         case stm:
-            let stmCount = Int(try cd.readByte(at: ic + 1))
+            let stmCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "STM",
@@ -513,8 +513,8 @@ struct OpcodeDecoder {
                 comment: "Store \(stmCount) words at TOS to TOS-1"
             )
         case ixp:
-            let elementsPerWord = Int(try cd.readByte(at: ic + 1))
-            let fieldWidth = Int(try cd.readByte(at: ic + 2))
+            let elementsPerWord = Int(try codeData.readByte(at: ic + 1))
+            let fieldWidth = Int(try codeData.readByte(at: ic + 2))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "IXP",
@@ -524,7 +524,7 @@ struct OpcodeDecoder {
                     "Index packed array TOS-1[TOS], \(elementsPerWord) elts/word, \(fieldWidth) field width"
             )
         case rbp:
-            let retCount = Int(try cd.readByte(at: ic + 1))
+            let retCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "RBP",
@@ -533,7 +533,7 @@ struct OpcodeDecoder {
                 comment: "Return from base procedure"
             )
         case cbp:
-            let procNum = Int(try cd.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
                 opcode: opcode,
@@ -544,7 +544,7 @@ struct OpcodeDecoder {
                 destination: loc
             )
         case lla:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(
                 segment: currSeg.segNum,
                 procedure: procedure,
@@ -560,7 +560,7 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case ldci:
-            let val = Int(try cd.readWord(at: ic + 1))
+            let val = Int(try codeData.readWord(at: ic + 1))
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "LDCI",
@@ -569,7 +569,7 @@ struct OpcodeDecoder {
                 comment: "Load one-word constant \(val)"
             )
         case ldl:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(
                 segment: segment,
                 procedure: procedure,
@@ -585,7 +585,7 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case stl:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(
                 segment: segment,
                 procedure: procedure,
@@ -601,8 +601,8 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case cxp:
-            let seg = Int(try cd.readByte(at: ic + 1))
-            let procNum = Int(try cd.readByte(at: ic + 2))
+            let seg = Int(try codeData.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 2))
             let loc = Location(segment: seg, procedure: procNum)
             return DecodedInstruction(
                 opcode: opcode,
@@ -613,7 +613,7 @@ struct OpcodeDecoder {
                 destination: loc
             )
         case clp:
-            let procNum = Int(try cd.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
                 opcode: opcode,
@@ -624,7 +624,7 @@ struct OpcodeDecoder {
                 destination: loc
             )
         case cgp:
-            let procNum = Int(try cd.readByte(at: ic + 1))
+            let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
                 opcode: opcode,
@@ -635,10 +635,10 @@ struct OpcodeDecoder {
                 destination: loc
             )
         case lpa:
-            let count = Int(try cd.readByte(at: ic + 1))
+            let count = Int(try codeData.readByte(at: ic + 1))
             var txtRep = ""
             for i in 1...count {
-                if let c = try? cd.readByte(at: ic + 1 + i) {
+                if let c = try? codeData.readByte(at: ic + 1 + i) {
                     if c >= 0x20 && c <= 0x7e {
                         txtRep.append(Character(UnicodeScalar(Int(c))!))
                     } else {
@@ -655,8 +655,8 @@ struct OpcodeDecoder {
                 comment: "Load packed array"
             )
         case ste:
-            let seg = Int(try cd.readByte(at: ic + 1))
-            let (val, inc) = try cd.readBig(at: ic + 2)
+            let seg = Int(try codeData.readByte(at: ic + 1))
+            let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
                 procedure: 0,
@@ -672,7 +672,7 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case bpt:
-            let (val, inc) = try cd.readBig(at: ic + 1)
+            let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "BPT",
@@ -727,7 +727,7 @@ struct OpcodeDecoder {
     func decodeComparator(at index: Int) -> (
         suffix: String, prefix: String, increment: Int, dataType: String
     ) {
-        guard let b = try? cd.readByte(at: index) else {
+        guard let b = try? codeData.readByte(at: index) else {
             return ("", "", 1, "")
         }
         switch b {
@@ -736,7 +736,7 @@ struct OpcodeDecoder {
         case 6: return ("BOOL", "Boolean", 1, "BOOLEAN")
         case 8: return ("SET", "Set", 1, "SET")
         case 10:
-            if let (val, inc) = try? cd.readBig(at: index + 1) {
+            if let (val, inc) = try? codeData.readBig(at: index + 1) {
                 return (
                     "BYTE", "Byte array (\(val) long)", inc + 1,
                     "ARRAY[1..\(val)] OF BYTE"
@@ -744,7 +744,7 @@ struct OpcodeDecoder {
             }
             return ("BYTE", "Byte array (0 long)", 1, "ARRAY OF BYTE")
         case 12:
-            if let (val, inc) = try? cd.readBig(at: index + 1) {
+            if let (val, inc) = try? codeData.readBig(at: index + 1) {
                 return (
                     "WORD", "Word array (\(val) long)", inc + 1,
                     "ARRAY[1..\(val)] OF WORD"

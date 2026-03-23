@@ -31,18 +31,18 @@ final class OutputFlagTests: XCTestCase {
         return String(data: outData, encoding: .utf8) ?? ""
     }
 
-    private func makeMinimalInputs() -> (SegDictionary, [Int: CodeSegment], Set<Location>, [ProcIdentifier], Set<Call>) {
-        let seg = Segment(codeaddr: 0, codeleng: 0, name: "TEST", segkind: .dataseg, textaddr: 0, segNum: 0, mType: 0, version: 0)
+    private func makeMinimalInputs() -> (SegDictionary, [Int: CodeSegment], Set<Location>, [ProcedureIdentifier], Set<Call>) {
+        let seg = Segment(codeAddress: 0, codeLength: 0, name: "TEST", segmentKind: .dataseg, textAddress: 0, segNum: 0, machineType: 0, version: 0)
         let dict = SegDictionary(segTable: [0: seg], intrinsics: [], comment: "")
 
         let proc = Procedure()
-        proc.procType = ProcIdentifier(isFunction: false, segment: 0, segmentName: "TEST", procedure: 1, procName: "MYPROC")
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 0, segmentName: "TEST", procedure: 1, procName: "MYPROC")
         proc.instructions[0] = Instruction(opcode: 0xAD, mnemonic: "RNP", params: [0], comment: "Return", stackState: [])
         proc.entryPoints = [0]
 
         let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: [0]), procedures: [proc])
         let codeSegs: [Int: CodeSegment] = [0: codeSeg]
-        let allProcedures: [ProcIdentifier] = [proc.procType!]
+        let allProcedures: [ProcedureIdentifier] = [proc.identifier!]
 
         return (dict, codeSegs, [], allProcedures, [])
     }

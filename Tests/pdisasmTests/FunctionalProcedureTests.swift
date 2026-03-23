@@ -22,13 +22,13 @@ final class FunctionalProcedureTests: XCTestCase {
         let code = Data(arr)
 
         var proc = Procedure()
-        proc.procType = ProcIdentifier(isFunction: false, segment: 1, procedure: 1)
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 1)
 
         var callers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
+        var allProcedures: [ProcedureIdentifier] = []
 
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "SEGT", segkind: .dataseg, textaddr: 0, segNum: 1, mType: 0, version: 0)
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "SEGT", segmentKind: .dataseg, textAddress: 0, segNum: 1, machineType: 0, version: 0)
 
         // addr points to the procedure header (procNumber at index 10)
         let addr = 10

@@ -66,7 +66,7 @@ func exportLabels(
 
 func importProcedures(
     fromCSV CSVFile: String,
-    to allProcedures: inout [ProcIdentifier],
+    to allProcedures: inout [ProcedureIdentifier],
     appSupportDirectory: URL
 ) {
     do {
@@ -79,7 +79,7 @@ func importProcedures(
                 contentsOf: URL(fileURLWithPath: fileURL.path)
             ) {
                 allProcedures = try dec.decode(
-                    [ProcIdentifier].self,
+                    [ProcedureIdentifier].self,
                     from: procData
                 )
             }
@@ -92,7 +92,7 @@ func importProcedures(
 
 func exportProcedures(
     toCSV CSVfile: String,
-    from procedures: [ProcIdentifier],
+    from procedures: [ProcedureIdentifier],
     overwrite: Bool = false,
     appSupportDirectory: URL
 ) {
@@ -164,8 +164,8 @@ func readCodeFileStructure(codeData: CodeData) throws -> SegDictionary {
 
     // decode Segment Dictionary (per-segment parts)
     for segIdx in 0...15 {
-        let codeaddr = Int(try diskInfo.readWord(at: segIdx * 4))
-        let codeleng = Int(try diskInfo.readWord(at: segIdx * 4 + 2))
+        let codeAddress = Int(try diskInfo.readWord(at: segIdx * 4))
+        let codeLength = Int(try diskInfo.readWord(at: segIdx * 4 + 2))
         var name = ""
         for j in 0...7 {
             name.append(
@@ -182,20 +182,20 @@ func readCodeFileStructure(codeData: CodeData) throws -> SegDictionary {
         )
         var segNum = Int(try segInfo.readByte(at: segIdx * 2))
         if segNum == 0 { segNum = segIdx }
-        let mType = Int(try segInfo.readByte(at: segIdx * 2 + 1) & 0x0F)
+        let machineType = Int(try segInfo.readByte(at: segIdx * 2 + 1) & 0x0F)
         let version = Int(
             (try segInfo.readByte(at: segIdx * 2 + 1) & 0xE0) >> 5
         )
         let text = try textAddr.readWord(at: segIdx * 2)
-        if codeleng > 0 {
+        if codeLength > 0 {
             segTable[segIdx] = Segment(
-                codeaddr: codeaddr,
-                codeleng: codeleng,
+                codeAddress: codeAddress,
+                codeLength: codeLength,
                 name: name,
-                segkind: kind ?? .dataseg,
-                textaddr: Int(text),
+                segmentKind: kind ?? .dataseg,
+                textAddress: Int(text),
                 segNum: segNum,
-                mType: mType,
+                machineType: machineType,
                 version: version
             )
         }
@@ -255,21 +255,21 @@ func normaliseMemoryLocations(
                         inst.memLocation?.segment = p.origin.segment
                     } else {
                         print(
-                            "\(proc.abbrevDescription): Memory location \(loc) doesn't match any caller"
+                            "\(proc.shortDescription): Memory location \(loc) doesn't match any caller"
                         )
                     }
                 case proc.lexicalLevel:
                     print(
-                        "\(proc.abbrevDescription): Memory location \(loc) has lex level \(lexLevel) and is local ",
+                        "\(proc.shortDescription): Memory location \(loc) has lex level \(lexLevel) and is local ",
                         terminator: " "
                     )
-                    inst.memLocation?.procedure = proc.procType?.procedure
+                    inst.memLocation?.procedure = proc.identifier?.procedure
                     print("Memory location is now \(loc).")
                 default:
                     var parents = allCallers.filter {
-                        $0.target.segment == proc.procType?.segment
+                        $0.target.segment == proc.identifier?.segment
                             && $0.target.procedure
-                                == proc.procType?.procedure
+                                == proc.identifier?.procedure
                     }.map(\.origin)
                     var foundMatch = false
                     while parents.isEmpty == false && !foundMatch {
@@ -324,8 +324,8 @@ public func runPdisasm(
     var allCodeSegs: [Int: CodeSegment] = [:]
     var allLocations: Set<Location> = []
     var sysLocations: Set<Location> = []
-    var allProcedures: [ProcIdentifier] = []
-    var sysProcedures: [ProcIdentifier] = []
+    var allProcedures: [ProcedureIdentifier] = []
+    var sysProcedures: [ProcedureIdentifier] = []
     var allCallers: Set<Call> = []
 
     // Try loading name maps (optional files in repo)
@@ -382,8 +382,8 @@ public func runPdisasm(
         let seg = segment.value
         var offset = 0
         let code = binaryData.getCodeBlock(
-            at: seg.codeaddr,
-            length: seg.codeleng
+            at: seg.codeAddress,
+            length: seg.codeLength
         )
 
         // If the extracted code block is missing or too small to contain the
@@ -398,7 +398,7 @@ public func runPdisasm(
             continue
         }
         
-        if seg.segkind == .dataseg  {
+        if seg.segmentKind == .dataseg  {
             // for the moment, ignore data segments. Need to work out how to parse.
             if verbose {
                 print("Skipping segment \(seg.name) (segNum=\(seg.segNum)): segment kind is .dataseg")
@@ -427,12 +427,12 @@ public func runPdisasm(
         if seg.segNum == 0 && seg.name == "PASCALSY" {
             if let extraSeg = segDict.segTable[15] {
                 extraCode = binaryData.getCodeBlock(
-                    at: extraSeg.codeaddr,
-                    length: extraSeg.codeleng
+                    at: extraSeg.codeAddress,
+                    length: extraSeg.codeLength
                 )
                 let pascalProcCount = Int(code[code.endIndex - 1])
                 let lastProcHdrLoc = code.endIndex - 2 - pascalProcCount * 2
-                let cdForLast = CodeData(data: code, ipc: 0, header: 0)
+                let cdForLast = CodeData(data: code, instructionPointer: 0, header: 0)
                 let lastProcRelativeAddr = Int(
                     try cdForLast.readWord(at: lastProcHdrLoc)
                 )
@@ -455,7 +455,7 @@ public func runPdisasm(
             procedures: []
         )
 
-        let cdForPtrs = CodeData(data: code, ipc: 0, header: 0)
+        let cdForPtrs = CodeData(data: code, instructionPointer: 0, header: 0)
         for i in 1...codeSeg.procedureDictionary.procedureCount {
             let ptrLoc = code.endIndex - i * 2 - 2
             if let ptr = try? cdForPtrs.getSelfRefPointer(at: ptrLoc) {
@@ -499,7 +499,7 @@ public func runPdisasm(
             }
 
             // if it's assembler, proc# is based on the index alone.
-            if procNumber == 0 && seg.mType == 7 {
+            if procNumber == 0 && seg.machineType == 7 {
                 procNumber = procIdx + 1
                 isAssembler = true
             }
@@ -509,12 +509,12 @@ public func runPdisasm(
             if let predefinedProc = allProcedures.first(where: {
                 $0.segment == seg.segNum && $0.procedure == procNumber
             }) {
-                proc.procType = predefinedProc
+                proc.identifier = predefinedProc
             } 
 
             // go through the parameters/function return and set the
             // allLabels data for predeclared procedures.
-            if let pt = proc.procType {
+            if let pt = proc.identifier {
                 // if it's a function, set locations 1 (and 2 for reals) to retval
                 if pt.isFunction == true {
                     if let ret = allLocations.first(where: {
@@ -535,7 +535,7 @@ public func runPdisasm(
                             )
                         )
                     }
-                    if proc.procType?.returnType == "REAL" {
+                    if proc.identifier?.returnType == "REAL" {
                         if let ret = allLocations.first(where: {
                             $0.segment == seg.segNum
                                 && $0.procedure == procNumber && $0.addr == 2
@@ -558,7 +558,7 @@ public func runPdisasm(
                 }
             }
 
-            if isAssembler && seg.mType == 7 {
+            if isAssembler && seg.machineType == 7 {
                 try? decodeAssemblerProcedure(
                     segmentNumber: seg.segNum,
                     procedureNumber: procNumber,
@@ -590,7 +590,7 @@ public func runPdisasm(
     // can't do until all procedures are decoded and we know the procedure calling hierarchy)
     for (_, codeSeg) in allCodeSegs {
         for proc in codeSeg.procedures {
-            if let pt = proc.procType {
+            if let pt = proc.identifier {
                 allCallers.forEach { call in
                     if call.target.segment == pt.segment
                         && call.target.procedure == pt.procedure
@@ -618,8 +618,8 @@ public func runPdisasm(
         for proc in codeSeg.procedures {
             normaliseMemoryLocations(proc, allCallers)
             let missingLex = allLocations.filter({
-                $0.lexLevel == nil && $0.segment == proc.procType?.segment
-                    && $0.procedure == proc.procType?.procedure
+                $0.lexLevel == nil && $0.segment == proc.identifier?.segment
+                    && $0.procedure == proc.identifier?.procedure
             })
             missingLex.forEach { loc in
                 allLocations.remove(loc)
@@ -633,7 +633,7 @@ public func runPdisasm(
     // Now we can update memory locations that correspond to procedure/function parameters and returns.
     for (_, codeSeg) in allCodeSegs {
         for proc in codeSeg.procedures {
-            if let pt = proc.procType {
+            if let pt = proc.identifier {
                 var paramAddr = 1
 
                 // if it's a function, set locations 1 (and 2 for reals) to retval
@@ -658,7 +658,7 @@ public func runPdisasm(
                             )
                         )
                     }
-                    if proc.procType?.returnType == "REAL" {
+                    if proc.identifier?.returnType == "REAL" {
                         if let ret = allLocations.first(where: {
                             $0.segment == pt.segment
                                 && $0.procedure == pt.procedure
@@ -713,11 +713,11 @@ public func runPdisasm(
     // As the stack plays a role in control flow, we need to handle them at the same time.
     for (_, codeSeg) in allCodeSegs {
         for proc in codeSeg.procedures {
-            if proc.procType?.isAssembly == true {
+            if proc.identifier?.isAssembly == true {
                 // skip assembly procedures
                 continue
             }
-            simulateStackandGeneratePseudocodeForProcedure(
+            simulateStackAndGeneratePseudocode(
                 proc: proc,
                 allProcedures: &allProcedures,
                 allLocations: &allLocations

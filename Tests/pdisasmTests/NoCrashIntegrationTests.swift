@@ -17,26 +17,26 @@ final class NoCrashIntegrationTests: XCTestCase {
     let comment = data.subdata(in: 433..<512)
 
     // CodeData views for safe, bounds-checked reads
-    let cdDisk = CodeData(data: diskInfo, ipc: 0, header: 0)
-    let cdSegKind = CodeData(data: segKind, ipc: 0, header: 0)
-    let cdTextAddr = CodeData(data: textAddr, ipc: 0, header: 0)
-    let cdSegInfo = CodeData(data: segInfo, ipc: 0, header: 0)
+    let cdDisk = CodeData(data: diskInfo, instructionPointer: 0, header: 0)
+    let cdSegKind = CodeData(data: segKind, instructionPointer: 0, header: 0)
+    let cdTextAddr = CodeData(data: textAddr, instructionPointer: 0, header: 0)
+    let cdSegInfo = CodeData(data: segInfo, instructionPointer: 0, header: 0)
 
         var segTable: [Int: Segment] = [:]
         for i in 0...15 {
-            let codeaddr = Int(try cdDisk.readWord(at: i * 4))
-            let codeleng = Int(try cdDisk.readWord(at: i * 4 + 2))
+            let codeAddress = Int(try cdDisk.readWord(at: i * 4))
+            let codeLength = Int(try cdDisk.readWord(at: i * 4 + 2))
             var name = ""
             for j in 0...7 { name.append(String(UnicodeScalar(Int(segName[i * 8 + j]))!)) }
             name = name.trimmingCharacters(in: [" "])
             let kind = SegmentKind(rawValue: Int(try cdSegKind.readWord(at: i * 2)))
             var segNum = Int(try cdSegInfo.readByte(at: i * 2))
             if segNum == 0 { segNum = i }
-            let mType = Int(try cdSegInfo.readByte(at: i * 2 + 1) & 0x0F)
+            let machineType = Int(try cdSegInfo.readByte(at: i * 2 + 1) & 0x0F)
             let version = Int((try cdSegInfo.readByte(at: i * 2 + 1) & 0xE0) >> 5)
             let text = Int(try cdTextAddr.readWord(at: i * 2))
-            if codeleng > 0 {
-                segTable[i] = Segment(codeaddr: codeaddr, codeleng: codeleng, name: name, segkind: kind ?? .dataseg, textaddr: text, segNum: segNum, mType: mType, version: version)
+            if codeLength > 0 {
+                segTable[i] = Segment(codeAddress: codeAddress, codeLength: codeLength, name: name, segmentKind: kind ?? .dataseg, textAddress: text, segNum: segNum, machineType: machineType, version: version)
             }
         }
 
@@ -51,7 +51,7 @@ final class NoCrashIntegrationTests: XCTestCase {
         // Now exercise the segment processing that previously crashed. Should not throw or crash.
         var allCodeSegs: [Int: CodeSegment] = [:]
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
+        var allProcedures: [ProcedureIdentifier] = []
     // allLabels was previously used for name mapping; no longer required in the test
     // so remove the variable to avoid an unused-variable warning.
         var allCallers: Set<Call> = []
@@ -67,7 +67,7 @@ final class NoCrashIntegrationTests: XCTestCase {
                         extraCode = codeBlock(for: extraSeg, from: data)
                         let pascalProcCount = code.count > 0 ? Int(code[code.endIndex - 1]) : 0
                         let lastProcHdrLoc = code.count > 0 ? code.endIndex - 2 - pascalProcCount * 2 : 0
-                        let lastProcRelativeAddr = try CodeData(data: code, ipc: 0, header: 0).readWord(at: lastProcHdrLoc)
+                        let lastProcRelativeAddr = try CodeData(data: code, instructionPointer: 0, header: 0).readWord(at: lastProcHdrLoc)
                         let lastProcAbsAddr = Int(lastProcRelativeAddr) - lastProcHdrLoc
                         offset = lastProcAbsAddr + extraCode.endIndex - 2
                     }
@@ -80,7 +80,7 @@ final class NoCrashIntegrationTests: XCTestCase {
                 codeSeg.procedureDictionary = ProcedureDictionary(procedureCount: Int(code[code.endIndex - 1]), procedurePointers: [])
                 for i in 1...codeSeg.procedureDictionary.procedureCount {
                     let ptrIndex = code.endIndex - i * 2 - 2
-                    if let ptr = try? CodeData(data: code, ipc: 0, header: 0).getSelfRefPointer(at: ptrIndex) {
+                    if let ptr = try? CodeData(data: code, instructionPointer: 0, header: 0).getSelfRefPointer(at: ptrIndex) {
                         codeSeg.procedureDictionary.procedurePointers.append(ptr)
                     } else {
                         codeSeg.procedureDictionary.procedurePointers.append(0)

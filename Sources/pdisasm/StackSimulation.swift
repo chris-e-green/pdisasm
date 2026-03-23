@@ -1,9 +1,9 @@
 import Foundation
 
 // MARK: - Stack Simulation and Pseudo-Code Generation
-func simulateStackandGeneratePseudocodeForProcedure(
+func simulateStackAndGeneratePseudocode(
     proc: Procedure,
-    allProcedures: inout [ProcIdentifier],
+    allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>
 ) {
     func handleComparison(
@@ -34,9 +34,9 @@ func simulateStackandGeneratePseudocodeForProcedure(
         var (b, tb) = simulator.pop()
         if ta == "CHAR" || tb == "CHAR" {
             setLocType(a, "CHAR")
-            a = chkCharType(a)
+            a = formatCharLiteral(a)
             setLocType(b, "CHAR")
-            b = chkCharType(b)
+            b = formatCharLiteral(b)
         } else {
             setLocType(a, "INTEGER")
             setLocType(b, "INTEGER")
@@ -54,7 +54,7 @@ func simulateStackandGeneratePseudocodeForProcedure(
         }
     }
     
-    func chkCharType(_ loc:String) -> String {
+    func formatCharLiteral(_ loc:String) -> String {
         if let ch = Int(loc) {
             if ch >= 0x20 && ch <= 0x7E {
                 return String(format: "'%c'", ch)
@@ -77,7 +77,7 @@ func simulateStackandGeneratePseudocodeForProcedure(
     proc.entryPoints.insert(proc.exitIC)
 
     // Build lookup dictionaries for O(1) access instead of O(n) linear searches
-    var procLookup: [String: ProcIdentifier] = [:]
+    var procLookup: [String: ProcedureIdentifier] = [:]
     for p in allProcedures {
         let key = "\(p.segment):\(p.procedure)"
         procLookup[key] = p
@@ -108,9 +108,9 @@ func simulateStackandGeneratePseudocodeForProcedure(
     func findStackLabel(_ loc: Location) -> (String, String?) {
         let key = "\(loc.segment):\(loc.procedure ?? -1):\(loc.addr ?? -1)"
         if let ll = labelLookup[key] {
-            return (ll.dispName, ll.dispType)
+            return (ll.displayName, ll.displayType)
         } else {
-            return (loc.dispName, loc.dispType)
+            return (loc.displayName, loc.displayType)
         }
     }
 

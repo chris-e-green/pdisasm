@@ -5,13 +5,13 @@ import Foundation
 final class CallerTrackingTests: XCTestCase {
 
     /// Helper to build a synthetic procedure with given bytes and decode it.
-    private func decodeSynthetic(bytes: [UInt8], segment: Int = 1, procedureNumber: Int = 1) -> (Procedure, Set<Call>, [ProcIdentifier]) {
+    private func decodeSynthetic(bytes: [UInt8], segment: Int = 1, procedureNumber: Int = 1) -> (Procedure, Set<Call>, [ProcedureIdentifier]) {
         let code = Data(bytes)
         var proc = Procedure()
         var callers: Set<Call> = []
         var allLocations: Set<Location> = []
-        var allProcedures: [ProcIdentifier] = []
-        let seg = Segment(codeaddr: 0, codeleng: code.count, name: "TEST", segkind: .dataseg, textaddr: 0, segNum: segment, mType: 0, version: 0)
+        var allProcedures: [ProcedureIdentifier] = []
+        let seg = Segment(codeAddress: 0, codeLength: code.count, name: "TEST", segmentKind: .dataseg, textAddress: 0, segNum: segment, machineType: 0, version: 0)
         let addr = code.count - 2
 
         decodePascalProcedure(
@@ -104,7 +104,7 @@ final class CallerTrackingTests: XCTestCase {
         bytes += [0x01, 0x00]   // procNumber=1, lexLevel=0
 
         let (proc, _, _) = decodeSynthetic(bytes: bytes)
-        XCTAssertTrue(proc.procType?.isFunction == true)
+        XCTAssertTrue(proc.identifier?.isFunction == true)
     }
 
     func testRNPWithZeroRetCountIsProcedure() {
@@ -117,7 +117,7 @@ final class CallerTrackingTests: XCTestCase {
         bytes += [0x01, 0x00]
 
         let (proc, _, _) = decodeSynthetic(bytes: bytes)
-        XCTAssertFalse(proc.procType?.isFunction == true)
+        XCTAssertFalse(proc.identifier?.isFunction == true)
     }
 
     func testRBPWithRetCountDetectsFunction() {
@@ -130,6 +130,6 @@ final class CallerTrackingTests: XCTestCase {
         bytes += [0x01, 0x00]
 
         let (proc, _, _) = decodeSynthetic(bytes: bytes)
-        XCTAssertTrue(proc.procType?.isFunction == true)
+        XCTAssertTrue(proc.identifier?.isFunction == true)
     }
 }

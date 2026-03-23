@@ -6,9 +6,9 @@ final class OpcodeDecoderTests: XCTestCase {
 
     /// Helper to create an OpcodeDecoder with given bytes and decode at ic=0.
     private func decode(bytes: [UInt8], opcode: UInt8, ic: Int = 0, segment: Int = 1, procedure: Int = 1, addr: Int = 100) throws -> OpcodeDecoder.DecodedInstruction {
-        let cd = CodeData(data: Data(bytes), ipc: 0, header: addr)
-        let decoder = OpcodeDecoder(cd: cd)
-        let seg = Segment(codeaddr: 0, codeleng: bytes.count, name: "T", segkind: .dataseg, textaddr: 0, segNum: segment, mType: 0, version: 0)
+        let cd = CodeData(data: Data(bytes), instructionPointer: 0, header: addr)
+        let decoder = OpcodeDecoder(codeData: cd)
+        let seg = Segment(codeAddress: 0, codeLength: bytes.count, name: "T", segmentKind: .dataseg, textAddress: 0, segNum: segment, machineType: 0, version: 0)
         let proc = Procedure()
         return try decoder.decode(opcode: opcode, at: ic, currSeg: seg, segment: segment, procedure: procedure, proc: proc, addr: addr)
     }
@@ -156,8 +156,8 @@ final class OpcodeDecoderTests: XCTestCase {
     // MARK: - decodeComparator
 
     func testDecodeComparatorReal() {
-        let cd = CodeData(data: Data([0x02]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x02]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, prefix, inc, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "REAL")
         XCTAssertEqual(prefix, "Real")
@@ -166,24 +166,24 @@ final class OpcodeDecoderTests: XCTestCase {
     }
 
     func testDecodeComparatorString() {
-        let cd = CodeData(data: Data([0x04]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x04]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, _, _, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "STR")
         XCTAssertEqual(dataType, "STRING")
     }
 
     func testDecodeComparatorBool() {
-        let cd = CodeData(data: Data([0x06]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x06]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, _, _, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "BOOL")
         XCTAssertEqual(dataType, "BOOLEAN")
     }
 
     func testDecodeComparatorSet() {
-        let cd = CodeData(data: Data([0x08]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x08]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, _, _, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "SET")
         XCTAssertEqual(dataType, "SET")
@@ -191,8 +191,8 @@ final class OpcodeDecoderTests: XCTestCase {
 
     func testDecodeComparatorByteArray() {
         // Byte array: 0x0A followed by BIG value 5
-        let cd = CodeData(data: Data([0x0A, 0x05]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x0A, 0x05]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, prefix, inc, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "BYTE")
         XCTAssertTrue(prefix.contains("5"))
@@ -202,16 +202,16 @@ final class OpcodeDecoderTests: XCTestCase {
 
     func testDecodeComparatorWordArray() {
         // Word array: 0x0C followed by BIG value 3
-        let cd = CodeData(data: Data([0x0C, 0x03]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0x0C, 0x03]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, _, _, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "WORD")
         XCTAssertTrue(dataType.contains("WORD"))
     }
 
     func testDecodeComparatorUnknown() {
-        let cd = CodeData(data: Data([0xFF]), ipc: 0, header: 0)
-        let decoder = OpcodeDecoder(cd: cd)
+        let cd = CodeData(data: Data([0xFF]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
         let (suffix, _, inc, dataType) = decoder.decodeComparator(at: 0)
         XCTAssertEqual(suffix, "")
         XCTAssertEqual(dataType, "")

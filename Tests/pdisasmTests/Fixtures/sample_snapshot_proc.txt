@@ -1,6 +1,6 @@
 ## Segment Table
 
-| slot | segNum | name | codeaddr | codeleng | kind | textAddr | mType | version |
+| slot | segNum | name | codeAddress | codeLength | kind | textAddr | machineType | version |
 |-----:|-------:|------|---------:|---------:|------|---------:|-------|--------:|
 
 intrinsics: `[]`

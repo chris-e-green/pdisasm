@@ -4,37 +4,37 @@ public enum SegmentKind: Int {
 }
 
 public struct Segment: CustomStringConvertible {
-    public var codeaddr: Int
-    public var codeleng: Int
+    public var codeAddress: Int
+    public var codeLength: Int
     public var name: String = ""
-    public var segkind: SegmentKind = .dataseg
-    public var textaddr: Int = 0
+    public var segmentKind: SegmentKind = .dataseg
+    public var textAddress: Int = 0
     public var segNum: Int = 0
-    public var mType: Int = 0
+    public var machineType: Int = 0
     public var version: Int = 0
 
     public var description: String {
         return
-            "Segment(name: \"\(name)\", codeaddr: \(String(format:"%04X", codeaddr)), len: \(codeleng))"
+            "Segment(name: \"\(name)\", codeAddress: \(String(format:"%04X", codeAddress)), len: \(codeLength))"
     }
 
     public init(
-        codeaddr: Int,
-        codeleng: Int,
+        codeAddress: Int,
+        codeLength: Int,
         name: String,
-        segkind: SegmentKind,
-        textaddr: Int,
+        segmentKind: SegmentKind,
+        textAddress: Int,
         segNum: Int,
-        mType: Int,
+        machineType: Int,
         version: Int
     ) {
-        self.codeaddr = codeaddr
-        self.codeleng = codeleng
+        self.codeAddress = codeAddress
+        self.codeLength = codeLength
         self.name = name
-        self.segkind = segkind
-        self.textaddr = textaddr
+        self.segmentKind = segmentKind
+        self.textAddress = textAddress
         self.segNum = segNum
-        self.mType = mType
+        self.machineType = machineType
         self.version = version
     }
 }
