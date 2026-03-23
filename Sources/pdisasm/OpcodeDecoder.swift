@@ -6,6 +6,54 @@ import Foundation
 struct OpcodeDecoder {
     let cd: CodeData
 
+    // MARK: - Trivial single-byte opcode table
+    // Opcodes that decode to just a mnemonic and comment with bytesConsumed=1, no params/locations.
+    private static let trivialOpcodes: [UInt8: (mnemonic: String, comment: String)] = [
+        abi:  ("ABI",  "Absolute value of integer (TOS)"),
+        abr:  ("ABR",  "Absolute value of real (TOS)"),
+        adi:  ("ADI",  "Add integers (TOS + TOS-1)"),
+        adr:  ("ADR",  "Add reals (TOS + TOS-1)"),
+        land: ("LAND", "Logical AND (TOS & TOS-1)"),
+        dif:  ("DIF",  "Set difference (TOS-1 AND NOT TOS)"),
+        dvi:  ("DVI",  "Divide integers (TOS-1 / TOS)"),
+        dvr:  ("DVR",  "Divide reals (TOS-1 / TOS)"),
+        chk:  ("CHK",  "Check subrange (TOS-1 <= TOS-2 <= TOS)"),
+        flo:  ("FLO",  "Float next to TOS (int TOS-1 to real TOS)"),
+        flt:  ("FLT",  "Float TOS (int TOS to real TOS)"),
+        inn:  ("INN",  "Set membership (TOS-1 in set TOS)"),
+        int:  ("INT",  "Set intersection (TOS AND TOS-1)"),
+        lor:  ("LOR",  "Logical OR (TOS | TOS-1)"),
+        modi: ("MODI", "Modulo integers (TOS-1 % TOS)"),
+        mpi:  ("MPI",  "Multiply integers (TOS * TOS-1)"),
+        mpr:  ("MPR",  "Multiply reals (TOS * TOS-1)"),
+        ngi:  ("NGI",  "Negate integer"),
+        ngr:  ("NGR",  "Negate real"),
+        lnot: ("LNOT", "Logical NOT (~TOS)"),
+        srs:  ("SRS",  "Subrange set [TOS-1..TOS]"),
+        sbi:  ("SBI",  "Subtract integers (TOS-1 - TOS)"),
+        sbr:  ("SBR",  "Subtract reals (TOS-1 - TOS)"),
+        sgs:  ("SGS",  "Build singleton set [TOS]"),
+        sqi:  ("SQI",  "Square integer (TOS * TOS)"),
+        sqr:  ("SQR",  "Square real (TOS * TOS)"),
+        sto:  ("STO",  "Store indirect word (TOS into TOS-1)"),
+        ixs:  ("IXS",  "Index string array (check 1<=TOS<=len of str TOS-1)"),
+        uni:  ("UNI",  "Set union (TOS OR TOS-1)"),
+        ldcn: ("LDCN", "Load constant NIL"),
+        ldp:  ("LDP",  "Load packed field (TOS)"),
+        stp:  ("STP",  "Store packed field (TOS into TOS-1)"),
+        ldb:  ("LDB",  "Load byte at byte ptr TOS-1 + TOS"),
+        stb:  ("STB",  "Store byte at TOS to byte ptr TOS-2 + TOS-1"),
+        nop:  ("NOP",  "No operation"),
+        xit:  ("XIT",  "Exit the operating system"),
+        nop2: ("NOP",  "No operation"),
+        equi: ("EQUI", "Integer TOS-1 = TOS"),
+        geqi: ("GEQI", "Integer TOS-1 >= TOS"),
+        grti: ("GRTI", "Integer TOS-1 > TOS"),
+        leqi: ("LEQI", "Integer TOS-1 <= TOS"),
+        lesi: ("LESI", "Integer TOS-1 < TOS"),
+        neqi: ("NEQI", "Integer TOS-1 <> TOS"),
+    ]
+
     struct DecodedInstruction {
         let opcode: UInt8
         let mnemonic: String
@@ -54,6 +102,16 @@ struct OpcodeDecoder {
     ) throws
         -> DecodedInstruction
     {
+        // Fast path: trivial single-byte opcodes (no params, no locations)
+        if let entry = Self.trivialOpcodes[opcode] {
+            return DecodedInstruction(
+                opcode: opcode,
+                mnemonic: entry.mnemonic,
+                bytesConsumed: 1,
+                comment: entry.comment
+            )
+        }
+
         switch opcode {
         case sldc0...sldc127:
             return DecodedInstruction(
@@ -62,209 +120,6 @@ struct OpcodeDecoder {
                 params: [Int(opcode)],
                 bytesConsumed: 1,
                 comment: "Short load one-word constant \(opcode)"
-            )
-        case abi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "ABI",
-                bytesConsumed: 1,
-                comment: "Absolute value of integer (TOS)"
-            )
-        case abr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "ABR",
-                bytesConsumed: 1,
-                comment: "Absolute value of real (TOS)"
-            )
-        case adi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "ADI",
-                bytesConsumed: 1,
-                comment: "Add integers (TOS + TOS-1)"
-            )
-        case adr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "ADR",
-                bytesConsumed: 1,
-                comment: "Add reals (TOS + TOS-1)"
-            )
-        case land:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LAND",
-                bytesConsumed: 1,
-                comment: "Logical AND (TOS & TOS-1)"
-            )
-        case dif:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "DIF",
-                bytesConsumed: 1,
-                comment: "Set difference (TOS-1 AND NOT TOS)"
-            )
-        case dvi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "DVI",
-                bytesConsumed: 1,
-                comment: "Divide integers (TOS-1 / TOS)"
-            )
-        case dvr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "DVR",
-                bytesConsumed: 1,
-                comment: "Divide reals (TOS-1 / TOS)"
-            )
-        case chk:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "CHK",
-                bytesConsumed: 1,
-                comment: "Check subrange (TOS-1 <= TOS-2 <= TOS)"
-            )
-        case flo:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "FLO",
-                bytesConsumed: 1,
-                comment: "Float next to TOS (int TOS-1 to real TOS)"
-            )
-        case flt:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "FLT",
-                bytesConsumed: 1,
-                comment: "Float TOS (int TOS to real TOS)"
-            )
-        case inn:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "INN",
-                bytesConsumed: 1,
-                comment: "Set membership (TOS-1 in set TOS)"
-            )
-        case int:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "INT",
-                bytesConsumed: 1,
-                comment: "Set intersection (TOS AND TOS-1)"
-            )
-        case lor:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LOR",
-                bytesConsumed: 1,
-                comment: "Logical OR (TOS | TOS-1)"
-            )
-        case modi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "MODI",
-                bytesConsumed: 1,
-                comment: "Modulo integers (TOS-1 % TOS)"
-            )
-        case mpi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "MPI",
-                bytesConsumed: 1,
-                comment: "Multiply integers (TOS * TOS-1)"
-            )
-        case mpr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "MPR",
-                bytesConsumed: 1,
-                comment: "Multiply reals (TOS * TOS-1)"
-            )
-        case ngi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "NGI",
-                bytesConsumed: 1,
-                comment: "Negate integer"
-            )
-        case ngr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "NGR",
-                bytesConsumed: 1,
-                comment: "Negate real"
-            )
-        case lnot:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LNOT",
-                bytesConsumed: 1,
-                comment: "Logical NOT (~TOS)"
-            )
-        case srs:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SRS",
-                bytesConsumed: 1,
-                comment: "Subrange set [TOS-1..TOS]"
-            )
-        case sbi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SBI",
-                bytesConsumed: 1,
-                comment: "Subtract integers (TOS-1 - TOS)"
-            )
-        case sbr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SBR",
-                bytesConsumed: 1,
-                comment: "Subtract reals (TOS-1 - TOS)"
-            )
-        case sgs:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SGS",
-                bytesConsumed: 1,
-                comment: "Build singleton set [TOS]"
-            )
-        case sqi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SQI",
-                bytesConsumed: 1,
-                comment: "Square integer (TOS * TOS)"
-            )
-        case sqr:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "SQR",
-                bytesConsumed: 1,
-                comment: "Square real (TOS * TOS)"
-            )
-        case sto:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "STO",
-                bytesConsumed: 1,
-                comment: "Store indirect word (TOS into TOS-1)"
-            )
-        case ixs:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "IXS",
-                bytesConsumed: 1,
-                comment: "Index string array (check 1<=TOS<=len of str TOS-1)"
-            )
-        case uni:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "UNI",
-                bytesConsumed: 1,
-                comment: "Set union (TOS OR TOS-1)"
             )
         case lde:
             let seg = Int(try cd.readByte(at: ic + 1))
@@ -293,13 +148,6 @@ struct OpcodeDecoder {
                 bytesConsumed: 2,
                 comment:
                     "Call standard procedure \(cspProcs[procNum]?.0 ?? String(procNum))"
-            )
-        case ldcn:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LDCN",
-                bytesConsumed: 1,
-                comment: "Load constant NIL"
             )
         case adj:
             let count = Int(try cd.readByte(at: ic + 1))
@@ -646,20 +494,6 @@ struct OpcodeDecoder {
                 bytesConsumed: 2,
                 comment: "Unconditional jump to \(String(format: "%04x", dest))"
             )
-        case ldp:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LDP",
-                bytesConsumed: 1,
-                comment: "Load packed field (TOS)"
-            )
-        case stp:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "STP",
-                bytesConsumed: 1,
-                comment: "Store packed field (TOS into TOS-1)"
-            )
         case ldm:
             let ldmCount = Int(try cd.readByte(at: ic + 1))
             return DecodedInstruction(
@@ -677,20 +511,6 @@ struct OpcodeDecoder {
                 params: [stmCount],
                 bytesConsumed: 2,
                 comment: "Store \(stmCount) words at TOS to TOS-1"
-            )
-        case ldb:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LDB",
-                bytesConsumed: 1,
-                comment: "Load byte at byte ptr TOS-1 + TOS"
-            )
-        case stb:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "STB",
-                bytesConsumed: 1,
-                comment: "Store byte at TOS to byte ptr TOS-2 + TOS-1"
             )
         case ixp:
             let elementsPerWord = Int(try cd.readByte(at: ic + 1))
@@ -723,27 +543,6 @@ struct OpcodeDecoder {
                 comment: "Call base procedure",
                 destination: loc
             )
-        case equi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "EQUI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 = TOS"
-            )
-        case geqi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "GEQI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 >= TOS"
-            )
-        case grti:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "GRTI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 > TOS"
-            )
         case lla:
             let (val, inc) = try cd.readBig(at: ic + 1)
             let loc = Location(
@@ -769,20 +568,6 @@ struct OpcodeDecoder {
                 bytesConsumed: 3,
                 comment: "Load one-word constant \(val)"
             )
-        case leqi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LEQI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 <= TOS"
-            )
-        case lesi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "LESI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 < TOS"
-            )
         case ldl:
             let (val, inc) = try cd.readBig(at: ic + 1)
             let loc = Location(
@@ -798,13 +583,6 @@ struct OpcodeDecoder {
                 bytesConsumed: 1 + inc,
                 comment: "Load local word",
                 memLocation: loc
-            )
-        case neqi:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "NEQI",
-                bytesConsumed: 1,
-                comment: "Integer TOS-1 <> TOS"
             )
         case stl:
             let (val, inc) = try cd.readBig(at: ic + 1)
@@ -893,13 +671,6 @@ struct OpcodeDecoder {
                 comment: "Store extended word TOS into",
                 memLocation: loc
             )
-        case nop:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "NOP",
-                bytesConsumed: 1,
-                comment: "No operation"
-            )
         case bpt:
             let (val, inc) = try cd.readBig(at: ic + 1)
             return DecodedInstruction(
@@ -908,20 +679,6 @@ struct OpcodeDecoder {
                 params: [val],
                 bytesConsumed: 1 + inc,
                 comment: "Breakpoint"
-            )
-        case xit:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "XIT",
-                bytesConsumed: 1,
-                comment: "Exit the operating system"
-            )
-        case nop2:
-            return DecodedInstruction(
-                opcode: opcode,
-                mnemonic: "NOP",
-                bytesConsumed: 1,
-                comment: "No operation"
             )
         case sldl1...sldl16:
             let b = Int(opcode)
