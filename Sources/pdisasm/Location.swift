@@ -157,24 +157,4 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         }
         return retval
     }
-
-    public var longDescription: String {
-        var s = "S\(segment)"
-        if let procedure = procedure {
-            s.append("_P\(procedure)")
-        }
-        if let lexLevel = lexLevel {
-            s.append("_L\(lexLevel)")
-        }
-        if let addr = addr {
-            s.append("_A\(addr)")
-        }
-        if !name.isEmpty {
-            s.append("_\(name)")
-        }
-        if !type.isEmpty {
-            s.append(":\(type)")
-        }
-        return s
-    }
 }

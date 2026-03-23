@@ -1,4 +1,4 @@
-public struct Call: CustomStringConvertible, Hashable, Codable {
+public struct Call: CustomStringConvertible, Hashable {
     public static func == (lhs: Call, rhs: Call) -> Bool {
         return lhs.origin == rhs.origin && lhs.target == rhs.target
     }

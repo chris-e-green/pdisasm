@@ -439,7 +439,6 @@ public func runPdisasm(
 
         let codeSeg: CodeSegment = CodeSegment(
             procedureDictionary: ProcedureDictionary(
-                segment: Int(code[code.endIndex - 2]),
                 procedureCount: Int(code[code.endIndex - 1]),
                 procedurePointers: []
             ),

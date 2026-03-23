@@ -201,8 +201,4 @@ struct StackSimulator {
         }
         return (0, "malformed set!")
     }
-
-    func snapshot() -> [String] {
-        return stack
-    }
 }
