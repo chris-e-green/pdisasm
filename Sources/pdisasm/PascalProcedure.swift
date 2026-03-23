@@ -112,277 +112,55 @@ func decodePascalProcedure(
             let memLoc = decoded.memLocation
             let dest = decoded.destination
 
+            // Helper: track a procedure call (find-or-create Location, record caller relationship)
+            func trackCall(targetSegment: Int, targetProcedure: Int) {
+                let loc =
+                    allLocations.first(where: {
+                        $0.segment == targetSegment && $0.procedure == targetProcedure
+                            && $0.addr == nil
+                    })
+                    ?? Location(segment: targetSegment, procedure: targetProcedure, addr: nil)
+                allLocations.insert(loc)
+                if targetProcedure != procedure || targetSegment != segment {
+                    callers.insert(Call(from: myLoc, to: loc))
+                }
+            }
+
             switch opcode {
-            case sldc0...sldc127:
-                ic += bytesConsumed
-            case abi:
-                ic += bytesConsumed
-            case abr:
-                ic += bytesConsumed
-            case adi:
-                ic += bytesConsumed
-            case adr:
-                ic += bytesConsumed
-            case land:
-                ic += bytesConsumed
-            case dif:
-                ic += bytesConsumed
-            case dvi:
-                ic += bytesConsumed
-            case dvr:
-                ic += bytesConsumed
-            case chk:
-                ic += bytesConsumed
-            case flo:
-                ic += bytesConsumed
-            case flt:
-                ic += bytesConsumed
-            case inn:
-                ic += bytesConsumed
-            case int:
-                ic += bytesConsumed
-            case lor:
-                ic += bytesConsumed
-            case modi:
-                ic += bytesConsumed
-            case mpi:
-                ic += bytesConsumed
-            case mpr:
-                ic += bytesConsumed
-            case ngi:
-                ic += bytesConsumed
-            case ngr:
-                ic += bytesConsumed
-            case lnot:
-                ic += bytesConsumed
-            case srs:
-                ic += bytesConsumed
-            case sbi:
-                ic += bytesConsumed
-            case sbr:
-                ic += bytesConsumed
-            case sgs:
-                ic += bytesConsumed
-            case sqi:
-                ic += bytesConsumed
-            case sqr:
-                ic += bytesConsumed
-            case sto:
-                ic += bytesConsumed
-            case ixs:
-                ic += bytesConsumed
-            case uni:
-                ic += bytesConsumed
-            case lde:
-                ic += bytesConsumed
-            case csp:
-                ic += bytesConsumed
-            case ldcn:
-                ic += bytesConsumed
-            case adj:
-                ic += bytesConsumed
-            case fjp:
-                ic += bytesConsumed
-            case inc:
-                ic += bytesConsumed
-            case ind:
-                ic += bytesConsumed
-            case ixa:
-                ic += bytesConsumed
-            case lao:
-                ic += bytesConsumed
-            case lsa:
-                ic += bytesConsumed
-            case lae:
-                ic += bytesConsumed
-            case mov:
-                ic += bytesConsumed
-            case ldo:
-                ic += bytesConsumed
-            case sas:
-                ic += bytesConsumed
-            case sro:
-                ic += bytesConsumed
-            case xjp:
-                // Case jump
-                ic += bytesConsumed
             case rnp:
                 // Return from non-base procedure
-                let retCount = decoded.params[0]
-                isFunction = (retCount > 0)
-                ic += bytesConsumed
+                isFunction = (decoded.params[0] > 0)
                 done = true
-            case cip:
-                // Call intermediate procedure
-                let procNum = Int(decoded.params[0])
-                let loc =
-                    allLocations.first(where: {
-                        $0.segment == segment && $0.procedure == procNum
-                            && $0.addr == nil
-                    })
-                    ?? Location(segment: segment, procedure: procNum, addr: nil)
-                allLocations.insert(loc)
-                if procNum != procedure {  // don't add if recursive
-                    callers.insert(Call(from: myLoc, to: loc))
-                }
-                ic += bytesConsumed
-            case eql:
-                ic += bytesConsumed
-            case geq:
-                ic += bytesConsumed
-            case grt:
-                ic += bytesConsumed
-            case lda:
-                ic += bytesConsumed
-            case ldc:
-                // Load multiple-word constant
-                // LDC is special: needs manual size calculation due to variable-length word-aligned data
-                let count = decoded.params[0]
-                var tempIC = ic + 2
-                if tempIC % 2 != 0 { tempIC += 1 }  // word aligned data
-                // Calculate actual bytes consumed including alignment
-                bytesConsumed = 2 + (ic % 2 == 0 ? 0 : 1) + count * 2
-                ic += bytesConsumed
-            case leq:
-                ic += bytesConsumed
-            case les:
-                ic += bytesConsumed
-            case lod:
-                ic += bytesConsumed
-            case neq:
-                ic += bytesConsumed
-            case str:
-                ic += bytesConsumed
-            case ujp:
-                ic += bytesConsumed
-            case ldp:
-                ic += bytesConsumed
-            case stp:
-                ic += bytesConsumed
-            case ldm:
-                ic += bytesConsumed
-            case stm:
-                ic += bytesConsumed
-            case ldb:
-                ic += bytesConsumed
-            case stb:
-                ic += bytesConsumed
-            case ixp:
-                ic += bytesConsumed
             case rbp:
                 // Return from base procedure
-                let retCount = decoded.params[0]
-                isFunction = (retCount > 0)
-                ic += bytesConsumed
+                isFunction = (decoded.params[0] > 0)
                 done = true
-            case cbp:
-                // Call base procedure
-                let procNum = Int(params[0])
-                let loc =
-                    allLocations.first(where: {
-                        $0.segment == segment && $0.procedure == procNum
-                            && $0.addr == nil
-                    })
-                    ?? Location(segment: segment, procedure: procNum, addr: nil)
-                allLocations.insert(loc)
-                if procNum != procedure {  // don't add if recursive
-                    callers.insert(Call(from: myLoc, to: loc))
-                }
-                ic += bytesConsumed
-            case equi:
-                ic += bytesConsumed
-            case geqi:
-                ic += bytesConsumed
-            case grti:
-                ic += bytesConsumed
-            case lla:
-                ic += bytesConsumed
-            case ldci:
-                ic += bytesConsumed
-            case leqi:
-                ic += bytesConsumed
-            case lesi:
-                ic += bytesConsumed
-            case ldl:
-                ic += bytesConsumed
-            case neqi:
-                ic += bytesConsumed
-            case stl:
-                ic += bytesConsumed
-            case cxp:
-                // Call external procedure
-                let seg = Int(params[0])
-                let procNum = Int(params[1])
-                let loc =
-                    allLocations.first(where: {
-                        $0.segment == seg && $0.procedure == procNum
-                            && $0.addr == nil
-                    }) ?? Location(segment: seg, procedure: procNum, addr: nil)
-                allLocations.insert(loc)
-                if procNum != procedure || seg != segment {  // don't add if recursive
-                    callers.insert(Call(from: myLoc, to: loc))
-                }
-                ic += bytesConsumed
-            case clp:
-                // Call local procedure
-                let procNum = Int(params[0])
-                let loc =
-                    allLocations.first(where: {
-                        $0.segment == segment && $0.procedure == procNum
-                            && $0.addr == nil
-                    })
-                    ?? Location(segment: segment, procedure: procNum, addr: nil)
-                allLocations.insert(loc)
-                if procNum != procedure {  // don't add if recursive
-                    callers.insert(Call(from: myLoc, to: loc))
-                }
-                ic += bytesConsumed
-            case cgp:
-                // Call global procedure
-                let procNum = Int(params[0])
-                let loc =
-                    allLocations.first(where: {
-                        $0.segment == segment && $0.procedure == procNum
-                            && $0.addr == nil
-                    })
-                    ?? Location(segment: segment, procedure: procNum, addr: nil)
-
-                allLocations.insert(loc)
-                if procNum != procedure {  // don't add if recursive
-                    callers.insert(Call(from: myLoc, to: loc))
-                }
-                ic += bytesConsumed
-            case lpa:
-                ic += bytesConsumed
-            case ste:
-                ic += bytesConsumed
-            case nop:
-                ic += bytesConsumed
-            case unk1:
-                ic += bytesConsumed
-            case unk2:
-                ic += bytesConsumed
-            case bpt:
-                ic += bytesConsumed
             case xit:
-                isFunction = false  // AFAIK only the PASCALSYSTEM.PASCALSYSTEM procedure ever calls this
-                ic += bytesConsumed
+                // Exit interpreter — only PASCALSYSTEM.PASCALSYSTEM calls this
+                isFunction = false
                 done = true
-            case nop2:
-                ic += bytesConsumed
-            case sldl1...sldl16:
-                ic += bytesConsumed
-            case sldo1...sldo16:
-                ic += bytesConsumed
-            case sind0...sind7:
-                ic += bytesConsumed
+            case cip:
+                trackCall(targetSegment: segment, targetProcedure: Int(decoded.params[0]))
+            case cbp:
+                trackCall(targetSegment: segment, targetProcedure: Int(params[0]))
+            case clp:
+                trackCall(targetSegment: segment, targetProcedure: Int(params[0]))
+            case cgp:
+                trackCall(targetSegment: segment, targetProcedure: Int(params[0]))
+            case cxp:
+                trackCall(targetSegment: Int(params[0]), targetProcedure: Int(params[1]))
+            case ldc:
+                // LDC is special: recalculate bytesConsumed for variable-length word-aligned data
+                let count = decoded.params[0]
+                bytesConsumed = 2 + (ic % 2 == 0 ? 0 : 1) + count * 2
             default:
-                // Unexpected opcode — stop decoding
+                // All other opcodes (including unknown ones) just advance ic.
+                // Unknown opcodes with no mnemonic indicate unrecognised data — stop decoding.
                 if decoded.mnemonic.isEmpty {
                     return
                 }
-                ic += bytesConsumed
             }
+            ic += bytesConsumed
 
             // Build instruction from decoded data (after switch, before applying markers)
             if proc.instructions[ic - bytesConsumed] == nil {
