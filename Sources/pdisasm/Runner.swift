@@ -296,20 +296,22 @@ func normaliseMemoryLocations(
 
 // MARK: - Public Entry Point
 
-/// Public entrypoint for the library to run the decompiler.
-/// This mirrors the original CLI behaviour but is exposed as a callable function
-/// so the `pdisasm-cli` executable can delegate to it.
-public func runPdisasm(
+/// Holds the structured results of a disassembly run.
+public struct DisassemblyResult: @unchecked Sendable {
+    public let sourceFilename: String
+    public let segDictionary: SegDictionary
+    public let codeSegments: [Int: CodeSegment]
+    public let allLocations: Set<Location>
+    public let allProcedures: [ProcedureIdentifier]
+    public let allCallers: Set<Call>
+}
+
+/// Disassemble a binary file and return structured results without printing.
+public func disassemble(
     filename: String,
     verbose: Bool = false,
-    rewrite: Bool = false,
-    showMarkup: Bool = false,
-    showPCode: Bool = false,
-    showPseudoCode: Bool = false,
-    showDot: Bool = false
-)
-    throws
-{
+    rewrite: Bool = false
+) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
     do {
@@ -725,19 +727,13 @@ public func runPdisasm(
         }
     }
 
-    // Output results using the existing helper
-    outputResults(
+    let result = DisassemblyResult(
         sourceFilename: fileIdentifier,
         segDictionary: segDict,
-        codeSegs: allCodeSegs,
+        codeSegments: allCodeSegs,
         allLocations: allLocations,
         allProcedures: allProcedures,
-        allCallers: allCallers,
-        verbose: verbose,
-        showMarkup: showMarkup,
-        showPCode: showPCode,
-        showPseudoCode: showPseudoCode,
-        showDot: showDot
+        allCallers: allCallers
     )
 
     exportLabels(
@@ -764,5 +760,68 @@ public func runPdisasm(
         from: allProcedures.filter { $0.segment == 0 },
         overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
+    )
+
+    return result
+}
+
+/// Render a ``DisassemblyResult`` to a String using the shared output logic.
+public func renderDisassembly(
+    _ result: DisassemblyResult,
+    showMarkup: Bool = true,
+    showPCode: Bool = true,
+    showPseudoCode: Bool = true,
+    showDot: Bool = false,
+    verbose: Bool = false
+) -> String {
+    let stream = StringStream()
+    var s: TextOutputStream = stream
+    outputResults(
+        to: &s,
+        sourceFilename: result.sourceFilename,
+        segDictionary: result.segDictionary,
+        codeSegs: result.codeSegments,
+        allLocations: result.allLocations,
+        allProcedures: result.allProcedures,
+        allCallers: result.allCallers,
+        verbose: verbose,
+        showMarkup: showMarkup,
+        showPCode: showPCode,
+        showPseudoCode: showPseudoCode,
+        showDot: showDot
+    )
+    return stream.text
+}
+
+/// Public entrypoint for the library to run the decompiler.
+/// This mirrors the original CLI behaviour but is exposed as a callable function
+/// so the `pdisasm-cli` executable can delegate to it.
+public func runPdisasm(
+    filename: String,
+    verbose: Bool = false,
+    rewrite: Bool = false,
+    showMarkup: Bool = false,
+    showPCode: Bool = false,
+    showPseudoCode: Bool = false,
+    showDot: Bool = false
+) throws {
+    let result = try disassemble(
+        filename: filename,
+        verbose: verbose,
+        rewrite: rewrite
+    )
+
+    outputResults(
+        sourceFilename: result.sourceFilename,
+        segDictionary: result.segDictionary,
+        codeSegs: result.codeSegments,
+        allLocations: result.allLocations,
+        allProcedures: result.allProcedures,
+        allCallers: result.allCallers,
+        verbose: verbose,
+        showMarkup: showMarkup,
+        showPCode: showPCode,
+        showPseudoCode: showPseudoCode,
+        showDot: showDot
     )
 }

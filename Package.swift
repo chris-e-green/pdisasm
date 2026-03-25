@@ -34,6 +34,15 @@ let package = Package(
                 .swiftLanguageMode(.v6)
             ]
         ),
+        .executableTarget(
+            name: "pdisasm-gui",
+            dependencies: [
+                "pdisasm",
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
         .testTarget(
             name: "pdisasmTests",
             dependencies: ["pdisasm"],
