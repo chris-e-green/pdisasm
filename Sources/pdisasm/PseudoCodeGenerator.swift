@@ -57,8 +57,16 @@ struct PseudoCodeGenerator {
                 }
             }
             src = srcdata.joined(separator: ", ")
-            let (dst, _) = stack.pop()  // destination address
+            let (dst, t) = stack.pop()  // destination address
+            if stmCount == 2 && srcdata.count == 2 && t == "REAL" {
+                // need to see if the elements parse as a real number
+                if let val1 = UInt16(srcdata[0]), let val2 = UInt16(srcdata[1]) {
+                    let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
+                    return "\(dst) := \(String(format:"%f", rv))"
+                }
+            }
             return "\(dst) := \(src)"
+            
         case sro, str, stl, ste:
             let (src, _) = stack.pop(true)
             if let destLoc = inst.memLocation {
@@ -98,7 +106,7 @@ struct PseudoCodeGenerator {
     {
         let lookupKey = "\(loc.segment):\(loc.procedure ?? -1)"
         guard let called = procLookup[lookupKey] else {
-            return nil
+            return loc.displayName + "()"  // fallback to just displaying the location
         }
 
         let parmCount = called.parameters.count

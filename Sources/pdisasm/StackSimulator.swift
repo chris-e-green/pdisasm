@@ -116,11 +116,43 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack as a REAL value.
     /// - Returns: a tuple with the REAL value and the 'REAL' type
-    mutating func popReal() -> (String, String?) {
+    mutating func popReal(_ withoutParentheses: Bool = false) -> (String, String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
-            return (String(parts[0]), String(parts[1]))
+            if parts[1] == "REAL" { // if it was a real, we can just return it
+                return (String(parts[0]), "REAL")
+            } else { // not a real, so we need to get the second word.
+                let b = stack.popLast() ?? "underflow!"
+                if b.contains(sep) {
+                    let bParts = b.split(separator: sep, maxSplits: 1)
+                    if let val1 = UInt16(parts[0]), let val2 = UInt16(bParts[0]) {
+                        let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
+                        return (
+                            "\(rv)", "REAL"
+                        )
+                    }
+                    let name = parts[0].split(separator: "{", maxSplits: 1)[0]
+                    let bName = bParts[0].split(separator: "{", maxSplits: 1)[0]
+                    if name != bName {
+                        print(
+                            "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"
+                        )
+                        return ("\(a).\(b)", "REAL")
+                    } else {
+                        if withoutParentheses {
+                            return ("\(name)", "REAL")
+                        } else {
+                            return ("\(name)", "REAL")
+                        }
+                    }
+                } else {
+                    print(
+                        "Warning: expected second part of REAL to be typed, got '\(b)'"
+                    )
+                    return ("\(a).\(b)", "REAL")
+                }
+            }
         } else {
             let b = stack.popLast() ?? "underflow!"
             if let val1 = UInt16(a), let val2 = UInt16(b) {

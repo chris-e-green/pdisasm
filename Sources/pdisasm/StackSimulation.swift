@@ -177,13 +177,17 @@ func simulateStackAndGeneratePseudocode(
             simulator.pushReal("\(b) / \(a)")
         case chk:
             // Check subrange (TOS-1 <= TOS-2 <= TOS)
-            let _ = simulator.pop()
-            let _ = simulator.pop()
-            let c = simulator.pop()
-            simulator.push(c)
+            let (a, at) = simulator.pop()
+            let (b, bt) = simulator.pop()
+            let (c, ct) = simulator.pop()
+            let type = (at != "UNKNOWN" ? at : (bt != "UNKNOWN" ? bt : ct)) ?? ""
+            setLocType(a, type)
+            setLocType(b, type)
+            setLocType(c, type)
+            simulator.push((c,type))
         case flo:
             // Float next to TOS (int TOS-1 to real TOS)
-            let a = simulator.pop()  // TOS
+            let a = simulator.popReal()  // TOS
             let (b, _) = simulator.pop()  // TOS-1
             setLocType(b, "INTEGER")
             simulator.push(a)  // put previous TOS back
@@ -305,9 +309,11 @@ func simulateStackAndGeneratePseudocode(
             )
         case ixs:
             // Index string array (check 1 <= TOS <= len of str byte ptr TOS-1)
-            _ = simulator.pop()  // discard index
-            _ = simulator.pop()  // discard byte ptr offset
-            _ = simulator.pop()  // discard byte ptr base
+            // doesn't change the stack!
+          //  _ = simulator.pop()  // discard index
+          //  _ = simulator.pop()  // discard byte ptr offset
+          //  _ = simulator.pop()  // discard byte ptr base
+            _ = 0
         case uni:
             // Set union (TOS OR TOS-1)
             let (set1Len, set1) = simulator.popSet()
@@ -450,8 +456,8 @@ func simulateStackAndGeneratePseudocode(
             // Index array (TOS * element size + TOS-1)
             let _ = inst.params[0]  // Element size, used for address calculation but not in pseudo-code
             let (eltIndex, _) = simulator.pop()
-            let (arrayBase, _) = simulator.pop()
-            simulator.push(("\(arrayBase)[\(eltIndex)]", "POINTER"))
+            let (arrayBase, t) = simulator.pop()
+            simulator.push(("\(arrayBase)[\(eltIndex)]", t))
         case lao:
             // Load global address
             if let loc = inst.memLocation {

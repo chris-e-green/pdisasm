@@ -335,7 +335,7 @@ func decodeAssemblerProcedure(
     if !s.isEmpty {
         proc.instructions[((addr - pos - 1) / 16) * 16] = Instruction(
             opcode: op,
-            mnemonic: s + String(repeating: " ", count: (48 - s.count)) + " | "
+            mnemonic: s + String(repeating: " ", count: (50 - s.count)) + " | "
                 + sh,
             isPascal: false,
             stackState: []
