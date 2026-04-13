@@ -33,11 +33,14 @@ public struct OutputLine: Identifiable, Sendable {
     public let id: Int           // sequential line number
     public let kind: LineKind
     public let text: String
+    /// Optional anchor identifier (e.g. "2.3") used as a scroll target for procedure headers.
+    public let anchor: String?
 
-    public init(id: Int, kind: LineKind, text: String) {
+    public init(id: Int, kind: LineKind, text: String, anchor: String? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
+        self.anchor = anchor
     }
 }
 
@@ -50,8 +53,8 @@ public func renderStructuredLines(
     var lines: [OutputLine] = []
     var nextID = 0
 
-    func addLine(_ kind: LineKind, _ text: String) {
-        lines.append(OutputLine(id: nextID, kind: kind, text: text))
+    func addLine(_ kind: LineKind, _ text: String, anchor: String? = nil) {
+        lines.append(OutputLine(id: nextID, kind: kind, text: text, anchor: anchor))
         nextID += 1
     }
 
@@ -91,11 +94,14 @@ public func renderStructuredLines(
                 let procDesc = result.allProcedures.first(where: {
                     $0.segment == s && $0.procedure == proc.identifier?.procedure
                 })
+                let procNum = proc.identifier?.procedure ?? -99
+                let anchor = "\(s).\(procNum)"
                 addLine(.header,
                     "### "
                         + (procDesc?.description ?? proc.identifier?.description
                             ?? "")
-                        + " (* P=\(proc.identifier?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
+                        + " (* P=\(procNum), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)",
+                    anchor: anchor
                 )
 
                 // Callers

@@ -19,6 +19,9 @@ final class DisassemblyViewModel {
     var showVariables: Bool = true
     var verbose: Bool = false
 
+    /// The anchor ID of the procedure to scroll to (e.g. "2.3"). Set by sidebar selection.
+    var selectedProcedure: String?
+
     // MARK: - Backing data (produced once per file open / reload)
 
     /// All lines produced by the last disassembly, always includes every kind.

@@ -181,6 +181,11 @@ let wdc6502: [UInt8: WDC6502OpInfo] = [
     0xfe: WDC6502OpInfo(mnemonic: "INC $%04x,X", paramLength: 2),
 ]
 
+// TODO: assembler still sometimes places disassembly at wrong spot
+// TODO: stopping at an RTS is not foolproof because some routines continue
+//       this might be tricky to solve, may have to examine code flow.
+
+
 func decodeAssemblerProcedure(
     segmentNumber: Int,
     procedureNumber: Int,

@@ -6,12 +6,16 @@ import Foundation
 struct StackSimulator {
     let sep: Character = "~"
     var stack: [String] = []
+    
+    func prettyStack() -> String {
+        "[" + stack.joined(separator: ", ") + "]"
+    }
 
-    mutating func push(_ value: (String, String?)) {
-        if let type = value.1 {
-            stack.append("\(value.0)\(sep)\(type)")
+    mutating func push(_ value: (val: String, type: String?)) {
+        if let type = value.type {
+            stack.append("\(value.val)\(sep)\(type)")
         } else {
-            stack.append("\(value.0)\(sep)UNKNOWN")
+            stack.append("\(value.val)\(sep)UNKNOWN")
         }
     }
 
@@ -29,7 +33,7 @@ struct StackSimulator {
     ///   - withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the popped value and its type (if any)
     mutating func pop(_ type: String, _ withoutParentheses: Bool = false) -> (
-        String, String?
+        val: String, type: String?
     ) {
         let a = stack.popLast() ?? "underflow!"
         var parenthesized: String
@@ -62,9 +66,9 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack and any datatype
     ///
-    /// - Parameter withoutParentheses:
+    /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the popped value and its type (if any)
-    mutating func pop(_ withoutParentheses: Bool = false) -> (String, String?) {
+    mutating func pop(_ withoutParentheses: Bool = false) -> (val: String, type: String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {  // typed value
             let parts = a.split(separator: sep, maxSplits: 1)
@@ -89,10 +93,15 @@ struct StackSimulator {
     @discardableResult
     /// Gets the top of the stack and any datatype without changing the stack
     ///
-    /// - Parameter withoutParentheses:
+    /// - Parameter at: the index from the top of the stack to peek at (0 for top, 1 for second, etc.)
+    /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the value at the top of the stack and its type (if any)
-    func peek(_ withoutParentheses: Bool = false) -> (String, String?) {
-        let a = stack.last ?? "underflow!"
+    func peek(_ at: Int = 0, _ withoutParentheses: Bool = false) -> (val: String, type: String?) {
+        let pos = stack.endIndex - at - 1
+        if pos < stack.startIndex || pos >= stack.endIndex {
+            return ("underflow!", nil)
+        }        
+        let a = stack[pos]
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
             if withoutParentheses {
@@ -116,7 +125,7 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack as a REAL value.
     /// - Returns: a tuple with the REAL value and the 'REAL' type
-    mutating func popReal(_ withoutParentheses: Bool = false) -> (String, String?) {
+    mutating func popReal() -> (val: String, type: String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
@@ -140,11 +149,7 @@ struct StackSimulator {
                         )
                         return ("\(a).\(b)", "REAL")
                     } else {
-                        if withoutParentheses {
-                            return ("\(name)", "REAL")
-                        } else {
-                            return ("\(name)", "REAL")
-                        }
+                        return ("\(name)", "REAL")
                     }
                 } else {
                     print(
@@ -172,7 +177,7 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack as a SET value.
     /// - Returns: a tuple with the length of the set and its string representation
-    mutating func popSet() -> (Int, String) {
+    mutating func popSet() -> (len: Int, val: String) {
         let (setLen, _) = self.pop()
         // to hold string set values
         var setData: [String] = []

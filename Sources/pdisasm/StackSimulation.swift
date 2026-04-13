@@ -93,16 +93,17 @@ func simulateStackAndGeneratePseudocode(
     // Initialize components for clean separation of concerns
     var simulator = StackSimulator()
     let pseudoGen = PseudoCodeGenerator(
-        procLookup: procLookup,
-        labelLookup: labelLookup,
+        allProcedures: allProcedures,
+        //        procLookup: procLookup,
+//        labelLookup: labelLookup,
         allLocations: allLocations
     )
 
-    // Alias for backward compatibility during refactoring
-    var currentStack: [String] {
-        get { simulator.stack }
-        set { simulator.stack = newValue }
-    }
+//    // Alias for backward compatibility during refactoring
+//    var currentStack: [String] {
+//        get { simulator.stack }
+//        set { simulator.stack = newValue }
+//    }
 
     // Helper to lookup label by Location
     func findStackLabel(_ loc: Location) -> (String, String?) {
@@ -201,6 +202,7 @@ func simulateStackAndGeneratePseudocode(
             // Set membership (TOS-1 in set TOS)
             let (_, set) = simulator.popSet()
             let (chk, _) = simulator.pop()
+            setLocType(chk, "INTEGER")
             simulator.push(("\(chk) IN \(set)", "BOOLEAN"))
         case int:
             // Set intersection (TOS AND TOS-1)
@@ -310,10 +312,13 @@ func simulateStackAndGeneratePseudocode(
         case ixs:
             // Index string array (check 1 <= TOS <= len of str byte ptr TOS-1)
             // doesn't change the stack!
-          //  _ = simulator.pop()  // discard index
+            let (index, indexType) = simulator.peek()
+            setLocType(index, "INTEGER")
+            let (bytePtrOffset, bytePtrOffsetType) = simulator.peek(1)
+            let (bytePtr, bytePtrType) = simulator.peek(2)
+            //  _ = simulator.pop()  // discard index
           //  _ = simulator.pop()  // discard byte ptr offset
           //  _ = simulator.pop()  // discard byte ptr base
-            _ = 0
         case uni:
             // Set union (TOS OR TOS-1)
             let (set1Len, set1) = simulator.popSet()
@@ -773,7 +778,7 @@ func simulateStackAndGeneratePseudocode(
         }
 
         inst.pseudoCode = pseudoCode
-        inst.stackState = currentStack
+        inst.stackState = simulator.stack
     }
 
     flagForLabel.forEach {

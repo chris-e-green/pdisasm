@@ -62,7 +62,7 @@ struct ContentView: View {
 // MARK: - Sidebar
 
 struct SidebarView: View {
-    let viewModel: DisassemblyViewModel
+    @Bindable var viewModel: DisassemblyViewModel
 
     var body: some View {
         if viewModel.segments.isEmpty {
@@ -76,8 +76,14 @@ struct SidebarView: View {
                 ForEach(viewModel.segments) { segment in
                     Section(segment.name) {
                         ForEach(segment.procedures) { proc in
-                            Text(proc.name)
-                                .font(.system(.body, design: .monospaced))
+                            Button {
+                                viewModel.selectedProcedure = proc.id
+                            } label: {
+                                Text(proc.name)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -90,7 +96,7 @@ struct SidebarView: View {
 // MARK: - Detail
 
 struct DetailView: View {
-    let viewModel: DisassemblyViewModel
+    @Bindable var viewModel: DisassemblyViewModel
 
     var body: some View {
         Group {
@@ -111,20 +117,30 @@ struct DetailView: View {
                 )
             } else {
                 GeometryReader { geo in
-                    ScrollView([.horizontal, .vertical]) {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(viewModel.filteredLines) { line in
-                                Text(line.text)
-                                    .font(.system(.body, design: .monospaced))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 1)
-                                    .background(backgroundColor(for: line.kind))
+                    ScrollViewReader { scrollProxy in
+                        ScrollView([.horizontal, .vertical]) {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                ForEach(viewModel.filteredLines) { line in
+                                    Text(line.text)
+                                        .font(.system(.body, design: .monospaced))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 1)
+                                        .background(backgroundColor(for: line.kind))
+                                        .id(line.anchor ?? "line-\(line.id)")
+                                }
+                            }
+                            .textSelection(.enabled)
+                            .padding(.vertical, 4)
+                            .frame(minWidth: geo.size.width, alignment: .leading)
+                        }
+                        .onChange(of: viewModel.selectedProcedure) { _, newValue in
+                            if let anchor = newValue {
+                                withAnimation {
+                                    scrollProxy.scrollTo(anchor, anchor: .top)
+                                }
                             }
                         }
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
-                        .frame(minWidth: geo.size.width, alignment: .leading)
                     }
                 }
             }

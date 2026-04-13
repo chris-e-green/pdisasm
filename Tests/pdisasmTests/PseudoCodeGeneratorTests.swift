@@ -7,17 +7,8 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         procs: [ProcedureIdentifier] = [],
         labels: [Location] = []
     ) -> PseudoCodeGenerator {
-        var procLookup: [String: ProcedureIdentifier] = [:]
-        for p in procs {
-            procLookup["\(p.segment):\(p.procedure)"] = p
-        }
-        var labelLookup: [String: Location] = [:]
-        for l in labels {
-            labelLookup["\(l.segment):\(l.procedure ?? -1):\(l.addr ?? -1)"] = l
-        }
         return PseudoCodeGenerator(
-            procLookup: procLookup,
-            labelLookup: labelLookup,
+            allProcedures: procs,
             allLocations: Set(labels)
         )
     }

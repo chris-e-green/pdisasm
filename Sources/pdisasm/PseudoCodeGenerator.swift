@@ -4,17 +4,28 @@ import Foundation
 
 /// Generates high-level pseudo-code from decoded instructions and stack states
 struct PseudoCodeGenerator {
-    let procLookup: [String: ProcedureIdentifier]
-    let labelLookup: [String: Location]
+//    let procLookup: [String: ProcedureIdentifier]
+//    let labelLookup: [String: Location]
+    let allProcedures: [ProcedureIdentifier]
     var allLocations: Set<Location>
 
     // Helper to lookup label by Location
-    func findLabel(_ loc: Location) -> (String?, String?) {
-        let key = "\(loc.segment):\(loc.procedure ?? -1):\(loc.addr ?? -1)"
-        if let ll = labelLookup[key] {
-            return (ll.displayName, ll.displayType)
-        } else {
-            return (nil, nil)
+//    func findLabel(_ loc: Location) -> (String?, String?) {
+//        let key = "\(loc.segment):\(loc.procedure ?? -1):\(loc.addr ?? -1)"
+//        if let ll = labelLookup[key] {
+//            return (ll.displayName, ll.displayType)
+//        } else {
+//            return (nil, nil)
+//        }
+//    }
+    
+    func setLocType(_ locStr: String, _ type: String) {
+        // if the location is a memory reference, set the type.
+        if locStr.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
+            // convert string location to Location
+            let l = Location(from: locStr)
+            // find in allLocations and set type
+            allLocations.first(where: { $0 == l })?.type = type
         }
     }
 
@@ -24,9 +35,15 @@ struct PseudoCodeGenerator {
         loc: Location?
     ) -> String? {
         switch inst.opcode {
-        case sto, sas:
+        case sto:
             let (src, _) = stack.pop()
             let (dest, _) = stack.pop()
+            return "\(dest) := \(src)"
+        case sas:
+            let (src, _) = stack.pop()
+            let (dest, _) = stack.pop()
+            setLocType(src, "STRING")
+            setLocType(dest, "STRING")
             return "\(dest) := \(src)"
         case mov:
             let (src, _) = stack.pop()
@@ -62,33 +79,48 @@ struct PseudoCodeGenerator {
                 // need to see if the elements parse as a real number
                 if let val1 = UInt16(srcdata[0]), let val2 = UInt16(srcdata[1]) {
                     let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
+                    setLocType(dst, "REAL")
                     return "\(dst) := \(String(format:"%f", rv))"
                 }
             }
             return "\(dst) := \(src)"
             
         case sro, str, stl, ste:
-            let (src, _) = stack.pop(true)
+            let (src, srcType) = stack.pop(true)
             if let destLoc = inst.memLocation {
-                let (destName, destType) = findLabel(destLoc)
-                if let destType = destType {
+                let (destName, destType) = (destLoc.displayName, destLoc.displayType)
+//                findLabel(destLoc)
+//                let (destName, destType) = findLabel(destLoc)
+//                if let destType = destType {
                     switch destType {
                     case "CHAR":
                         if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
                             return
-                                "\(destName ?? destLoc.displayName) := '\(String(format: "%c", ch))'"
+                                "\(destName) := '\(String(format: "%c", ch))'"
+                        } else {
+                            return "\(destName) := \(src)"
                         }
                     case "BOOLEAN":
                         if src == "0" {
-                            return "\(destName ?? destLoc.displayName) := FALSE"
+                            return "\(destName) := FALSE"
                         } else if src == "1" {
-                            return "\(destName ?? destLoc.displayName) := TRUE"
+                            return "\(destName) := TRUE"
+                        } else {
+                            return "\(destName) := \(src)"
                         }
+                        
                     default:
+                        if !destType.isEmpty && destType != "UNKNOWN" {
+                            setLocType(src, destType)
+                        }
+                        if let type = srcType, !type.isEmpty && type != "UNKNOWN" {
+                            setLocType(destLoc.displayName, type)
+                        }
                         break
                     }
-                }
-                return "\(destName ?? destLoc.displayName) := \(src)"
+//                }
+                return "\(destName) := \(src)"
+//                return "\(destName ?? destLoc.displayName) := \(src)"
             }
             return "\(inst.memLocation?.displayName ?? "unknown") := \(src)"
         case cip, cbp, cxp, clp, cgp:
@@ -104,8 +136,8 @@ struct PseudoCodeGenerator {
     func handleCallProcedure(_ loc: Location, stack: inout StackSimulator)
         -> String?
     {
-        let lookupKey = "\(loc.segment):\(loc.procedure ?? -1)"
-        guard let called = procLookup[lookupKey] else {
+        guard let called = allProcedures.first(where:{ $0.segment == loc.segment && $0.procedure == loc.procedure })
+                 else {
             return loc.displayName + "()"  // fallback to just displaying the location
         }
 
@@ -127,11 +159,7 @@ struct PseudoCodeGenerator {
                 } else {
                     aParams.append(a)
                 }
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    allLocations.first(where: { $0 == l })?.type = "CHAR"
-                }
+                setLocType(a, "CHAR")
                 i -= 1
             case "BOOLEAN":
                 let (a, _) = stack.pop()
@@ -142,11 +170,7 @@ struct PseudoCodeGenerator {
                 } else {
                     aParams.append(a)
                 }
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    allLocations.first(where: { $0 == l })?.type = "BOOLEAN"
-                }
+                setLocType(a, "BOOLEAN")
                 i -= 1
             case let pfx where pfx.hasPrefix("SET"):
                 let (a, at) = stack.peek()
@@ -166,11 +190,7 @@ struct PseudoCodeGenerator {
             default:
                 let (a, _) = stack.pop()
                 aParams.append(a)
-                if a.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A/) {
-                    // convert string location to Location
-                    let l = Location(from: a)
-                    allLocations.first(where: { $0 == l })?.type = called.parameters[i].type
-                }
+                setLocType(a, called.parameters[i].type)
                 i -= 1
             }
         }
