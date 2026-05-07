@@ -72,7 +72,7 @@ final class GenerateDisasmSnapshot: XCTestCase {
 
         // Redirect stdout to the output file
         freopen(outPath, "w", stdout)
-        outputResults(sourceFilename: fileURL.lastPathComponent, segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: fileURL.lastPathComponent, segDictionary: segDict, codeSegs: codeSegs, dataSegs: [], allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
         fflush(stdout)
     }
 }

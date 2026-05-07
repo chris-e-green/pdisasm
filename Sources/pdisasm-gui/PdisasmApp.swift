@@ -1,14 +1,17 @@
 import AppKit
 import SwiftUI
+import pdisasm_gui_lib
 
 @main
 struct PdisasmApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.openFileAction) private var openFileAction
+    @Environment(\.openWindow) private var openWindow
+    @State private var appState = GUIAppState()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(appState: appState)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -17,7 +20,18 @@ struct PdisasmApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
                 .disabled(openFileAction == nil)
+
+                Divider()
+
+                Button("Metadata Editor") {
+                    openWindow(id: "metadata-editor")
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
             }
+        }
+
+        WindowGroup("Metadata Editor", id: "metadata-editor") {
+            MetadataEditorView(relevantFilenames: appState.relevantMetadataFiles)
         }
     }
 }

@@ -2,10 +2,15 @@ import SwiftUI
 import UniformTypeIdentifiers
 import pdisasm
 
-struct ContentView: View {
+public struct ContentView: View {
     @State private var viewModel = DisassemblyViewModel()
+    @Bindable var appState: GUIAppState
 
-    var body: some View {
+    public init(appState: GUIAppState) {
+        self.appState = appState
+    }
+
+    public var body: some View {
         NavigationSplitView {
             SidebarView(viewModel: viewModel)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220)
@@ -32,6 +37,65 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .secondaryAction) {
+                let matchCount = viewModel.searchMatchIndices.count
+                let scanned = viewModel.searchScannedLineCount
+                let total = viewModel.searchTotalLineCount
+                let progressPercent = total > 0 ? (scanned * 100) / total : 0
+                let statusWidth = viewModel.searchStatusWidthPreset.width
+
+                TextField("Search disassembly", text: $viewModel.searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 200)
+                    .onSubmit { viewModel.commitSearch() }
+
+                if matchCount > 0 {
+                    Text("\(viewModel.currentMatchIndex + 1)/\(matchCount)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                    Button {
+                        viewModel.previousMatch()
+                    } label: {
+                        Label("Previous", systemImage: "chevron.up")
+                    }
+                    Button {
+                        viewModel.nextMatch()
+                    } label: {
+                        Label("Next", systemImage: "chevron.down")
+                    }
+                }
+
+                ZStack(alignment: .leading) {
+                    if viewModel.isSearching {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            ViewThatFits(in: .horizontal) {
+                                Text("Searching... \(viewModel.liveSearchMatchCount) matches (\(scanned)/\(total), \(progressPercent)%)")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                Text("\(viewModel.liveSearchMatchCount) matches, \(progressPercent)%")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                Text("\(progressPercent)%")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(width: statusWidth, alignment: .leading)
+
+                Menu {
+                    Picker("Search Status Width", selection: $viewModel.searchStatusWidthPreset) {
+                        ForEach(DisassemblyViewModel.SearchStatusWidthPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "textformat.size")
+                }
+                .help("Choose search status width")
+
                 Toggle("Markup", isOn: $viewModel.showMarkup)
                 Toggle("P-Code", isOn: $viewModel.showPCode)
                 Toggle("Pseudocode", isOn: $viewModel.showPseudoCode)
@@ -55,6 +119,13 @@ struct ContentView: View {
         }
         .focusedSceneValue(\.openFileAction) {
             viewModel.showFileImporter = true
+        }
+        .onAppear {
+            viewModel.restoreLastFile()
+            appState.relevantMetadataFiles = viewModel.relevantMetadataFiles
+        }
+        .onChange(of: viewModel.relevantMetadataFiles) { _, newValue in
+            appState.relevantMetadataFiles = newValue
         }
     }
 }
@@ -117,17 +188,22 @@ struct DetailView: View {
                 )
             } else {
                 GeometryReader { geo in
+                    let lines = viewModel.filteredLines
+
                     ScrollViewReader { scrollProxy in
                         ScrollView([.horizontal, .vertical]) {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(viewModel.filteredLines) { line in
+                                ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                                    let lineID = line.anchor ?? "line-\(line.id)"
+                                    let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
+                                    let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
                                     Text(line.text)
                                         .font(.system(.body, design: .monospaced))
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 1)
-                                        .background(backgroundColor(for: line.kind))
-                                        .id(line.anchor ?? "line-\(line.id)")
+                                        .background(isCurrentMatch ? Color.yellow.opacity(0.4) : isMatch ? Color.yellow.opacity(0.2) : backgroundColor(for: line.kind))
+                                        .id(lineID)
                                 }
                             }
                             .textSelection(.enabled)
@@ -138,6 +214,13 @@ struct DetailView: View {
                             if let anchor = newValue {
                                 withAnimation {
                                     scrollProxy.scrollTo(anchor, anchor: .top)
+                                }
+                            }
+                        }
+                        .onChange(of: viewModel.currentMatchAnchor) { _, newValue in
+                            if let anchor = newValue {
+                                withAnimation {
+                                    scrollProxy.scrollTo(anchor, anchor: .center)
                                 }
                             }
                         }
@@ -160,5 +243,18 @@ struct DetailView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(appState: GUIAppState())
+}
+
+// MARK: - Focused Value for Open File action
+
+public struct OpenFileActionKey: FocusedValueKey {
+    public typealias Value = () -> Void
+}
+
+public extension FocusedValues {
+    var openFileAction: (() -> Void)? {
+        get { self[OpenFileActionKey.self] }
+        set { self[OpenFileActionKey.self] = newValue }
+    }
 }

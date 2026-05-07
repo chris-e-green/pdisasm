@@ -4,6 +4,8 @@ public class Procedure {
     public var exitIC: Int = 0
     public var parameterSize: Int = 0
     public var dataSize: Int = 0
+    public var segmentStartAddress: Int?
+    public var segmentEndAddress: Int?
     public var identifier: ProcedureIdentifier?
     public var instructions: [Int: Instruction] = [:]
     public var entryPoints: Set<Int> = []

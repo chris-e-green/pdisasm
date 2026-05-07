@@ -4,14 +4,18 @@ import Foundation
 
 /// Manages the symbolic execution stack during P-code decoding
 struct StackSimulator {
-    let sep: Character = "~"
+    let sep = "~"
+    let ptr = "@"
     var stack: [String] = []
     
     func prettyStack() -> String {
         "[" + stack.joined(separator: ", ") + "]"
     }
 
-    mutating func push(_ value: (val: String, type: String?)) {
+    mutating func push(_ value: (val: String, type: String?), isPointer: Bool = false) {
+        var stackRep = "\(value.val)\(sep)"
+        if isPointer { stackRep += ptr }
+        stackRep += "\(value.type ?? "UNKNOWN")"
         if let type = value.type {
             stack.append("\(value.val)\(sep)\(type)")
         } else {
@@ -19,10 +23,10 @@ struct StackSimulator {
         }
     }
 
-    mutating func pushReal(_ value: String) {
-        stack.append("\(value)\(sep)REAL")
-    }
-
+//    mutating func pushReal(_ value: String, isPointer: Bool = false) {
+//        stack.append("\(value)\(sep)REAL")
+//    }
+    
     @discardableResult
     /// Pops the top of the stack and any datatype. If the type
     /// of the popped value is not defined, it uses the provided type

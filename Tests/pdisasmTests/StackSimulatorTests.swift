@@ -83,11 +83,11 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertEqual(val, "underflow!")
     }
 
-    // MARK: - pushReal / popReal
+    // MARK: - push real / popReal
 
     func testPushRealAndPopReal() {
         var sim = StackSimulator()
-        sim.pushReal("3.14")
+        sim.push(("3.14", "REAL"))
         let (val, typ) = sim.popReal()
         XCTAssertEqual(val, "3.14")
         XCTAssertEqual(typ, "REAL")

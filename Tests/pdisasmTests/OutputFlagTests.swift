@@ -52,7 +52,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowDotProducesDigraph() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showDot: true)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showDot: true)
         }
         XCTAssertTrue(out.contains("digraph {"))
         XCTAssertTrue(out.contains("}"))
@@ -63,7 +63,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowMarkupTrue() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showMarkup: true, showPCode: true)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showMarkup: true, showPCode: true)
         }
         XCTAssertTrue(out.contains("#  test"))
         XCTAssertTrue(out.contains("## Segment"))
@@ -73,7 +73,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowMarkupFalseSuppressesMarkdown() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showMarkup: false, showPCode: true)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showMarkup: false, showPCode: true)
         }
         XCTAssertFalse(out.contains("#  test"))
         XCTAssertFalse(out.contains("## Segment"))
@@ -84,7 +84,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowPCodeTrueIncludesInstructions() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: true)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: true)
         }
         XCTAssertTrue(out.contains("RNP"))
     }
@@ -92,7 +92,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowPCodeFalseSuppressesInstructions() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: false)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: false)
         }
         XCTAssertFalse(out.contains("0000:"))
     }
@@ -102,7 +102,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowPseudoCodeTrueIncludesBEGINEND() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showPseudoCode: true)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPseudoCode: true)
         }
         XCTAssertTrue(out.contains("BEGIN"))
         XCTAssertTrue(out.contains("END"))
@@ -111,7 +111,7 @@ final class OutputFlagTests: XCTestCase {
     func testShowPseudoCodeFalseSuppressesBEGINEND() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let out = captureOutput {
-            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, allLocations: locs, allProcedures: procs, allCallers: callers, showPseudoCode: false)
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPseudoCode: false)
         }
         XCTAssertFalse(out.contains("BEGIN"))
     }

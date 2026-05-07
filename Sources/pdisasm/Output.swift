@@ -16,6 +16,31 @@ public class StringStream: TextOutputStream {
     }
 }
 
+private func assemblerDestinationText(
+    for instruction: Instruction,
+    destination: Location,
+    allProcedures: [ProcedureIdentifier]
+) -> String {
+    let procedureLabel: String
+    if let procedure = destination.procedure,
+        let dest = allProcedures.first(where: {
+            $0.segment == destination.segment && $0.procedure == procedure
+        })
+    {
+        procedureLabel = dest.shortDescription
+    } else {
+        procedureLabel = destination.displayName
+    }
+
+    let arrow = instruction.opcode == 0x4c ? " => " : " -> "
+
+    if let addr = destination.addr {
+        return "\(arrow)\(procedureLabel) @ $\(String(format: "%04x", addr))"
+    }
+
+    return "\(arrow)\(procedureLabel)"
+}
+
 // MARK: - Structured Output Model
 
 /// Classifies the kind of each output line so the GUI can filter and colour them.
@@ -75,6 +100,14 @@ public func renderStructuredLines(
             addLine(.global, "G\(loc.addr ?? -1)=\(loc.description)")
         })
     addLine(.global, "")
+    
+    for ds in result.dataSegments.sorted(by: { $0 < $1 }) {
+        addLine(.variable, "## Data Segment \(ds)\n")
+        result.allLocations.filter({ $0.segment == ds }).sorted().forEach( { loc in
+            addLine(.variable, "D\(loc.addr ?? -1)=\(loc.description)")
+        })
+    }
+    addLine(.variable, "")
 
     for (s, codeSeg) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
         if verbose {
@@ -246,6 +279,13 @@ public func renderStructuredLines(
                             if let comment = inst.comment {
                                 pcLine += " ; \(comment)"
                             }
+                            if let destination = inst.destination {
+                                pcLine += assemblerDestinationText(
+                                    for: inst,
+                                    destination: destination,
+                                    allProcedures: result.allProcedures
+                                )
+                            }
                             addLine(.pcode, pcLine)
                         }
                     }
@@ -283,6 +323,7 @@ func outputResults(
     sourceFilename: String,
     segDictionary: SegDictionary,
     codeSegs: [Int: CodeSegment],
+    dataSegs: [Int],
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
@@ -298,6 +339,7 @@ func outputResults(
         sourceFilename: sourceFilename,
         segDictionary: segDictionary,
         codeSegs: codeSegs,
+        dataSegs: dataSegs,
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
@@ -315,6 +357,7 @@ func outputResults<Target: TextOutputStream>(
     sourceFilename: String,
     segDictionary: SegDictionary,
     codeSegs: [Int: CodeSegment],
+    dataSegs: [Int],
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
@@ -359,6 +402,14 @@ func outputResults<Target: TextOutputStream>(
         })
     emit("")
 
+    for ds in dataSegs.sorted(by: { $0 < $1 }) {
+        emit("## Data Segment \(ds)\n")
+        allLocations.filter({ $0.segment == ds }).sorted().forEach( { loc in
+            emit("D\(loc.addr ?? -1)=\(loc.description)")
+        })
+    }
+    emit("")
+    
     for (s, codeSeg) in codeSegs.sorted(by: { $0.key < $1.key }) {
         if verbose {
             segDictionary.segTable.first(where: { $0.value.segNum == s }).map {
@@ -541,8 +592,17 @@ func outputResults<Target: TextOutputStream>(
                             }
                         } else {
                             emit(inst.mnemonic, terminator: "")
-                            if inst.comment != nil {
-                                emit(" ; \(inst.comment!)")
+                            if let comment = inst.comment {
+                                emit(" ; \(comment)", terminator: "")
+                            }
+                            if let destination = inst.destination {
+                                emit(
+                                    assemblerDestinationText(
+                                        for: inst,
+                                        destination: destination,
+                                        allProcedures: allProcedures
+                                    )
+                                )
                             } else {
                                 emit("")
                             }

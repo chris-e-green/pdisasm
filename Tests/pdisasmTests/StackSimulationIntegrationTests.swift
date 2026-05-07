@@ -28,6 +28,7 @@ final class StackSimulationIntegrationTests: XCTestCase {
 
         simulateStackAndGeneratePseudocode(
             proc: proc,
+            knownRecords: [],
             allProcedures: &allProcedures,
             allLocations: &allLocations
         )
