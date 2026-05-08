@@ -176,7 +176,8 @@ public func renderStructuredLines(
                     addLine(.pseudocode, "BEGIN")
                 } else {
                     addLine(.markup, "```assembly")
-                    addLine(.pcode, "; ASSEMBLER PROCEDURE")
+                    addLine(.pseudocode, "; ASSEMBLER PROCEDURE")
+                    addLine(.pseudocode, ".\(proc.identifier?.isFunction == true ? "FUNC" : "PROC") \(proc.identifier?.procName ?? "P\(proc.identifier?.procedure ?? -99)")")
                 }
 
                 var indentLevel: Int = 1
@@ -274,7 +275,7 @@ public func renderStructuredLines(
                                     )
                                 }
                             }
-                        } else {
+                        } else { // not pascal
                             pcLine += inst.mnemonic
                             if let comment = inst.comment {
                                 pcLine += " ; \(comment)"
@@ -286,7 +287,7 @@ public func renderStructuredLines(
                                     allProcedures: result.allProcedures
                                 )
                             }
-                            addLine(.pcode, pcLine)
+                            addLine(.pseudocode, pcLine)
                         }
                     }
 
@@ -309,8 +310,11 @@ public func renderStructuredLines(
                         }
                     }
                 }
-
-                addLine(.pseudocode, "END")
+                if proc.identifier?.isAssembly == false {
+                    addLine(.pseudocode, "END")
+                } else {
+                    addLine(.pseudocode, ".END")
+                }
                 addLine(.markup, "```")
                 addLine(.markup, "")
             }
