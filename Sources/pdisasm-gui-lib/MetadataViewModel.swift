@@ -140,15 +140,29 @@ final class MetadataViewModel {
         var fields: [String] = []
         var current = ""
         var inQuotes = false
-        for ch in line {
+        var index = line.startIndex
+        while index < line.endIndex {
+            let ch = line[index]
             if ch == "\"" {
-                inQuotes.toggle()
+                if inQuotes {
+                    let nextIndex = line.index(after: index)
+                    if nextIndex < line.endIndex && line[nextIndex] == "\"" {
+                        current.append("\"")
+                        index = line.index(after: nextIndex)
+                        continue
+                    } else {
+                        inQuotes = false
+                    }
+                } else {
+                    inQuotes = true
+                }
             } else if ch == "," && !inQuotes {
                 fields.append(current)
                 current = ""
             } else {
                 current.append(ch)
             }
+            index = line.index(after: index)
         }
         fields.append(current)
         return fields

@@ -181,10 +181,6 @@ let wdc6502: [UInt8: WDC6502OpInfo] = [
     0xfe: WDC6502OpInfo(mnemonic: "INC $%04x,X", paramLength: 2),
 ]
 
-// TODO: assembler still sometimes places disassembly at wrong spot
-// TODO: stopping at an RTS is not foolproof because some routines continue
-//       this might be tricky to solve, may have to examine code flow.
-
 private struct AssemblerFooterInfo {
     let footerBytes: Int
     let baseRelocs: Set<Int>
@@ -209,7 +205,6 @@ private func parseAssemblerFooter(
         baseRelocs.insert(try codeData.getSelfRefPointer(at: addr - footerBytes))
         footerBytes += 2
     }
-    if baseCount > 0 { print("\(segmentNumber):\(procedureNumber) baseRelocs \(baseRelocs.sorted())") }
 
     var segRelocs: Set<Int> = []
     let segRelocCount = Int(try codeData.readWord(at: addr - footerBytes))
@@ -218,7 +213,6 @@ private func parseAssemblerFooter(
         segRelocs.insert(try codeData.getSelfRefPointer(at: addr - footerBytes))
         footerBytes += 2
     }
-    if segRelocCount > 0 { print("\(segmentNumber):\(procedureNumber) segRelocs \(segRelocs.sorted())") }
 
     var procRelocs: Set<Int> = []
     let procRelocCount = Int(try codeData.readWord(at: addr - footerBytes))
@@ -227,16 +221,17 @@ private func parseAssemblerFooter(
         procRelocs.insert(try codeData.getSelfRefPointer(at: addr - footerBytes))
         footerBytes += 2
     }
-    if procRelocCount > 0 { print("\(segmentNumber):\(procedureNumber) procRelocs \(procRelocs.sorted())") }
 
     var interpRelocs: Set<Int> = []
     let interpRelocCount = Int(try codeData.readWord(at: addr - footerBytes))
+    footerBytes += 2
     for _ in 0..<interpRelocCount {
         interpRelocs.insert(try codeData.getSelfRefPointer(at: addr - footerBytes))
         footerBytes += 2
     }
-    if interpRelocCount > 0 { print("\(segmentNumber):\(procedureNumber) interpRelocs \(interpRelocs.sorted())") }
 
+    footerBytes -= 2 // The final count word is not followed by relocation entries, so subtract its bytes from the total.
+    
     return AssemblerFooterInfo(
         footerBytes: footerBytes,
         baseRelocs: baseRelocs,
@@ -526,9 +521,6 @@ func decodeAssemblerProcedure(
         instruction.mnemonic.contains(" | ")
     }
 
-    if segmentNumber == 30 && procedureNumber == 4 {
-        _ = 0
-    }
     if let existingIdentifier = proc.identifier {
         // Preserve metadata-provided function/procedure classification.
         existingIdentifier.isAssembly = true

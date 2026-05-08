@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import pdisasm
 
 /// Observable view model that drives the GUI.

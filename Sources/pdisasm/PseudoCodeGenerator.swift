@@ -51,8 +51,6 @@ struct PseudoCodeGenerator {
                     print("Type conflict for \(locStr): existing type \(found?.type ?? "nil") vs new type \(type)")
                 }
             }
-                
-//            allLocations.first(where: { $0 == l })?.type = type
         }
     }
 
