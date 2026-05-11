@@ -5,6 +5,7 @@
 - Either support markdown rendering in the gui, or use equivalent formatting to make it more readable. (Eg the table of segments should be markdown in CLI mode but a proper table in GUI mode).
 - Work out what to do with type conflicts, rather than just logging them.
 - Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or mantissa) - this is currently being treated as an integer access, which is obviously wrong.
+- Refactor where pseudocode is generated, particularly where types are determined in multiple places.
 - Finish checking for and removing unnecessary structures that are relics of 
   earlier approaches and data structures.
 - Stack isn't always cleared at the end of the procedure, so something's off...
