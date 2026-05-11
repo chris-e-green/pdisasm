@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Observation
 
 /// Represents a single row in a CSV file as an ordered dictionary of column→value.
 struct CSVRow: Identifiable {

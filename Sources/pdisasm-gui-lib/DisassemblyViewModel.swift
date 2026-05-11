@@ -297,6 +297,7 @@ final class DisassemblyViewModel {
         ) else { return }
         if isStale { persistURL(url) }
         guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
         fileURL = url
         runDisassembly()
     }
