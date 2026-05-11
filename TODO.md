@@ -1,6 +1,10 @@
 # TODO
 
-- Fix remaining bugs in 6502 disassembly (can't just stop at RTS, and not all content displayed in correct place). 
+- Make the gui view more hierarchical - segment details in first panel, procedures/functions in second panel, and then details of selected procedure/function in third panel.
+- Make the GUI more interactive - double-clicking on a procedure/function in pseudo-code should take you to the details of that procedure/function, and double-clicking on a memory location should take you to the details of that memory location.
+- Either support markdown rendering in the gui, or use equivalent formatting to make it more readable. (Eg the table of segments should be markdown in CLI mode but a proper table in GUI mode).
+- Work out what to do with type conflicts, rather than just logging them.
+- Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or mantissa) - this is currently being treated as an integer access, which is obviously wrong.
 - Finish checking for and removing unnecessary structures that are relics of 
   earlier approaches and data structures.
 - Stack isn't always cleared at the end of the procedure, so something's off...
@@ -9,11 +13,12 @@
 - Look at changing storage of metadata to be in a database (which should hopefully fix the issue of duplication of addresses etc, by enforcing unique keys).
 - Look at what's required to be able to store metadata in iCloud.
 - Look at whether it's now viable to write-back datatypes etc at the end of the run.
-- Make sure we aren't exporting the pseudo-location for procedures/functions as part of the allLocations files.
 - Fix the handling of addresses vs values in pseudocode.
-- Implement support for common/standard structure types, eg. FIB.
 - Look at improving the stack implementation (particularly for variables on the stack) so that their names are determined at print time, allowing them to reflect the final name/datatype.
 - Check that the markdown switch only enables/disables markdown, and leaves pseudocode intact.
+- ~~Fix remaining bugs in 6502 disassembly (can't just stop at RTS, and not all content displayed in correct place). ~~
+- ~~Make sure we aren't exporting the pseudo-location for procedures/functions as part of the allLocations files.~~
+- ~~Implement support for common/standard structure types, eg. FIB.~~
 - ~~Put the metadata files in a separate (configurable?) directory~~
 - ~~Check whether there's a more 'swiftian' equivalent to FileManager~~
 - ~~Auto-map proc/func parameters to their memory locations~~
