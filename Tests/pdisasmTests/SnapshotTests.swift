@@ -19,7 +19,7 @@ final class SnapshotTests: XCTestCase {
         dup2(pipefds[1], STDOUT_FILENO)
 
         // call the function
-        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, dataSegs: [], allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
 
         // restore stdout and read pipe
         fflush(stdout)

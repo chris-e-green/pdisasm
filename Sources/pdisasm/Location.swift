@@ -5,6 +5,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
     public var procedure: Int?
     public var lexLevel: Int?
     public var addr: Int?
+    public var isParam: Bool
     public var name: String
     public var type: String
 
@@ -43,6 +44,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
             Int.self,
             forKey: CodingKeys.addr
         )
+        self.isParam = false
         self.name = try container.decode(String.self, forKey: CodingKeys.name)
         self.type = try container.decode(String.self, forKey: CodingKeys.type)
     }
@@ -52,6 +54,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         procedure: Int? = nil,
         lexLevel: Int? = nil,
         addr: Int? = nil,
+        isParam: Bool = false,
         name: String = "",
         type: String = ""
     ) {
@@ -59,6 +62,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         self.procedure = procedure
         self.lexLevel = lexLevel
         self.addr = addr
+        self.isParam = isParam
         self.name = name
         self.type = type
     }
@@ -84,6 +88,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
                 }
             }
         }
+        self.isParam = false
     }
     
     public func encode(to encoder: Encoder) throws {

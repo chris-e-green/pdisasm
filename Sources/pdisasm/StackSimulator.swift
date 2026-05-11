@@ -4,21 +4,29 @@ import Foundation
 
 /// Manages the symbolic execution stack during P-code decoding
 struct StackSimulator {
-    let sep: Character = "~"
+    let sep = "~"
+    let ptr = "@"
     var stack: [String] = []
+    
+    func prettyStack() -> String {
+        "[" + stack.joined(separator: ", ") + "]"
+    }
 
-    mutating func push(_ value: (String, String?)) {
-        if let type = value.1 {
-            stack.append("\(value.0)\(sep)\(type)")
+    mutating func push(_ value: (val: String, type: String?), isPointer: Bool = false) {
+        var stackRep = "\(value.val)\(sep)"
+        if isPointer { stackRep += ptr }
+        stackRep += "\(value.type ?? "UNKNOWN")"
+        if let type = value.type {
+            stack.append("\(value.val)\(sep)\(type)")
         } else {
-            stack.append("\(value.0)\(sep)UNKNOWN")
+            stack.append("\(value.val)\(sep)UNKNOWN")
         }
     }
 
-    mutating func pushReal(_ value: String) {
-        stack.append("\(value)\(sep)REAL")
-    }
-
+//    mutating func pushReal(_ value: String, isPointer: Bool = false) {
+//        stack.append("\(value)\(sep)REAL")
+//    }
+    
     @discardableResult
     /// Pops the top of the stack and any datatype. If the type
     /// of the popped value is not defined, it uses the provided type
@@ -29,7 +37,7 @@ struct StackSimulator {
     ///   - withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the popped value and its type (if any)
     mutating func pop(_ type: String, _ withoutParentheses: Bool = false) -> (
-        String, String?
+        val: String, type: String?
     ) {
         let a = stack.popLast() ?? "underflow!"
         var parenthesized: String
@@ -62,9 +70,9 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack and any datatype
     ///
-    /// - Parameter withoutParentheses:
+    /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the popped value and its type (if any)
-    mutating func pop(_ withoutParentheses: Bool = false) -> (String, String?) {
+    mutating func pop(_ withoutParentheses: Bool = false) -> (val: String, type: String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {  // typed value
             let parts = a.split(separator: sep, maxSplits: 1)
@@ -89,10 +97,15 @@ struct StackSimulator {
     @discardableResult
     /// Gets the top of the stack and any datatype without changing the stack
     ///
-    /// - Parameter withoutParentheses:
+    /// - Parameter at: the index from the top of the stack to peek at (0 for top, 1 for second, etc.)
+    /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the value at the top of the stack and its type (if any)
-    func peek(_ withoutParentheses: Bool = false) -> (String, String?) {
-        let a = stack.last ?? "underflow!"
+    func peek(_ at: Int = 0, _ withoutParentheses: Bool = false) -> (val: String, type: String?) {
+        let pos = stack.endIndex - at - 1
+        if pos < stack.startIndex || pos >= stack.endIndex {
+            return ("underflow!", nil)
+        }        
+        let a = stack[pos]
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
             if withoutParentheses {
@@ -116,11 +129,39 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack as a REAL value.
     /// - Returns: a tuple with the REAL value and the 'REAL' type
-    mutating func popReal() -> (String, String?) {
+    mutating func popReal() -> (val: String, type: String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
-            return (String(parts[0]), String(parts[1]))
+            if parts[1] == "REAL" { // if it was a real, we can just return it
+                return (String(parts[0]), "REAL")
+            } else { // not a real, so we need to get the second word.
+                let b = stack.popLast() ?? "underflow!"
+                if b.contains(sep) {
+                    let bParts = b.split(separator: sep, maxSplits: 1)
+                    if let val1 = UInt16(parts[0]), let val2 = UInt16(bParts[0]) {
+                        let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
+                        return (
+                            "\(rv)", "REAL"
+                        )
+                    }
+                    let name = parts[0].split(separator: "{", maxSplits: 1)[0]
+                    let bName = bParts[0].split(separator: "{", maxSplits: 1)[0]
+                    if name != bName {
+                        print(
+                            "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"
+                        )
+                        return ("\(a).\(b)", "REAL")
+                    } else {
+                        return ("\(name)", "REAL")
+                    }
+                } else {
+                    print(
+                        "Warning: expected second part of REAL to be typed, got '\(b)'"
+                    )
+                    return ("\(a).\(b)", "REAL")
+                }
+            }
         } else {
             let b = stack.popLast() ?? "underflow!"
             if let val1 = UInt16(a), let val2 = UInt16(b) {
@@ -140,7 +181,7 @@ struct StackSimulator {
     @discardableResult
     /// Pops the top of the stack as a SET value.
     /// - Returns: a tuple with the length of the set and its string representation
-    mutating func popSet() -> (Int, String) {
+    mutating func popSet() -> (len: Int, val: String) {
         let (setLen, _) = self.pop()
         // to hold string set values
         var setData: [String] = []

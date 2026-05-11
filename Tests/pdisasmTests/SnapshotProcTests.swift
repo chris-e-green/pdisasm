@@ -24,7 +24,7 @@ final class SnapshotProcTests: XCTestCase {
         fflush(stdout)
         dup2(pipefds[1], STDOUT_FILENO)
 
-        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
+        outputResults(sourceFilename: "sample.bin", segDictionary: segDict, codeSegs: codeSegs, dataSegs: [], allLocations: allLocations, allProcedures: allProcedures, allCallers: allCallers)
 
         fflush(stdout)
         dup2(originalStdout, STDOUT_FILENO)

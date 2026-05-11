@@ -8,6 +8,12 @@ let package = Package(
     platforms: [
         .macOS(.v26)
     ],
+    products: [
+        .library(
+            name: "pdisasm-gui-lib",
+            targets: ["pdisasm-gui-lib"]
+        ),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
         .package(url: "https://github.com/dehesa/CodableCSV.git", from: "0.6.7"),
@@ -29,6 +35,24 @@ let package = Package(
             dependencies: [
                 "pdisasm",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+        .target(
+            name: "pdisasm-gui-lib",
+            dependencies: [
+                "pdisasm",
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+        .executableTarget(
+            name: "pdisasm-gui",
+            dependencies: [
+                "pdisasm-gui-lib",
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)

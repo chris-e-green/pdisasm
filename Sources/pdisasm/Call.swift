@@ -1,4 +1,7 @@
-public struct Call: CustomStringConvertible, Hashable {
+import Foundation
+public struct Call: CustomStringConvertible, Hashable, Identifiable {
+    public let id = UUID()
+    
     public static func == (lhs: Call, rhs: Call) -> Bool {
         return lhs.origin == rhs.origin && lhs.target == rhs.target
     }
