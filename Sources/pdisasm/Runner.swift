@@ -92,7 +92,7 @@ func resolveAssemblerProcedureTargets(
             {
                 // Mark the target address as an entry point in the target procedure
                 targetProcedure.entryPoints.insert(targetAddress)
-                
+
                 allCallers.insert(
                     Call(
                         from: origin,
@@ -148,7 +148,8 @@ func exportLabels(
         if !overwrite && FileManager.default.fileExists(atPath: fileURL.path) {
             return
         }
-        let backupURL = fileURL.appendingPathExtension("bak")
+
+        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
         if FileManager.default.fileExists(atPath: backupURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
         }
@@ -212,7 +213,7 @@ func exportProcedures(
             return
         }
 
-        let backupURL = fileURL.appendingPathExtension("bak")
+        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
         if FileManager.default.fileExists(atPath: backupURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
         }
@@ -270,7 +271,7 @@ func exportKnownRecords(
             return
         }
 
-        let backupURL = fileURL.appendingPathExtension("bak")
+        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
         if FileManager.default.fileExists(atPath: backupURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
         }
@@ -420,18 +421,9 @@ func normaliseMemoryLocations(
                     }) {
                         inst.memLocation?.procedure = p.origin.procedure
                         inst.memLocation?.segment = p.origin.segment
-                    } else {
-                        print(
-                            "\(proc.shortDescription): Memory location \(loc) doesn't match any caller"
-                        )
                     }
                 case proc.lexicalLevel:
-                    print(
-                        "\(proc.shortDescription): Memory location \(loc) has lex level \(lexLevel) and is local ",
-                        terminator: " "
-                    )
                     inst.memLocation?.procedure = proc.identifier?.procedure
-                    print("Memory location is now \(loc).")
                 default:
                     var parents = allCallers.filter {
                         $0.target.segment == proc.identifier?.segment
@@ -478,7 +470,7 @@ public struct DisassemblyResult: @unchecked Sendable {
 public func disassemble(
     filename: String,
     verbose: Bool = false,
-    rewrite: Bool = false
+    rewrite: Bool = true
 ) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
@@ -489,6 +481,8 @@ public func disassemble(
         throw error
     }
 
+    let systemSegments = [0, 2, 3, 4, 5, 6, 20, 21, 22, 28, 29, 30, 31]
+
     let segDict = try readCodeFileStructure(codeData: binaryData)
 
     var allCodeSegs: [Int: CodeSegment] = [:]
@@ -498,7 +492,7 @@ public func disassemble(
     var sysProcedures: [ProcedureIdentifier] = []
     var allCallers: Set<Call> = []
     var dataSegments: [Int] = []
-    
+
     var knownRecords: Set<PascalRecord> = [
         PascalRecord(name: "FIB", members: [
             0: Identifier(name:"FWINDOW", type: "WINDOWP"),
@@ -672,7 +666,7 @@ public func disassemble(
             }
             continue
         }
-        
+
         if seg.segmentKind == .dataseg  {
             dataSegments.append(Int(seg.segNum))
             // data segments don't have content within the file - the runtime just reserves memory
@@ -683,13 +677,13 @@ public func disassemble(
             }
             continue
         }
-        
+
         // count of procedures in this segment
         let procCount = Int(code[code.endIndex - 1])
-        
+
         // wrap the code in a CodeData to make it easier to read from it.
         let codeData = CodeData(data: code, instructionPointer: 0, header: 0)
-        
+
         // This applies to the core pascal operating system file (SYSTEM.PASCAL).
         // Segment 0 (the PASCALSYSTEM segment) is actually split between
         // slots 0 and 15 in the segment table. The part that's in slot 15
@@ -760,7 +754,6 @@ public func disassemble(
             }
         }
 
-        var tempCallers: Set<Call> = []
         // track assembly entry points across procedures within a segment because they can call
         // each other directly by absolute address, without going through the procedure table. This means we won't be able to assign them to a procedure based on calls from other procedures, so we need to track them separately and assign them to a pseudo-procedure for the assembler code at the end.
         var asmEntryPoints: Set<Int> = []
@@ -768,6 +761,7 @@ public func disassemble(
         for (procIdx, procPtr) in codeSeg.procedureDictionary.procedurePointers
             .enumerated()
         {
+            var tempCallers: Set<Call> = []
             var proc = Procedure()
             var segCodeBlock: Data
             var procStartOffset = procPtr
@@ -840,7 +834,8 @@ public func disassemble(
                     addr: procStartOffset,
                     callers: &tempCallers,
                     allLocations: &allLocations,
-                    allProcedures: &allProcedures
+                    allProcedures: &allProcedures,
+                    verbose: verbose
                 )
             }
 
@@ -866,24 +861,39 @@ public func disassemble(
     for (_, codeSeg) in allCodeSegs {
         for proc in codeSeg.procedures {
             if let pt = proc.identifier {
-                allCallers.forEach { call in
+                allCallers = Set(allCallers.map { call in
                     if call.target.segment == pt.segment
                         && call.target.procedure == pt.procedure
                         && call.target.lexLevel == nil
                     {
-                        allCallers.remove(call)
                         call.target.lexLevel = proc.lexicalLevel
-                        allCallers.insert(call)
                     }
                     if call.origin.segment == pt.segment
                         && call.origin.procedure == pt.procedure
                         && call.origin.lexLevel == nil
                     {
-                        allCallers.remove(call)
                         call.origin.lexLevel = proc.lexicalLevel
-                        allCallers.insert(call)
                     }
-                }
+                    return call
+                })
+//                allCallers.forEach { call in
+//                    if call.target.segment == pt.segment
+//                        && call.target.procedure == pt.procedure
+//                        && call.target.lexLevel == nil
+//                    {
+//                        allCallers.remove(call)
+//                        call.target.lexLevel = proc.lexicalLevel
+//                        allCallers.insert(call)
+//                    }
+//                    if call.origin.segment == pt.segment
+//                        && call.origin.procedure == pt.procedure
+//                        && call.origin.lexLevel == nil
+//                    {
+//                        allCallers.remove(call)
+//                        call.origin.lexLevel = proc.lexicalLevel
+//                        allCallers.insert(call)
+//                    }
+//                }
             }
         }
     }
@@ -892,16 +902,25 @@ public func disassemble(
     for (_, codeSeg) in allCodeSegs {
         for proc in codeSeg.procedures {
             normaliseMemoryLocations(proc, allCallers)
-            let missingLex = allLocations.filter({ $0.isParam == false &&
-                $0.lexLevel == nil && $0.segment == proc.identifier?.segment
-                    && $0.procedure == proc.identifier?.procedure
+            allLocations = Set(allLocations.map { loc in
+                if loc.isParam == false, loc.lexLevel == nil,
+                    loc.segment == proc.identifier?.segment,
+                    loc.procedure == proc.identifier?.procedure
+                {
+                    loc.lexLevel = proc.lexicalLevel
+                }
+                return loc
             })
-            missingLex.forEach { loc in
-                allLocations.remove(loc)
-                let updatedLoc = loc
-                updatedLoc.lexLevel = proc.lexicalLevel
-                allLocations.insert(updatedLoc)
-            }
+//            let missingLex = allLocations.filter({ $0.isParam == false &&
+//                $0.lexLevel == nil && $0.segment == proc.identifier?.segment
+//                    && $0.procedure == proc.identifier?.procedure
+//            })
+//            missingLex.forEach { loc in
+//                allLocations.remove(loc)
+//                let updatedLoc = loc
+//                updatedLoc.lexLevel = proc.lexicalLevel
+//                allLocations.insert(updatedLoc)
+//            }
         }
     }
 
@@ -1020,37 +1039,46 @@ public func disassemble(
     exportKnownRecords(
         toJson: sysRecordsFile,
         from: knownRecords.filter { $0.isSystemRecord == true },
+        overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )
 
     exportKnownRecords(
         toJson: allRecordsFile,
         from: knownRecords.filter { $0.isSystemRecord == false },
+        overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )
 
+    // we don't export segment 0 into the app file
+    // we also don't export locations without addresses (as they're actually procedures/functions)
+    // and we don't export entries that are marked as parameters because they're exported as part of the procedure
     exportLabels(
         toCSV: allLabelsCSVFile,
-        from: allLocations.filter { $0.segment != 0 && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
+        from: allLocations.filter { !systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
         overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )
+    // the system file contains segment 0, as long as they're not parameters or without an address
     exportLabels(
         toCSV: sysLabelsCSVFile,
-        from: allLocations.filter { $0.segment == 0 && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
+        from: allLocations.filter { systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
         overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )
 
+    // the app procedures contains any procedure/function that's not in segment 0
     exportProcedures(
         toCSV: allProceduresCSVFile,
-        from: allProcedures.filter { $0.segment != 0 },
+        from: allProcedures.filter { !systemSegments.contains($0.segment) },
         overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )
+
+    // the system procedures contains all procedures/functions except segment 0
     exportProcedures(
         toCSV: sysProceduresCSVFile,
-        from: allProcedures.filter { $0.segment == 0 },
+        from: allProcedures.filter { systemSegments.contains($0.segment) },
         overwrite: rewrite,
         appSupportDirectory: appSupportDirectory
     )

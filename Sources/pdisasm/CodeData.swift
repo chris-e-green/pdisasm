@@ -3,6 +3,7 @@ import Foundation
 enum CodeDataError: Error {
     case unexpectedEndOfData
     case stringDecodingFailed
+    case invalidXJPParameters
 }
 
 struct CodeData {
@@ -19,6 +20,7 @@ struct CodeData {
     /// Read a byte from `CodeData` at `instructionPointer`, updating `instructionPointer`.
     /// - Returns: The byte value as a UInt8.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
+    @available(*, deprecated, message:"Use readByte(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readByte() throws -> UInt8 {
         guard instructionPointer < data.count else { throw CodeDataError.unexpectedEndOfData }
         let retval = data[instructionPointer]
@@ -29,6 +31,7 @@ struct CodeData {
     /// Read and decode a 'BIG' value from `CodeData`, at `instructionPointer`, updating `instructionPointer`.
     /// - Returns: The decoded value.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
+    @available(*, deprecated, message:"Use readBig(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readBig() throws -> Int {
         let firstByte = try readByte()
 
@@ -49,6 +52,7 @@ struct CodeData {
     /// Get a word from `CodeData` at `instructionPointer`, updating `instructionPointer`.
     ///  - Returns: The little-endian word stored at the current location.
     /// - Throws: `CodeDataError.unexpectedEndOfData` if the read goes past the end of the data.
+    @available(*, deprecated, message:"Use readWord(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readWord() throws -> UInt16 {
         guard instructionPointer + 1 < data.count else {
             throw CodeDataError.unexpectedEndOfData
@@ -126,6 +130,7 @@ struct CodeData {
     /// Decodes a relative address offset, which can be a short jump or a long jump via a jump table.
     /// - Returns: The absolute destination address.
     /// - Throws: `CodeDataError` if any underlying read fails.
+    @available(*, deprecated, message:"Use readAddress(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readAddress() throws -> Int {
         let offset = try readByte()
 
@@ -143,6 +148,7 @@ struct CodeData {
     /// Reads a length-prefixed string.
     /// - Returns: The decoded string.
     /// - Throws: `CodeDataError` on failure.
+    @available(*, deprecated, message:"Use readString(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readString() throws -> String {
         let count = Int(try readByte())
         guard instructionPointer + count <= data.count else {
@@ -159,6 +165,7 @@ struct CodeData {
     }
 
     /// Reads a length-prefixed byte array.
+    @available(*, deprecated, message:"Use readByteArray(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readByteArray() throws -> [UInt8] {
         let count = Int(try readByte())
         guard instructionPointer + count <= data.count else {
@@ -170,6 +177,7 @@ struct CodeData {
     }
 
     /// Reads a word-aligned array of `count` words.
+    @available(*, deprecated, message:"Use readWordArray(at:count:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readWordArray(count: Int) throws -> [UInt16] {
         guard instructionPointer + (count * 2) <= data.count else {
             throw CodeDataError.unexpectedEndOfData

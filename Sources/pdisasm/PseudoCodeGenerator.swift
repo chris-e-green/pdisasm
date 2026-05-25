@@ -131,7 +131,7 @@ struct PseudoCodeGenerator {
                 (src, _) = stack.popReal()
             } else {
                 for _ in 0..<stmCount {
-                    let (element, _) = stack.pop()
+                    let (element, _) = stack.pop(true)
                     let elementParts = element.split(separator: "{")
                     if String(elementParts[0]) != prevElement {
                         prevElement = String(elementParts[0])
@@ -154,23 +154,29 @@ struct PseudoCodeGenerator {
             return "\(dst) := \(src)"
             
         case sro, str, stl, ste:
-            let (src, srcType) = stack.pop(true)
+            let (_, srcType) = stack.peek()
             if let destLoc = inst.memLocation {
                 allLocations.insert(destLoc)
                 let (destName, destType) = findStackLabel(destLoc)
-                //(destLoc.displayName, destLoc.displayType)
-                //                findLabel(destLoc)
-                //                let (destName, destType) = findLabel(destLoc)
-                //                if let destType = destType {
                 switch destType {
+                case _ where (destType != nil && destType!.hasPrefix("SET ")):
+                    let (_, at) = stack.peek()
+                    if at == "INTEGER" {
+                        let (_, setData) = stack.popSet()
+                        return "\(destName) := \(setData)"
+                    } else {
+                        let (a, _) = stack.pop(true)
+                        return "\(destName) := \(a)"
+                    }
                 case "CHAR":
+                    let (src, _) = stack.pop(true)
                     if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
-                        return
-                          "\(destName) := '\(String(format: "%c", ch))'"
+                        return "\(destName) := '\(String(format: "%c", ch))'"
                     } else {
                         return "\(destName) := \(src)"
                     }
                 case "BOOLEAN":
+                    let (src, _) = stack.pop(true)
                     if src == "0" {
                         return "\(destName) := FALSE"
                     } else if src == "1" {
@@ -180,19 +186,19 @@ struct PseudoCodeGenerator {
                     }
                     
                 default:
+                    let (src, _) = stack.pop(true)
                     if let type = destType, !type.isEmpty && type != "UNKNOWN"  {
                         setLocType(src, type)
                     }
                     if let type = srcType, !type.isEmpty && type != "UNKNOWN" {
                         setLocType(destLoc.displayName, type)
                     }
-                    break
+                    return "\(destName) := \(src)"
                 }
-                //                }
-                return "\(destName) := \(src)"
-                //                return "\(destName ?? destLoc.displayName) := \(src)"
+            } else {
+                let (src, _) = stack.pop()
+                return "\(inst.memLocation?.displayName ?? "unknown") := \(src)"
             }
-            return "\(inst.memLocation?.displayName ?? "unknown") := \(src)"
         case cip, cbp, cxp, clp, cgp:
             if let dest = inst.destination {
                 return handleCallProcedure(dest, stack: &stack)
@@ -318,8 +324,8 @@ struct PseudoCodeGenerator {
             setLocType(a.val, "REAL")
             let (b, _) = stack.pop()  // TOS-1
             setLocType(b, "INTEGER")
+            stack.push((b, "REAL"))  // real(TOS-1)->TOS-1
             stack.push(a)  // put previous TOS back
-            stack.push((b, "REAL"))  // real(TOS-1)->TOS
             return nil
         case flt:
             let (a, _) = stack.pop("INTEGER")
@@ -376,9 +382,9 @@ struct PseudoCodeGenerator {
             let (a, _) = stack.pop()
             let (b, _) = stack.pop()
             if let av = Int(a) {
-                let wordsRequired = (av + 1) % 16
+                let wordsRequired = (av / 16) + 1
                 for i in 0..<wordsRequired {
-                    stack.push(("(\(b)..\(a)){\(i)}", "SET"))
+                    stack.push(("[\(b)..\(a)]{\(i)}", "SET"))
                 }
                 stack.push(("\(wordsRequired)", "INTEGER"))
             } else {
@@ -387,25 +393,29 @@ struct PseudoCodeGenerator {
             }
             return nil
         case sgs:
-            let (a, _) = stack.pop("INTEGER")
+            let (a, _) = stack.pop("INTEGER", true)
             if let av = Int(a) {
-                let wordsRequired = (av + 1) % 16
+                let wordsRequired = (av / 16) + 1
                 for i in 0..<wordsRequired {
-                    stack.push(("(\(a)){\(i)}", "SET"))
+                    stack.push(("[\(a)]{\(i)}", "SET"))
                 }
                 stack.push(("\(wordsRequired)", "INTEGER"))
             } else {
-                stack.push(("[\(a)]", "SET"))
+                stack.push(("\(a)", "SET"))
                 stack.push(("1", "INTEGER"))
             }
             return nil
         case adj:
             let count = inst.params[0]
             let (_, set) = stack.popSet()
-            for i in 0..<count {
-                stack.push(("\(set){\(i)}", "INTEGER"))
+            if count == 1 {
+                // special case where only one word is needed to represent the set, so we can just push the set itself without the word index
+                stack.push((set, "INTEGER"))
+            } else {
+                for i in 0..<count {
+                    stack.push(("\(set){\(i)}", "INTEGER"))
+                }
             }
-            stack.push(("\(count)", "INTEGER"))
             return nil
             
             // MARK: - Typed comparison opcodes
@@ -668,7 +678,7 @@ struct PseudoCodeGenerator {
         let parmCount = called.parameters.count
         var aParams: [String] = []
         if called.isFunction {
-            // pop and discard the return variable space
+            // pop and discard the return variable space (always two words)
             _ = stack.pop()
             _ = stack.pop()
         }

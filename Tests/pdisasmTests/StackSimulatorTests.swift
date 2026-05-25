@@ -136,7 +136,7 @@ final class StackSimulatorTests: XCTestCase {
         let (len, str) = sim.popSet()
         XCTAssertEqual(len, 2)
         // Should only contain the array name once
-        XCTAssertEqual(str, "[DATA]")
+        XCTAssertEqual(str, "DATA")
     }
 
     func testPopSetMalformed() {
@@ -144,6 +144,6 @@ final class StackSimulatorTests: XCTestCase {
         sim.push(("notanumber", "STRING"))
         let (len, str) = sim.popSet()
         XCTAssertEqual(len, 0)
-        XCTAssertEqual(str, "malformed set!")
+        XCTAssertEqual(str, "Set has no length!")
     }
 }

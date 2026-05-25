@@ -18,7 +18,7 @@ struct OpcodeDecoder {
         dvi:  ("DVI",  "Divide integers (TOS-1 / TOS)"),
         dvr:  ("DVR",  "Divide reals (TOS-1 / TOS)"),
         chk:  ("CHK",  "Check subrange (TOS-1 <= TOS-2 <= TOS)"),
-        flo:  ("FLO",  "Float next to TOS (int TOS-1 to real TOS)"),
+        flo:  ("FLO",  "Float next to TOS (int TOS-1 to real TOS-1, real TOS unchanged)"),
         flt:  ("FLT",  "Float TOS (int TOS to real TOS)"),
         inn:  ("INN",  "Set membership (TOS-1 in set TOS)"),
         int:  ("INT",  "Set intersection (TOS AND TOS-1)"),
@@ -52,6 +52,8 @@ struct OpcodeDecoder {
         leqi: ("LEQI", "Integer TOS-1 <= TOS"),
         lesi: ("LESI", "Integer TOS-1 < TOS"),
         neqi: ("NEQI", "Integer TOS-1 <> TOS"),
+        unk1:  ("UNK1", "Unknown opcode 0x9c"),
+        unk2:  ("UNK2", "Unknown opcode 0x9d"),
     ]
 
     struct DecodedInstruction {
@@ -203,7 +205,7 @@ struct OpcodeDecoder {
             )
         case lao:
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, lexLevel: 0, addr: val)
+            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "LAO",
@@ -259,7 +261,7 @@ struct OpcodeDecoder {
         case ldo:
             // LDO
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, lexLevel: 0, addr: val)
+            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "LDO",
@@ -281,7 +283,7 @@ struct OpcodeDecoder {
         case sro:
             // SRO
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, lexLevel: 0, addr: val)
+            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "SRO",
@@ -317,7 +319,7 @@ struct OpcodeDecoder {
                 print(
                     "Warning: XJP first (\(first)) is greater than last (\(last))"
                 )
-                exit(1)
+                throw CodeDataError.invalidXJPParameters
             }
             for _ in first...last {
                 let caseDest = try codeData.getSelfRefPointer(at: tempIC)
@@ -700,7 +702,7 @@ struct OpcodeDecoder {
         case sldo1...sldo16:
             let b2 = Int(opcode)
             let val = b2 - Int(sldo1) + 1
-            let loc = Location(segment: segment, lexLevel: 0, addr: val)
+            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
                 opcode: opcode,
                 mnemonic: "SLDO",

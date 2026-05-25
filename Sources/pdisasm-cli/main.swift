@@ -4,8 +4,7 @@ import pdisasm
 
 struct PdisasmCLI: @preconcurrency ParsableCommand {
     @Argument(help: "The file to decompile.")
-    var filename: String = "~/Repos/apple_pascal/SYSTEM.PASCAL-04-00.bin"
-    // var filename: String = "../apple_pascal/SET40COLS.CODE-04-00.bin"
+    var filename: String = "Tests/pdisasmTests/Fixtures/SYSTEM.LIBRARY-02-00.bin"
     @Option(help: "Run with verbose output.")
     var verbose: Bool = false
     @Option(help: "Rewrite reference data.")

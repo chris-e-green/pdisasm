@@ -241,24 +241,14 @@ private func parseAssemblerFooter(
     )
 }
 
-private let wdc6502BranchOpcodes: [UInt8] = [0x10, 0x30, 0x50, 0x70, 0x90, 0xB0, 0xD0, 0xF0]
-
 private func isWdc6502BranchOpcode(_ opcode: UInt8) -> Bool {
-    wdc6502BranchOpcodes.contains(opcode & 0x1F)
+    // all 6502 branch opcodes have the form XXX10000, so we check that bits 0-3 are 0 and bit 4 is 1
+    return (opcode & 0x1F) == 0x10
 }
 
-private func complementaryWdc6502BranchOpcode(for opcode: UInt8) -> UInt8? {
-    switch opcode {
-    case 0x90: return 0xB0 // BCC <-> BCS
-    case 0xB0: return 0x90
-    case 0xD0: return 0xF0 // BNE <-> BEQ
-    case 0xF0: return 0xD0
-    case 0x10: return 0x30 // BPL <-> BMI
-    case 0x30: return 0x10
-    case 0x50: return 0x70 // BVC <-> BVS
-    case 0x70: return 0x50
-    default: return nil
-    }
+private func complementaryWdc6502BranchOpcode(for opcode: UInt8) -> UInt8 {
+    // all 6502 branch opcodes have the form XXX10000, and complementary branches differ in bit 5, so we can flip bit 5 to get the complement
+    return opcode ^ 0x20
 }
 
 private func decodeAssemblerCodeInstruction(
@@ -338,9 +328,8 @@ private func decodeAssemblerCodeInstruction(
             // We'll decode both branches, then switch to data mode after the complementary instruction.
             let nextInstructionPointer = instructionPointer + 2
             if nextInstructionPointer < codeEnd,
-               let complement = complementaryWdc6502BranchOpcode(for: opcodeByte),
                let nextOpcode = try? codeData.readByte(at: nextInstructionPointer),
-               nextOpcode == complement
+               nextOpcode == complementaryWdc6502BranchOpcode(for: opcodeByte)
             {
                 shouldSwitchToDataMode = true
             }

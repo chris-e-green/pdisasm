@@ -133,7 +133,7 @@ public func renderStructuredLines(
                     "### "
                         + (procDesc?.description ?? proc.identifier?.description
                             ?? "")
-                        + " (* P=\(procNum), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)",
+                        + " (* S=\(s), P=\(procNum), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)",
                     anchor: anchor
                 )
 
@@ -437,7 +437,7 @@ func outputResults<Target: TextOutputStream>(
                     "### "
                         + (procDesc?.description ?? proc.identifier?.description
                             ?? "")
-                        + " (* P=\(proc.identifier?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
+                        + " (* S=\(s), P=\(proc.identifier?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
                 )
 
                 // emit callers

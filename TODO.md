@@ -1,22 +1,55 @@
 # TODO
+## GUI
+- Make the gui view more hierarchical - segment details in first panel, procedures/functions in second panel,
+  and then details of selected procedure/function in third panel.
+- Make the GUI more interactive - double-clicking on a procedure/function in pseudo-code should take you to
+  the details of that procedure/function, and double-clicking on a memory location should take you to the
+  details of that memory location.
+- Either support markdown rendering in the gui, or use equivalent formatting to make it more readable. (Eg
+  the table of segments should be markdown in CLI mode but a proper table in GUI mode).
+- It wouold be useful to be able to add comments to lines that are saved with the metadata (probably at the
+  instruction level, althoguh the comments are actually going to relate to the pseudocode...)
+- Need to be able to select multiple lines to copy - at the moment the GUI treats each line as
+  completely independent.
+- Want to be able to toggle display of the stack state in the p-code display.
+- In GUI, allow editing of names and types.
+- Check that the markdown switch only enables/disables markdown, and leaves pseudocode intact.
+- Maybe the GUI layout should be separated into multiple windows - one for the files, one for segments,
+  and separate windows (maybe?) for P-code, pseudocode and 6502 assembler - the p-code and pseudocode views could be interlinked so that clicking on pseudocode
 
-- Make the gui view more hierarchical - segment details in first panel, procedures/functions in second panel, and then details of selected procedure/function in third panel.
-- Make the GUI more interactive - double-clicking on a procedure/function in pseudo-code should take you to the details of that procedure/function, and double-clicking on a memory location should take you to the details of that memory location.
-- Either support markdown rendering in the gui, or use equivalent formatting to make it more readable. (Eg the table of segments should be markdown in CLI mode but a proper table in GUI mode).
+## Console
+
+## Core
 - Work out what to do with type conflicts, rather than just logging them.
-- Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or mantissa) - this is currently being treated as an integer access, which is obviously wrong.
+- Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or
+  mantissa) - this is currently being treated as an integer access, which is obviously wrong.
 - Refactor where pseudocode is generated, particularly where types are determined in multiple places.
-- Finish checking for and removing unnecessary structures that are relics of 
+- Implement support for reading the unit interface section (where it exists)
+- When the user overrides a name (and particularly type) that type should take precedence over automatic
+  type determination. This probably mean there'd need to be a way to distinguish automatic from manual entrie.
+- Automatic typing of parameters/returns should update the signature of the procedure/function.
+- Rethink: should 'system' be just segment 0, or all 'reserved' segments (0, 2-6, 58-63) and maybe even the
+  pre-assigned Apple Intrinsic Units (20-22, 28-31)? If so, we need to be careful not to clobber existing
+  entries if we (eg) load SYSTEM.PASCAL, SYSTEM.LIBRARY and an app.
+- Another rethink: should I actually not have 'system', instead storing/reading the SYSTEM.PASCAL (0, 2-6)
+  and SYSTEM.LIBRARY (20-22, 28-31) definitions from their corresponding files?
+- Yet another rethink: should the app actually be able to read and process those supporting libraries as required?
+- Finish checking for and removing unnecessary structures that are relics of
   earlier approaches and data structures.
 - Stack isn't always cleared at the end of the procedure, so something's off...
 - In UJP, try to handle while structure rather than as a goto.
-- In GUI, allow editing of names and types.
-- Look at changing storage of metadata to be in a database (which should hopefully fix the issue of duplication of addresses etc, by enforcing unique keys).
+- Look at changing storage of metadata to be in a database (which should hopefully fix the issue of
+  duplication of addresses etc, by enforcing unique keys).
 - Look at what's required to be able to store metadata in iCloud.
-- Look at whether it's now viable to write-back datatypes etc at the end of the run.
 - Fix the handling of addresses vs values in pseudocode.
-- Look at improving the stack implementation (particularly for variables on the stack) so that their names are determined at print time, allowing them to reflect the final name/datatype.
-- Check that the markdown switch only enables/disables markdown, and leaves pseudocode intact.
+- Look at improving the stack implementation (particularly for variables on the stack) so that their
+  names are determined at print time, allowing them to reflect the final name/datatype.
+
+## Completed
+
+- ~~Look at whether it's now viable to write-back datatypes etc at the end of the run.~~
+- ~~Storing sets doesn't work properly.~~
+- ~~Something's wrong with the procedure determination for the global memory locations in SYSTEM.PASCAL. ~~
 - ~~Fix remaining bugs in 6502 disassembly (can't just stop at RTS, and not all content displayed in correct place). ~~
 - ~~Make sure we aren't exporting the pseudo-location for procedures/functions as part of the allLocations files.~~
 - ~~Implement support for common/standard structure types, eg. FIB.~~

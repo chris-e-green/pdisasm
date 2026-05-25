@@ -7,7 +7,7 @@ struct StackSimulator {
     let sep = "~"
     let ptr = "@"
     var stack: [String] = []
-    
+
     func prettyStack() -> String {
         "[" + stack.joined(separator: ", ") + "]"
     }
@@ -26,7 +26,7 @@ struct StackSimulator {
 //    mutating func pushReal(_ value: String, isPointer: Bool = false) {
 //        stack.append("\(value)\(sep)REAL")
 //    }
-    
+
     @discardableResult
     /// Pops the top of the stack and any datatype. If the type
     /// of the popped value is not defined, it uses the provided type
@@ -43,12 +43,16 @@ struct StackSimulator {
         var parenthesized: String
         var locType: String
         if a.contains(sep) {  // typed value
-            let parts = a.split(separator: sep, maxSplits: 1)
+            var parts = a.split(separator: sep, maxSplits: 1)
+            if parts.count < 2 {
+                parts.append("UNKNOWN")
+            }
             let locName = String(parts[0])
             locType = String(parts[1])
             if locType == "UNKNOWN" {
                 locType = type
             }
+
             if withoutParentheses {
                 parenthesized = locName
             } else {
@@ -75,7 +79,10 @@ struct StackSimulator {
     mutating func pop(_ withoutParentheses: Bool = false) -> (val: String, type: String?) {
         let a = stack.popLast() ?? "underflow!"
         if a.contains(sep) {  // typed value
-            let parts = a.split(separator: sep, maxSplits: 1)
+            var parts = a.split(separator: sep, maxSplits: 1)
+            if parts.count < 2 {
+                parts.append("UNKNOWN")
+            }
             if withoutParentheses {
                 return (String(parts[0]), String(parts[1]))
             } else {
@@ -104,7 +111,7 @@ struct StackSimulator {
         let pos = stack.endIndex - at - 1
         if pos < stack.startIndex || pos >= stack.endIndex {
             return ("underflow!", nil)
-        }        
+        }
         let a = stack[pos]
         if a.contains(sep) {
             let parts = a.split(separator: sep, maxSplits: 1)
@@ -165,12 +172,9 @@ struct StackSimulator {
         } else {
             let b = stack.popLast() ?? "underflow!"
             if let val1 = UInt16(a), let val2 = UInt16(b) {
-                let fraction: UInt32 =
-                    UInt32(val1) | (UInt32(val2) & 0x007f) << 16
-                let exponent = (val2 & 0x7f80) < 7
-                let sign = (val2 & 0x8000) == 0x8000
+                let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
                 return (
-                    "\(sign ? "-" : "")\(fraction)e\(exponent)", "REAL"
+                    "\(rv)", "REAL"
                 )
             } else {
                 return ("\(a).\(b)", "REAL")
@@ -183,6 +187,7 @@ struct StackSimulator {
     /// - Returns: a tuple with the length of the set and its string representation
     mutating func popSet() -> (len: Int, val: String) {
         let (setLen, _) = self.pop()
+        var isNumeric = false // flag to track if we have numeric values in the set
         // to hold string set values
         var setData: [String] = []
         // to hold numeric set values
@@ -190,10 +195,13 @@ struct StackSimulator {
         var prevElement: String = ""
         // if the set length is an integer, it's valid
         if let len = Int(setLen) {
+            if len == 0 { // special case for empty set
+                return (0, "[]")
+            }
             // for each element in the set
             for i in 0..<len {
                 // pop the element
-                let (element, _) = self.pop()
+                let (element, _) = self.pop(true)
                 // we use '{' to indicate words within an array of elements
                 // eg. SETDATA{0}, SETDATA{1}, ... so that counting the words
                 // on the stack still works
@@ -219,6 +227,10 @@ struct StackSimulator {
                     }
                 }
             }
+            if !setVals.isEmpty {
+                isNumeric = true
+            }
+
             // if we have numeric set values, we convert them to ranges
             while !setVals.isEmpty {
                 let first = setVals.first!  // we can force unwrap as we checked above
@@ -238,8 +250,12 @@ struct StackSimulator {
                 setVals = Array(setVals.dropFirst(group.count))
             }
 
-            return (len, "[" + setData.joined(separator: ", ") + "]")
+            if isNumeric {
+                return (len, "[" + setData.joined(separator: ", ") + "]")
+            } else {
+                return (len, setData.joined(separator: ", "))
+            }
         }
-        return (0, "malformed set!")
+        return (0, "Set has no length!")
     }
 }
