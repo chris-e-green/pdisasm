@@ -115,6 +115,7 @@ public struct OutputLine: Identifiable, Sendable {
 /// All line types are always generated; the GUI filters by toggling kinds on/off.
 public func renderStructuredLines(
     from result: DisassemblyResult,
+    showStackState: Bool = false,
     verbose: Bool = false
 ) -> [OutputLine] {
     var lines: [OutputLine] = []
@@ -316,7 +317,9 @@ public func renderStructuredLines(
                                     pcLine += " \(d.description)"
                                 }
                             }
-                            pcLine += " " + prettyStack(inst.stackState ?? [])
+                            if showStackState {
+                                pcLine += " " + prettyStack(inst.stackState ?? [])
+                            }
                             addLine(.pcode, pcLine)
                             if paramStrings.count > 1 {
                                 for i in 1..<paramStrings.count {
@@ -386,6 +389,7 @@ func outputResults(
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
+    showStackState: Bool = false,
     showPseudoCode: Bool = true,
     showDot: Bool = false
 ) {
@@ -403,6 +407,7 @@ func outputResults(
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
+        showStackState: showStackState,
         showPseudoCode: showPseudoCode,
         showDot: showDot
     )
@@ -422,6 +427,7 @@ func outputResults<Target: TextOutputStream>(
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
+    showStackState: Bool = false,
     showPseudoCode: Bool = true,
     showDot: Bool = false
 ) {
@@ -652,7 +658,11 @@ func outputResults<Target: TextOutputStream>(
                                     emit(" \(d.description)", terminator: "")
                                 }
                             }
-                            emit(" " + prettyStack(inst.stackState ?? []))
+                            if showStackState {
+                                emit(" " + prettyStack(inst.stackState ?? []))
+                            } else {
+                                emit("")
+                            }
                             if paramStrings.count > 1 {
                                 for i in 1..<paramStrings.count {
                                     emit(

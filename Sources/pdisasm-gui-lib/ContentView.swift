@@ -98,6 +98,7 @@ public struct ContentView: View {
 
                 Toggle("Markup", isOn: $viewModel.showMarkup)
                 Toggle("P-Code", isOn: $viewModel.showPCode)
+                Toggle("Stack", isOn: $viewModel.showStackState)
                 Toggle("Pseudocode", isOn: $viewModel.showPseudoCode)
                 Toggle("Variables", isOn: $viewModel.showVariables)
                 Toggle("Verbose", isOn: $viewModel.verbose)
@@ -148,7 +149,7 @@ struct SidebarView: View {
                     Section(segment.name) {
                         ForEach(segment.procedures) { proc in
                             Button {
-                                viewModel.selectedProcedure = proc.id
+                                viewModel.scrollToProcedure(proc.id)
                             } label: {
                                 Text(proc.name)
                                     .font(.system(.body, design: .monospaced))
@@ -199,7 +200,8 @@ struct DetailView: View {
                                     let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
                                     Text(line.text)
                                         .font(.system(.body, design: .monospaced))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                        .frame(minWidth: geo.size.width, alignment: .leading)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 1)
                                         .background(isCurrentMatch ? Color.yellow.opacity(0.4) : isMatch ? Color.yellow.opacity(0.2) : backgroundColor(for: line.kind))
@@ -210,8 +212,8 @@ struct DetailView: View {
                             .padding(.vertical, 4)
                             .frame(minWidth: geo.size.width, alignment: .leading)
                         }
-                        .onChange(of: viewModel.selectedProcedure) { _, newValue in
-                            if let anchor = newValue {
+                        .onChange(of: viewModel.procedureScrollRequest) { _, _ in
+                            if let anchor = viewModel.selectedProcedure {
                                 withAnimation {
                                     scrollProxy.scrollTo(anchor, anchor: .top)
                                 }

@@ -73,6 +73,29 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "BASE:4:2 := VALUE")
     }
 
+    func testSTPUsesRealRepresentationTarget() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        stack.push(("4", "INTEGER"), kind: .constant)
+        stack.push(("2", "INTEGER"), kind: .constant)
+        stack.push(("VALUE", "INTEGER"), kind: .value)
+        let inst = Instruction(opcode: stp, mnemonic: "STP")
+        var gen = makeGenerator(labels: [loc])
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "REAL_BITS(RVALUE, 4, 2) := VALUE")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
     // MARK: - STB (store byte)
 
     func testSTBAssignment() {
@@ -95,6 +118,110 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(result, "ADDR[5] := 88")
+    }
+
+    func testSTBUsesRealRepresentationTarget() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        stack.push(("1", "INTEGER"), kind: .constant)
+        stack.push(("88", "BYTE"), kind: .constant)
+        let inst = Instruction(opcode: stb, mnemonic: "STB")
+        var gen = makeGenerator(labels: [loc])
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "REAL_BYTE(RVALUE, 1) := 88")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
+    // MARK: - STM (store multiple words)
+
+    func testSTMRecombinesRealWordRepresentationSource() {
+        let dst = Location(
+            segment: 31,
+            procedure: 4,
+            lexLevel: 1,
+            addr: 9,
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(
+            text: dst.displayName,
+            type: "REAL",
+            kind: .address,
+            location: dst
+        ))
+        stack.push(StackValue(text: "REAL_WORD(X, 0)", type: "INTEGER", kind: .value))
+        stack.push(StackValue(text: "REAL_WORD(X, 1)", type: "INTEGER", kind: .value))
+        let inst = Instruction(opcode: stm, mnemonic: "STM", params: [2])
+        var gen = makeGenerator(labels: [dst])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "S31_P4_L1_A9 := X")
+        XCTAssertEqual(dst.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
+    func testSTMRecombinesRealWordRepresentationSourceWithPhysicalWordLocation() {
+        let dst = Location(
+            segment: 29,
+            procedure: 6,
+            lexLevel: 1,
+            addr: 5,
+            type: "REAL",
+            typeSource: .metadata
+        )
+        let src = Location(
+            segment: 29,
+            procedure: 6,
+            lexLevel: 1,
+            addr: 3,
+            name: "X",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        let srcSecondWord = Location(
+            segment: 29,
+            procedure: 6,
+            lexLevel: 1,
+            addr: 4
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(
+            text: dst.displayName,
+            type: "UNKNOWN",
+            kind: .address,
+            location: dst
+        ))
+        stack.push(StackValue(
+            text: "REAL_WORD(X, 0)",
+            type: "INTEGER",
+            kind: .value,
+            location: src
+        ))
+        stack.push(StackValue(
+            text: "REAL_WORD(X, 1)",
+            type: "INTEGER",
+            kind: .value,
+            location: srcSecondWord
+        ))
+        let inst = Instruction(opcode: stm, mnemonic: "STM", params: [2])
+        var gen = makeGenerator(labels: [dst, src])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "S29_P6_L1_A5 := X")
+        XCTAssertTrue(stack.stack.isEmpty)
     }
 
     // MARK: - STL with memLocation
@@ -260,6 +387,21 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(val, "(6 * 7)")
     }
 
+    func testMPRCollapsesSameBaseRealWordRepresentationAccesses() {
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "Y", type: "REAL", kind: .value))
+        stack.push(StackValue(text: "REAL_WORD(S29_P4_L1_A6, 0)", type: "INTEGER", kind: .value))
+        stack.push(StackValue(text: "REAL_WORD(S29_P4_L1_A6, 1)", type: "INTEGER", kind: .value))
+        let inst = Instruction(opcode: mpr, mnemonic: "MPR")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "(Y * S29_P4_L1_A6)")
+        XCTAssertEqual(type, "REAL")
+    }
+
     func testDVI() {
         var stack = StackSimulator()
         stack.push(("20", "INTEGER"))
@@ -365,6 +507,37 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let (val, type) = stack.pop()
         XCTAssertTrue(val.contains("1.5"))
         XCTAssertTrue(val.contains("2.5"))
+        XCTAssertEqual(type, "REAL")
+    }
+
+    func testADRRecombinesRealWordRepresentationAccesses() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "X",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("1.5", "REAL"))
+        stack.push(("X", "REAL"), kind: .address, location: loc)
+        var gen = makeGenerator(labels: [loc])
+
+        _ = gen.generateForInstruction(
+            Instruction(opcode: ldm, mnemonic: "LDM", params: [2]),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(
+            Instruction(opcode: adr, mnemonic: "ADR"),
+            stack: &stack,
+            loc: nil
+        )
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "(X + 1.5)")
         XCTAssertEqual(type, "REAL")
     }
 
@@ -562,6 +735,51 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(type, "INTEGER")
     }
 
+    func testINDUsesRealRepresentationAccess() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        let inst = Instruction(opcode: ind, mnemonic: "IND", params: [1])
+        var gen = makeGenerator(labels: [loc])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "REAL_WORD(RVALUE, 1)")
+        XCTAssertEqual(value.type, "INTEGER")
+        XCTAssertEqual(value.location?.displayName, "S1_P1_L1_A6")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
+    func testINDUsesSecondRealWordMemoryLocation() {
+        let loc = Location(
+            segment: 29,
+            procedure: 4,
+            lexLevel: 1,
+            addr: 8,
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push((loc.displayName, "REAL"), kind: .address, location: loc)
+        let inst = Instruction(opcode: ind, mnemonic: "IND", params: [1])
+        var gen = makeGenerator(labels: [loc])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+
+        XCTAssertEqual(value.text, "REAL_WORD(S29_P4_L1_A8, 1)")
+        XCTAssertEqual(value.type, "INTEGER")
+        XCTAssertEqual(value.location?.displayName, "S29_P4_L1_A9")
+    }
+
     func testIXA() {
         var stack = StackSimulator()
         stack.push(("ARR", "POINTER"))
@@ -598,6 +816,29 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(type, "BYTE")
     }
 
+    func testLDBUsesRealRepresentationAccess() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        stack.push(("1", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: ldb, mnemonic: "LDB")
+        var gen = makeGenerator(labels: [loc])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "REAL_BYTE(RVALUE, 1)")
+        XCTAssertEqual(value.type, "BYTE")
+        XCTAssertNil(value.location)
+        XCTAssertEqual(loc.type, "REAL")
+    }
+
     func testLDP() {
         var stack = StackSimulator()
         stack.push(("BASE", "POINTER"))
@@ -611,6 +852,31 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(type, "INTEGER")
     }
 
+    func testLDPUsesRealRepresentationAccess() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        stack.push(("4", "INTEGER"), kind: .constant)
+        stack.push(("2", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: ldp, mnemonic: "LDP")
+        var gen = makeGenerator(labels: [loc])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "REAL_BITS(RVALUE, 4, 2)")
+        XCTAssertEqual(value.type, "INTEGER")
+        XCTAssertNil(value.location)
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
     func testLDM() {
         var stack = StackSimulator()
         stack.push(("ORIGIN", "POINTER"))
@@ -618,6 +884,27 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(stack.stack.count, 3)
+    }
+
+    func testLDMUsesRealRepresentationAccess() {
+        let loc = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "RVALUE",
+            type: "REAL",
+            typeSource: .metadata
+        )
+        var stack = StackSimulator()
+        stack.push(("RVALUE", "REAL"), kind: .address, location: loc)
+        let inst = Instruction(opcode: ldm, mnemonic: "LDM", params: [2])
+        var gen = makeGenerator(labels: [loc])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(stack.peekStackValue(1).text, "REAL_WORD(RVALUE, 0)")
+        XCTAssertEqual(stack.peekStackValue(0).text, "REAL_WORD(RVALUE, 1)")
+        XCTAssertEqual(stack.peekStackValue(0).location?.displayName, "S1_P1_L1_A6")
+        XCTAssertEqual(loc.type, "REAL")
     }
 
     // MARK: - CSP (call standard procedure)

@@ -87,6 +87,17 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertTrue(sim.stack.isEmpty)
     }
 
+    func testStackDescriptionIncludesStackValueFields() {
+        let loc = Location(segment: 1, procedure: 2, lexLevel: 3, addr: 4)
+        var sim = StackSimulator()
+        sim.push(("ADDR", "INTEGER"), kind: .address, location: loc)
+
+        XCTAssertEqual(
+            sim.stackDescription,
+            ["{V: ADDR, T: INTEGER, K: a, L: S1_P2_L3_A4}"]
+        )
+    }
+
     func testPeekEmptyStackReturnsUnderflow() {
         let sim = StackSimulator()
         let (val, _) = sim.peek()
@@ -110,6 +121,39 @@ final class StackSimulatorTests: XCTestCase {
         sim.stack.append("world")
         let (val, typ) = sim.popReal()
         XCTAssertEqual(val, "world.hello")
+        XCTAssertEqual(typ, "REAL")
+    }
+
+    func testPopRealMergesRealWordRepresentationAccesses() {
+        var sim = StackSimulator()
+        sim.push(StackValue(text: "REAL_WORD(X, 0)", type: "INTEGER", kind: .value))
+        sim.push(StackValue(text: "REAL_WORD(X, 1)", type: "INTEGER", kind: .value))
+
+        let (val, typ) = sim.popReal()
+
+        XCTAssertEqual(val, "X")
+        XCTAssertEqual(typ, "REAL")
+    }
+
+    func testPopRealMergesSameBaseRealWordLocationAccesses() {
+        var sim = StackSimulator()
+        sim.push(StackValue(text: "REAL_WORD(S29_P4_L1_A6, 0)", type: "INTEGER", kind: .value))
+        sim.push(StackValue(text: "REAL_WORD(S29_P4_L1_A6, 1)", type: "INTEGER", kind: .value))
+
+        let (val, typ) = sim.popReal()
+
+        XCTAssertEqual(val, "S29_P4_L1_A6")
+        XCTAssertEqual(typ, "REAL")
+    }
+
+    func testPopRealMergesRealWordAdjacentLocationAccesses() {
+        var sim = StackSimulator()
+        sim.push(StackValue(text: "REAL_WORD(S29_P4_L1_A8, 0)", type: "INTEGER", kind: .value))
+        sim.push(StackValue(text: "REAL_WORD(S29_P4_L1_A9, 1)", type: "INTEGER", kind: .value))
+
+        let (val, typ) = sim.popReal()
+
+        XCTAssertEqual(val, "S29_P4_L1_A8")
         XCTAssertEqual(typ, "REAL")
     }
 

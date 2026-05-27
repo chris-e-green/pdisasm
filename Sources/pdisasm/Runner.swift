@@ -1194,6 +1194,7 @@ public func renderDisassembly(
     _ result: DisassemblyResult,
     showMarkup: Bool = true,
     showPCode: Bool = true,
+    showStackState: Bool = false,
     showPseudoCode: Bool = true,
     showDot: Bool = false,
     verbose: Bool = false
@@ -1213,6 +1214,7 @@ public func renderDisassembly(
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
+        showStackState: showStackState,
         showPseudoCode: showPseudoCode,
         showDot: showDot
     )
@@ -1228,6 +1230,7 @@ public func runPdisasm(
     rewrite: Bool = false,
     showMarkup: Bool = false,
     showPCode: Bool = false,
+    showStackState: Bool = false,
     showPseudoCode: Bool = false,
     showDot: Bool = false
 ) throws {
@@ -1250,6 +1253,7 @@ public func runPdisasm(
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
+        showStackState: showStackState,
         showPseudoCode: showPseudoCode,
         showDot: showDot
     )

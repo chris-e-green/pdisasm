@@ -44,7 +44,7 @@ func simulateStackAndGeneratePseudocode(
         }
 
         inst.pseudoCode = pseudoCode
-        inst.stackState = simulator.stack
+        inst.stackState = simulator.stackDescription
     }
 
     // Write back location mutations from the pseudo-code generator

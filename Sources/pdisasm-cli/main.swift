@@ -13,6 +13,8 @@ struct PdisasmCLI: @preconcurrency ParsableCommand {
     var showMarkup: Bool = false
     @Flag(help: "Show pcode in output.")
     var showPcode: Bool = false
+    @Flag(help: "Show stack state after pcode instructions.")
+    var showStackState: Bool = false
     @Flag(help: "Show pseudocode in output.")
     var showPseudocode: Bool = false
     @Flag(help: "Show graphviz DOT file for call tree in output.")
@@ -28,6 +30,7 @@ struct PdisasmCLI: @preconcurrency ParsableCommand {
                 rewrite: rewrite,
                 showMarkup: showMarkup,
                 showPCode: showPcode,
+                showStackState: showStackState,
                 showPseudoCode: showPseudocode,
                 showDot: showDot
             )

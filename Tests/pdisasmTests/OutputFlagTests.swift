@@ -37,7 +37,7 @@ final class OutputFlagTests: XCTestCase {
 
         let proc = Procedure()
         proc.identifier = ProcedureIdentifier(isFunction: false, segment: 0, segmentName: "TEST", procedure: 1, procName: "MYPROC")
-        proc.instructions[0] = Instruction(opcode: 0xAD, mnemonic: "RNP", params: [0], comment: "Return", stackState: [])
+        proc.instructions[0] = Instruction(opcode: 0xAD, mnemonic: "RNP", params: [0], comment: "Return", stackState: ["{V: 5, T: INTEGER, K: c}"])
         proc.entryPoints = [0]
 
         let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: [0]), procedures: [proc])
@@ -95,6 +95,24 @@ final class OutputFlagTests: XCTestCase {
             outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: false)
         }
         XCTAssertFalse(out.contains("0000:"))
+    }
+
+    // MARK: - showStackState
+
+    func testShowStackStateTrueIncludesStackState() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let out = captureOutput {
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: true, showStackState: true)
+        }
+        XCTAssertTrue(out.contains("[{V: 5, T: INTEGER, K: c}]"))
+    }
+
+    func testShowStackStateFalseSuppressesStackState() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let out = captureOutput {
+            outputResults(sourceFilename: "test", segDictionary: dict, codeSegs: codeSegs, dataSegs: [], allLocations: locs, allProcedures: procs, allCallers: callers, showPCode: true, showStackState: false)
+        }
+        XCTAssertFalse(out.contains("[{V: 5, T: INTEGER, K: c}]"))
     }
 
     // MARK: - showPseudoCode

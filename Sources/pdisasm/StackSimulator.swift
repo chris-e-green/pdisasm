@@ -8,6 +8,16 @@ enum StackValueKind: String {
     case pointer
     case constant
     case expression
+
+    var displayCode: String {
+        switch self {
+        case .value: return "v"
+        case .address: return "a"
+        case .pointer: return "p"
+        case .constant: return "c"
+        case .expression: return "e"
+        }
+    }
 }
 
 struct StackValue {
@@ -27,6 +37,18 @@ struct StackValue {
     var isValueLike: Bool {
         kind == .value || kind == .constant || kind == .expression
     }
+
+    var stackDescription: String {
+        var fields = ["V: \(text)"]
+        if let type, !type.isEmpty {
+            fields.append("T: \(type)")
+        }
+        fields.append("K: \(kind.displayCode)")
+        if let location {
+            fields.append("L: \(location.displayName)")
+        }
+        return "{" + fields.joined(separator: ", ") + "}"
+    }
 }
 
 /// Manages the symbolic execution stack during P-code decoding
@@ -36,8 +58,12 @@ struct StackSimulator {
     var stack: [String] = []
     var values: [StackValue] = []
 
+    var stackDescription: [String] {
+        values.count == stack.count ? values.map(\.stackDescription) : stack
+    }
+
     func prettyStack() -> String {
-        "[" + stack.joined(separator: ", ") + "]"
+        "[" + stackDescription.joined(separator: ", ") + "]"
     }
 
     mutating func push(
@@ -131,6 +157,78 @@ struct StackSimulator {
         value.isAddressLike || value.type == "POINTER" ? .address : value.kind
     }
 
+    func realRepresentationBaseName(_ text: String) -> String? {
+        realRepresentationWord(text)?.base
+    }
+
+    func realRepresentationWord(_ text: String) -> (base: String, offset: Int)? {
+        guard text.hasPrefix("REAL_WORD("), text.hasSuffix(")") else {
+            return nil
+        }
+        let bodyStart = text.index(text.startIndex, offsetBy: "REAL_WORD(".count)
+        let bodyEnd = text.index(before: text.endIndex)
+        let body = text[bodyStart..<bodyEnd]
+        guard let comma = body.lastIndex(of: ",") else {
+            return nil
+        }
+        let base = String(body[..<comma]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let offsetText = body[body.index(after: comma)...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let offset = Int(offsetText) else {
+            return nil
+        }
+        return (base, offset)
+    }
+
+    func realRepresentationStorageBaseName(_ text: String) -> String? {
+        guard let word = realRepresentationWord(text) else {
+            return nil
+        }
+        guard word.offset != 0 else {
+            return word.base
+        }
+        let location = Location(from: word.base)
+        guard let address = location.addr else {
+            return word.base
+        }
+        location.addr = address - word.offset
+        return location.displayName
+    }
+
+    func realRepresentationStorageBaseName(_ value: StackValue) -> String? {
+        guard realRepresentationWord(value.text) != nil else {
+            return nil
+        }
+        if let baseName = realRepresentationStorageBaseName(value.text) {
+            return baseName
+        }
+        if let location = value.location {
+            return location.displayName
+        }
+        return nil
+    }
+
+    func realRepresentationPairBaseName(_ a: StackValue, _ b: StackValue) -> String? {
+        guard let aWord = realRepresentationWord(a.text),
+            let bWord = realRepresentationWord(b.text)
+        else {
+            return nil
+        }
+
+        let offsets = Set([aWord.offset, bWord.offset])
+        guard offsets == Set([0, 1]) else {
+            return nil
+        }
+
+        if aWord.base == bWord.base {
+            return aWord.base
+        }
+
+        let aBase = realRepresentationStorageBaseName(a)
+        let bBase = realRepresentationStorageBaseName(b)
+        return aBase == bBase ? aBase : nil
+    }
+
 //    mutating func pushReal(_ value: String, isPointer: Bool = false) {
 //        stack.append("\(value)\(sep)REAL")
 //    }
@@ -198,8 +296,11 @@ struct StackSimulator {
         }
 
         if a.type != nil || b.type != nil {
-            let name = a.text.split(separator: "{", maxSplits: 1)[0]
-            let bName = b.text.split(separator: "{", maxSplits: 1)[0]
+            if let pairName = realRepresentationPairBaseName(a, b) {
+                return (pairName, "REAL")
+            }
+            let name = realRepresentationStorageBaseName(a) ?? String(a.text.split(separator: "{", maxSplits: 1)[0])
+            let bName = realRepresentationStorageBaseName(b) ?? String(b.text.split(separator: "{", maxSplits: 1)[0])
             if name != bName {
                 print(
                     "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"

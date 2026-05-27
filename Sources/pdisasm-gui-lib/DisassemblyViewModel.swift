@@ -16,12 +16,14 @@ final class DisassemblyViewModel {
     // Display toggles – changing these only filters; no re-disassembly.
     var showMarkup: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var showPCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
+    var showStackState: Bool = false { didSet { rerenderStructuredLines() } }
     var showPseudoCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var showVariables: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var verbose: Bool = false
 
     /// The anchor ID of the procedure to scroll to (e.g. "2.3"). Set by sidebar selection.
     var selectedProcedure: String?
+    var procedureScrollRequest: Int = 0
 
     // MARK: - Search
 
@@ -87,6 +89,11 @@ final class DisassemblyViewModel {
         currentMatchIndex = (currentMatchIndex - 1 + count) % count
     }
 
+    func scrollToProcedure(_ procedureID: String) {
+        selectedProcedure = procedureID
+        procedureScrollRequest += 1
+    }
+
     func commitSearch() {
         searchDebounceTask?.cancel()
         committedSearchText = searchText
@@ -113,6 +120,7 @@ final class DisassemblyViewModel {
 
     /// All lines produced by the last disassembly, always includes every kind.
     private var allLines: [OutputLine] = []
+    private var disassemblyResult: DisassemblyResult?
     private var searchMatchIndexSet: Set<Int> = []
     private var searchDebounceTask: Task<Void, Never>?
     private var searchRebuildTask: Task<Void, Never>?
@@ -145,6 +153,16 @@ final class DisassemblyViewModel {
     private func rebuildFilteredLinesAndSearchMatches() {
         filteredLines = filterLines()
         rebuildSearchMatches(resetCurrentIndex: false)
+    }
+
+    private func rerenderStructuredLines() {
+        guard let disassemblyResult else { return }
+        allLines = renderStructuredLines(
+            from: disassemblyResult,
+            showStackState: showStackState,
+            verbose: verbose
+        )
+        rebuildFilteredLinesAndSearchMatches()
     }
 
     private func scheduleDebouncedSearchCommit() {
@@ -322,6 +340,7 @@ final class DisassemblyViewModel {
         searchTotalLineCount = 0
         isLoading = true
         errorMessage = nil
+        disassemblyResult = nil
         allLines = []
         filteredLines = []
         searchMatchIndices = []
@@ -331,16 +350,18 @@ final class DisassemblyViewModel {
 
         let path = url.path
         let verb = verbose
+        let stackState = showStackState
 
         Task {
             do {
-                let (lines, items, relevantFiles) = try await Task.detached {
+                let (result, lines, items, relevantFiles) = try await Task.detached {
                     let result = try disassemble(
                         filename: path,
                         verbose: verb
                     )
                     let lines = renderStructuredLines(
                         from: result,
+                        showStackState: stackState,
                         verbose: verb
                     )
 
@@ -376,9 +397,10 @@ final class DisassemblyViewModel {
                             procedures: procs
                         ))
                     }
-                    return (lines, items, relevantFiles)
+                    return (result, lines, items, relevantFiles)
                 }.value
 
+                self.disassemblyResult = result
                 self.allLines = lines
                 self.rebuildFilteredLinesAndSearchMatches()
                 self.segments = items

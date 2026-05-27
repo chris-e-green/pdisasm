@@ -51,6 +51,61 @@ struct PseudoCodeGenerator {
         }
     }
 
+    func representationWordText(
+        _ base: StackValue,
+        offset: String,
+        stack: StackSimulator
+    ) -> String {
+        if base.type == "REAL" {
+            return "REAL_WORD(\(stack.parenthesizedText(base)), \(offset))"
+        }
+        return "*(\(stack.parenthesizedText(base)) + \(offset))"
+    }
+
+    func representationWordLocation(
+        _ base: StackValue,
+        offset: String
+    ) -> Location? {
+        let trimmedOffset = offset.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let offsetValue = Int(trimmedOffset),
+            offsetValue != 0,
+            let location = base.location,
+            let address = location.addr
+        else {
+            return base.location
+        }
+
+        return Location(
+            segment: location.segment,
+            procedure: location.procedure,
+            lexLevel: location.lexLevel,
+            addr: address + offsetValue
+        )
+    }
+
+    func representationByteText(
+        _ base: StackValue,
+        offset: String,
+        stack: StackSimulator
+    ) -> String {
+        if base.type == "REAL" {
+            return "REAL_BYTE(\(stack.parenthesizedText(base)), \(offset))"
+        }
+        return "\(stack.parenthesizedText(base))[\(offset)]"
+    }
+
+    func representationBitsText(
+        _ base: StackValue,
+        width: String,
+        bit: String,
+        stack: StackSimulator
+    ) -> String {
+        if base.type == "REAL" {
+            return "REAL_BITS(\(stack.parenthesizedText(base)), \(width), \(bit))"
+        }
+        return "\(stack.parenthesizedText(base)):\(width):\(bit)"
+    }
+
     mutating func generateForInstruction(
         _ inst: Instruction,
         stack: inout StackSimulator,
@@ -114,7 +169,12 @@ struct PseudoCodeGenerator {
             let (bwid, _) = stack.pop()
             let bValue = stack.popStackValue()
             let a = stack.assignmentSourceText(aValue)
-            let b = stack.assignmentTargetText(bValue)
+            let b = bValue.type == "REAL"
+                ? representationBitsText(bValue, width: bwid, bit: bbit, stack: stack)
+                : stack.assignmentTargetText(bValue)
+            if bValue.type == "REAL" {
+                return "\(b) := \(a)"
+            }
             return "\(b):\(bwid):\(bbit) := \(a)"
         case stb:
             let srcValue = stack.popStackValue()
@@ -122,7 +182,9 @@ struct PseudoCodeGenerator {
             let dstaddrValue = stack.popStackValue()
             let src = stack.assignmentSourceText(srcValue, withoutParentheses: true)
             let dstoffs = stack.assignmentSourceText(dstoffsValue)
-            let dstaddr = stack.assignmentTargetText(dstaddrValue)
+            let dstaddr = dstaddrValue.type == "REAL"
+                ? representationByteText(dstaddrValue, offset: dstoffs, stack: stack)
+                : stack.assignmentTargetText(dstaddrValue)
             let dstoffstype = dstoffsValue.type
             let dstaddrtype = dstaddrValue.type
             if dstaddrtype == "STRING" && dstoffstype == "INTEGER" {
@@ -132,6 +194,9 @@ struct PseudoCodeGenerator {
                     }
                 }
             }
+            if dstaddrValue.type == "REAL" {
+                return "\(dstaddr) := \(src)"
+            }
             return "\(dstaddr)[\(dstoffs)] := \(src)"
         case stm:
             let stmCount = inst.params[0]
@@ -139,7 +204,10 @@ struct PseudoCodeGenerator {
             var prevElement: String = ""
             var srcdata: [String] = []
             let (_, t1) = stack.peek()
-            if stmCount == 2 && t1 == "REAL" {
+            let topRealBase = stack.realRepresentationBaseName(stack.peekStackValue().text)
+            let nextRealBase = stack.realRepresentationBaseName(stack.peekStackValue(1).text)
+            let storesRealRepresentation = topRealBase != nil && topRealBase == nextRealBase
+            if stmCount == 2 && (t1 == "REAL" || storesRealRepresentation) {
                 (src, _) = stack.popReal()
             } else {
                 for _ in 0..<stmCount {
@@ -532,22 +600,28 @@ struct PseudoCodeGenerator {
             let origin = stack.popStackValue()
             let wdOrigin = stack.parenthesizedText(origin)
             for i in 0..<ldmCount {
+                let text = origin.type == "REAL"
+                    ? representationWordText(origin, offset: "\(i)", stack: stack)
+                    : "\(wdOrigin){\(i)}"
                 stack.push(StackValue(
-                    text: "\(wdOrigin){\(i)}",
+                    text: text,
                     type: "INTEGER",
                     kind: .value,
-                    location: origin.location
+                    location: origin.type == "REAL"
+                        ? representationWordLocation(origin, offset: "\(i)")
+                        : origin.location
                 ))
             }
             return nil
         case ldb:
             let index = stack.popStackValue()
             let base = stack.popStackValue()
+            let offset = stack.parenthesizedText(index)
             stack.push(StackValue(
-                text: "\(stack.parenthesizedText(base))[\(stack.parenthesizedText(index))]",
+                text: representationByteText(base, offset: offset, stack: stack),
                 type: "BYTE",
                 kind: .value,
-                location: base.location
+                location: base.type == "REAL" ? nil : base.location
             ))
             return nil
         case ldp:
@@ -555,10 +629,10 @@ struct PseudoCodeGenerator {
             let (awid, _) = stack.pop()
             let base = stack.popStackValue()
             stack.push(StackValue(
-                text: "\(stack.parenthesizedText(base)):\(awid):\(abit)",
+                text: representationBitsText(base, width: awid, bit: abit, stack: stack),
                 type: "INTEGER",
                 kind: .value,
-                location: base.location
+                location: base.type == "REAL" ? nil : base.location
             ))
             return nil
         case inc:
@@ -585,7 +659,14 @@ struct PseudoCodeGenerator {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
                 return nil
             }
-            stack.push(StackValue(text: "*(\(a) + \(val))", type: "INTEGER", kind: .value, location: base.location))
+            stack.push(StackValue(
+                text: representationWordText(base, offset: "\(val)", stack: stack),
+                type: "INTEGER",
+                kind: .value,
+                location: base.type == "REAL"
+                    ? representationWordLocation(base, offset: "\(val)")
+                    : base.location
+            ))
             return nil
         case ixa:
             let _ = inst.params[0]
@@ -628,7 +709,14 @@ struct PseudoCodeGenerator {
             } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[offs] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
             } else {
-                stack.push(StackValue(text: "*(\(a) + \(offs))", type: t, kind: .value, location: base.location))
+                stack.push(StackValue(
+                    text: representationWordText(base, offset: "\(offs)", stack: stack),
+                    type: t == "REAL" ? "INTEGER" : t,
+                    kind: .value,
+                    location: t == "REAL"
+                        ? representationWordLocation(base, offset: "\(offs)")
+                        : base.location
+                ))
             }
             return nil
 
