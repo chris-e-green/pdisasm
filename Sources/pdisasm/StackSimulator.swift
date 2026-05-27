@@ -2,25 +2,133 @@ import Foundation
 
 // MARK: - Stack Simulator
 
+enum StackValueKind: String {
+    case value
+    case address
+    case pointer
+    case constant
+    case expression
+}
+
+struct StackValue {
+    var text: String
+    var type: String?
+    var kind: StackValueKind
+    var location: Location?
+
+    var encodedType: String {
+        type ?? "UNKNOWN"
+    }
+
+    var isAddressLike: Bool {
+        kind == .address || kind == .pointer
+    }
+
+    var isValueLike: Bool {
+        kind == .value || kind == .constant || kind == .expression
+    }
+}
+
 /// Manages the symbolic execution stack during P-code decoding
 struct StackSimulator {
     let sep = "~"
     let ptr = "@"
     var stack: [String] = []
+    var values: [StackValue] = []
 
     func prettyStack() -> String {
         "[" + stack.joined(separator: ", ") + "]"
     }
 
-    mutating func push(_ value: (val: String, type: String?), isPointer: Bool = false) {
+    mutating func push(
+        _ value: (val: String, type: String?),
+        isPointer: Bool = false,
+        kind: StackValueKind? = nil,
+        location: Location? = nil
+    ) {
         var stackRep = "\(value.val)\(sep)"
         if isPointer { stackRep += ptr }
         stackRep += "\(value.type ?? "UNKNOWN")"
+        let valueKind = kind ?? (isPointer ? .address : .value)
+        values.append(StackValue(
+            text: value.val,
+            type: value.type ?? "UNKNOWN",
+            kind: valueKind,
+            location: location
+        ))
         if let type = value.type {
             stack.append("\(value.val)\(sep)\(type)")
         } else {
             stack.append("\(value.val)\(sep)UNKNOWN")
         }
+    }
+
+    mutating func push(_ value: StackValue) {
+        values.append(value)
+        stack.append("\(value.text)\(sep)\(value.encodedType)")
+    }
+
+    mutating func popStackValue() -> StackValue {
+        if values.count == stack.count, let value = values.popLast() {
+            _ = stack.popLast()
+            return value
+        }
+
+        let encoded = stack.popLast() ?? "underflow!"
+        if encoded.contains(sep) {
+            var parts = encoded.split(separator: sep, maxSplits: 1)
+            if parts.count < 2 {
+                parts.append("UNKNOWN")
+            }
+            return StackValue(
+                text: String(parts[0]),
+                type: String(parts[1]),
+                kind: .value
+            )
+        }
+
+        return StackValue(text: encoded, type: nil, kind: .value)
+    }
+
+    func peekStackValue(_ at: Int = 0) -> StackValue {
+        let pos = stack.endIndex - at - 1
+        if values.count == stack.count, pos >= values.startIndex, pos < values.endIndex {
+            return values[pos]
+        }
+        if pos < stack.startIndex || pos >= stack.endIndex {
+            return StackValue(text: "underflow!", type: nil, kind: .value)
+        }
+        let encoded = stack[pos]
+        if encoded.contains(sep) {
+            let parts = encoded.split(separator: sep, maxSplits: 1)
+            return StackValue(text: String(parts[0]), type: String(parts[1]), kind: .value)
+        }
+        return StackValue(text: encoded, type: nil, kind: .value)
+    }
+
+    func parenthesizedText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
+        if withoutParentheses {
+            return value.text
+        }
+        if value.text.hasPrefix("*(") {
+            return value.text
+        }
+        return value.text.contains(" ") && value.type != "STRING" ? "(\(value.text))" : value.text
+    }
+
+    func assignmentTargetText(_ value: StackValue) -> String {
+        if value.kind == .pointer {
+            return "*(\(parenthesizedText(value)))"
+        }
+        return parenthesizedText(value)
+    }
+
+    func assignmentSourceText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
+        parenthesizedText(value, withoutParentheses: withoutParentheses)
+    }
+
+    func derivedAddressKind(from value: StackValue) -> StackValueKind {
+        value.isAddressLike || value.type == "POINTER" ? .address : value.kind
     }
 
 //    mutating func pushReal(_ value: String, isPointer: Bool = false) {
@@ -39,36 +147,15 @@ struct StackSimulator {
     mutating func pop(_ type: String, _ withoutParentheses: Bool = false) -> (
         val: String, type: String?
     ) {
-        let a = stack.popLast() ?? "underflow!"
-        var parenthesized: String
-        var locType: String
-        if a.contains(sep) {  // typed value
-            var parts = a.split(separator: sep, maxSplits: 1)
-            if parts.count < 2 {
-                parts.append("UNKNOWN")
-            }
-            let locName = String(parts[0])
-            locType = String(parts[1])
-            if locType == "UNKNOWN" {
-                locType = type
-            }
-
-            if withoutParentheses {
-                parenthesized = locName
-            } else {
-                parenthesized =
-                    (locName.contains(" ") && locType != "STRING")
-                    ? "(\(locName))" : locName
-            }
-        } else {
-            if withoutParentheses {
-                parenthesized = a
-            } else {
-                parenthesized = a.contains(" ") ? "(\(a))" : a
-            }
+        let value = popStackValue()
+        var locType = value.type ?? type
+        if locType == "UNKNOWN" {
             locType = type
         }
-        return (parenthesized, locType)
+        return (parenthesizedText(
+            StackValue(text: value.text, type: locType, kind: value.kind, location: value.location),
+            withoutParentheses: withoutParentheses
+        ), locType)
     }
 
     @discardableResult
@@ -77,28 +164,8 @@ struct StackSimulator {
     /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the popped value and its type (if any)
     mutating func pop(_ withoutParentheses: Bool = false) -> (val: String, type: String?) {
-        let a = stack.popLast() ?? "underflow!"
-        if a.contains(sep) {  // typed value
-            var parts = a.split(separator: sep, maxSplits: 1)
-            if parts.count < 2 {
-                parts.append("UNKNOWN")
-            }
-            if withoutParentheses {
-                return (String(parts[0]), String(parts[1]))
-            } else {
-                let parenthesized =
-                    (String(parts[0]).contains(" ") && parts[1] != "STRING")
-                    ? "(\(parts[0]))" : String(parts[0])
-                return (parenthesized, String(parts[1]))
-            }
-        } else {
-            if withoutParentheses {
-                return (a, nil)
-            } else {
-                let parenthesized = a.contains(" ") ? "(\(a))" : a
-                return (parenthesized, nil)
-            }
-        }
+        let value = popStackValue()
+        return (parenthesizedText(value, withoutParentheses: withoutParentheses), value.type)
     }
 
     @discardableResult
@@ -108,77 +175,41 @@ struct StackSimulator {
     /// - Parameter withoutParentheses: whether to return the value without parentheses
     /// - Returns: a tuple of the value at the top of the stack and its type (if any)
     func peek(_ at: Int = 0, _ withoutParentheses: Bool = false) -> (val: String, type: String?) {
-        let pos = stack.endIndex - at - 1
-        if pos < stack.startIndex || pos >= stack.endIndex {
+        let value = peekStackValue(at)
+        if value.text == "underflow!" {
             return ("underflow!", nil)
         }
-        let a = stack[pos]
-        if a.contains(sep) {
-            let parts = a.split(separator: sep, maxSplits: 1)
-            if withoutParentheses {
-                return (String(parts[0]), String(parts[1]))
-            } else {
-                let parenthesized =
-                    (String(parts[0]).contains(" ") && parts[1] != "STRING")
-                    ? "(\(parts[0]))" : String(parts[0])
-                return (parenthesized, String(parts[1]))
-            }
-        } else {
-            if withoutParentheses {
-                return (a, nil)
-            } else {
-                let parenthesized = a.contains(" ") ? "(\(a))" : a
-                return (parenthesized, nil)
-            }
-        }
+        return (parenthesizedText(value, withoutParentheses: withoutParentheses), value.type)
     }
 
     @discardableResult
     /// Pops the top of the stack as a REAL value.
     /// - Returns: a tuple with the REAL value and the 'REAL' type
     mutating func popReal() -> (val: String, type: String?) {
-        let a = stack.popLast() ?? "underflow!"
-        if a.contains(sep) {
-            let parts = a.split(separator: sep, maxSplits: 1)
-            if parts[1] == "REAL" { // if it was a real, we can just return it
-                return (String(parts[0]), "REAL")
-            } else { // not a real, so we need to get the second word.
-                let b = stack.popLast() ?? "underflow!"
-                if b.contains(sep) {
-                    let bParts = b.split(separator: sep, maxSplits: 1)
-                    if let val1 = UInt16(parts[0]), let val2 = UInt16(bParts[0]) {
-                        let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
-                        return (
-                            "\(rv)", "REAL"
-                        )
-                    }
-                    let name = parts[0].split(separator: "{", maxSplits: 1)[0]
-                    let bName = bParts[0].split(separator: "{", maxSplits: 1)[0]
-                    if name != bName {
-                        print(
-                            "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"
-                        )
-                        return ("\(a).\(b)", "REAL")
-                    } else {
-                        return ("\(name)", "REAL")
-                    }
-                } else {
-                    print(
-                        "Warning: expected second part of REAL to be typed, got '\(b)'"
-                    )
-                    return ("\(a).\(b)", "REAL")
-                }
+        let a = popStackValue()
+        if a.type == "REAL" {
+            return (a.text, "REAL")
+        }
+
+        let b = popStackValue()
+        if let val1 = UInt16(a.text), let val2 = UInt16(b.text) {
+            let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
+            return ("\(rv)", "REAL")
+        }
+
+        if a.type != nil || b.type != nil {
+            let name = a.text.split(separator: "{", maxSplits: 1)[0]
+            let bName = b.text.split(separator: "{", maxSplits: 1)[0]
+            if name != bName {
+                print(
+                    "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"
+                )
+                return ("\(a.text).\(b.text)", "REAL")
+            } else {
+                return ("\(name)", "REAL")
             }
         } else {
-            let b = stack.popLast() ?? "underflow!"
-            if let val1 = UInt16(a), let val2 = UInt16(b) {
-                let rv = Float(bitPattern: UInt32(val1) | UInt32(val2) << 16)
-                return (
-                    "\(rv)", "REAL"
-                )
-            } else {
-                return ("\(a).\(b)", "REAL")
-            }
+            return ("\(a.text).\(b.text)", "REAL")
         }
     }
 

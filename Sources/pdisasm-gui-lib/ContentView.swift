@@ -238,6 +238,7 @@ struct DetailView: View {
         case .variable:    return Color.orange.opacity(0.08)
         case .global:      return Color.purple.opacity(0.06)
         case .header:      return Color.yellow.opacity(0.10)
+        case .diagnostic:  return Color.red.opacity(0.08)
         }
     }
 }

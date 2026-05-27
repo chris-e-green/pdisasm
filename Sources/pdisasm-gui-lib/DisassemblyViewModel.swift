@@ -137,6 +137,7 @@ final class DisassemblyViewModel {
             case .variable:    return showVariables
             case .global:      return true       // always show globals
             case .header:      return true       // always show procedure headers
+            case .diagnostic:  return true       // always show diagnostics
             }
         }
     }

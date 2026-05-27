@@ -41,6 +41,47 @@ private func assemblerDestinationText(
     return "\(arrow)\(procedureLabel)"
 }
 
+private func sortedTypeConflicts(_ conflicts: [TypeConflict]) -> [TypeConflict] {
+    Array(Set(conflicts)).sorted {
+        if $0.segment != $1.segment {
+            return $0.segment < $1.segment
+        }
+        if $0.procedure != $1.procedure {
+            return ($0.procedure ?? -1) < ($1.procedure ?? -1)
+        }
+        if $0.lexLevel != $1.lexLevel {
+            return ($0.lexLevel ?? -1) < ($1.lexLevel ?? -1)
+        }
+        if $0.addr != $1.addr {
+            return ($0.addr ?? -1) < ($1.addr ?? -1)
+        }
+        if $0.existingType != $1.existingType {
+            return $0.existingType < $1.existingType
+        }
+        return $0.proposedType < $1.proposedType
+    }
+}
+
+private func typeConflictText(_ conflict: TypeConflict) -> String {
+    var location = "S\(conflict.segment)"
+    if let procedure = conflict.procedure {
+        location += " P\(procedure)"
+    }
+    if let lexLevel = conflict.lexLevel {
+        location += " L\(lexLevel)"
+    }
+    if let addr = conflict.addr {
+        location += " A\(addr)"
+    }
+
+    var text =
+        "TYPE CONFLICT \(location): kept \(conflict.existingType) (\(conflict.existingSource.rawValue)); rejected \(conflict.proposedType) (\(conflict.proposedSource.rawValue))"
+    if !conflict.evidence.isEmpty {
+        text += "; evidence: \(conflict.evidence)"
+    }
+    return text
+}
+
 // MARK: - Structured Output Model
 
 /// Classifies the kind of each output line so the GUI can filter and colour them.
@@ -51,6 +92,7 @@ public enum LineKind: Sendable, CaseIterable {
     case variable      // variable / location declarations
     case global        // global variable listings
     case header        // procedure/function header line, callers
+    case diagnostic    // warnings and diagnostics from analysis
 }
 
 /// A single line of disassembly output tagged with its kind.
@@ -91,6 +133,15 @@ public func renderStructuredLines(
     addLine(.markup, "#  \(result.sourceFilename) ")
     addLine(.markup, "")
     addLine(.markup, "\(result.segDictionary)")
+
+    if !result.typeConflicts.isEmpty {
+        addLine(.markup, "## Type Conflicts")
+        for conflict in sortedTypeConflicts(result.typeConflicts) {
+            addLine(.diagnostic, typeConflictText(conflict))
+        }
+        addLine(.diagnostic, "")
+    }
+
     addLine(.markup, "## Globals")
     addLine(.markup, "")
 
@@ -331,6 +382,7 @@ func outputResults(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
+    typeConflicts: [TypeConflict] = [],
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
@@ -347,6 +399,7 @@ func outputResults(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
+        typeConflicts: typeConflicts,
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
@@ -365,6 +418,7 @@ func outputResults<Target: TextOutputStream>(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
+    typeConflicts: [TypeConflict] = [],
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
@@ -397,6 +451,19 @@ func outputResults<Target: TextOutputStream>(
         emit("#  \(sourceFilename) \n")
         emit(segDictionary)
 
+        if !typeConflicts.isEmpty {
+            emit("## Type Conflicts\n")
+        }
+    }
+
+    if !typeConflicts.isEmpty {
+        for conflict in sortedTypeConflicts(typeConflicts) {
+            emit("; \(typeConflictText(conflict))")
+        }
+        emit("")
+    }
+
+    if showMarkup {
         emit("## Globals\n")
     }
 

@@ -115,4 +115,41 @@ final class OutputFlagTests: XCTestCase {
         }
         XCTAssertFalse(out.contains("BEGIN"))
     }
+
+    func testOutputReportsTypeConflictsOnce() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let loc = Location(
+            segment: 2,
+            procedure: 3,
+            lexLevel: 1,
+            addr: 4,
+            type: "REAL",
+            typeSource: .metadata
+        )
+        let conflict = loc.assignType(
+            "INTEGER",
+            source: .inferred,
+            evidence: "ADI"
+        )!
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: locs,
+                allProcedures: procs,
+                allCallers: callers,
+                typeConflicts: [conflict, conflict],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("## Type Conflicts"))
+        XCTAssertTrue(out.contains("TYPE CONFLICT S2 P3 L1 A4"))
+        XCTAssertTrue(out.contains("kept REAL (metadata)"))
+        XCTAssertTrue(out.contains("rejected INTEGER (inferred)"))
+        XCTAssertEqual(out.components(separatedBy: "TYPE CONFLICT").count - 1, 1)
+    }
 }

@@ -77,6 +77,16 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertEqual(sim.stack.count, 1)
     }
 
+    func testPushTracksValueKind() {
+        var sim = StackSimulator()
+        sim.push(("ADDR", "INTEGER"), kind: .address)
+        XCTAssertEqual(sim.peekStackValue().kind, .address)
+        let value = sim.popStackValue()
+        XCTAssertEqual(value.text, "ADDR")
+        XCTAssertEqual(value.kind, .address)
+        XCTAssertTrue(sim.stack.isEmpty)
+    }
+
     func testPeekEmptyStackReturnsUnderflow() {
         let sim = StackSimulator()
         let (val, _) = sim.peek()

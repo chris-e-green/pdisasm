@@ -26,12 +26,33 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "DEST := 42")
     }
 
+    func testSTOUsesAddressDestinationKind() {
+        var stack = StackSimulator()
+        stack.push(("DEST", "INTEGER"), kind: .address)
+        stack.push(("42", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: sto, mnemonic: "STO")
+        var gen = makeGenerator()
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "DEST := 42")
+        XCTAssertTrue(stack.stack.isEmpty)
+    }
+
     // MARK: - MOV generates assignment
 
     func testMOVAssignment() {
         var stack = StackSimulator()
         stack.push(("DST", "POINTER"))
         stack.push(("SRC", "POINTER"))
+        let inst = Instruction(opcode: mov, mnemonic: "MOV", params: [1])
+        var gen = makeGenerator()
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "DST := SRC")
+    }
+
+    func testMOVUsesAddressDestinationAndValueSourceKinds() {
+        var stack = StackSimulator()
+        stack.push(("DST", "POINTER"), kind: .address)
+        stack.push(("SRC", "INTEGER"), kind: .value)
         let inst = Instruction(opcode: mov, mnemonic: "MOV", params: [1])
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
@@ -63,6 +84,17 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(result, "ADDR[5] := X")
+    }
+
+    func testSTBUsesAddressDestinationKind() {
+        var stack = StackSimulator()
+        stack.push(("ADDR", "POINTER"), kind: .address)
+        stack.push(("5", "INTEGER"), kind: .constant)
+        stack.push(("88", "BYTE"), kind: .constant)
+        let inst = Instruction(opcode: stb, mnemonic: "STB")
+        var gen = makeGenerator()
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "ADDR[5] := 88")
     }
 
     // MARK: - STL with memLocation
@@ -488,6 +520,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let inst = Instruction(opcode: lao, mnemonic: "LAO", memLocation: loc)
         var gen = makeGenerator(labels: [loc])
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(stack.peekStackValue().kind, .address)
         let (val, _) = stack.pop()
         XCTAssertEqual(val, "GVAR")
         XCTAssertTrue(gen.allLocations.contains(loc))
@@ -519,12 +552,13 @@ final class PseudoCodeGeneratorTests: XCTestCase {
 
     func testIND() {
         var stack = StackSimulator()
-        stack.push(("BASE", "POINTER"))
+        stack.push(("BASE", "POINTER"), kind: .address)
         let inst = Instruction(opcode: ind, mnemonic: "IND", params: [2])
         var gen = makeGenerator()
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(stack.peekStackValue().kind, .value)
         let (val, type) = stack.pop()
-        XCTAssertEqual(val, "(BASE + 2)")
+        XCTAssertEqual(val, "*(BASE + 2)")
         XCTAssertEqual(type, "INTEGER")
     }
 
@@ -535,8 +569,21 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [2])
         var gen = makeGenerator()
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(stack.peekStackValue().kind, .address)
         let (val, _) = stack.pop()
         XCTAssertEqual(val, "ARR[3]")
+    }
+
+    func testIXPPreservesBaseAddressKind() {
+        var stack = StackSimulator()
+        stack.push(("BASE", "POINTER"), kind: .address)
+        stack.push(("4", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: ixp, mnemonic: "IXP", params: [2, 8])
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(stack.peekStackValue(2).kind, .address)
+        XCTAssertEqual(stack.peekStackValue(1).kind, .constant)
+        XCTAssertEqual(stack.peekStackValue(0).kind, .expression)
     }
 
     func testLDB() {

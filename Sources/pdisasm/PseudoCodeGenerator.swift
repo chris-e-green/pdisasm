@@ -58,8 +58,12 @@ struct PseudoCodeGenerator {
     ) -> String? {
         switch inst.opcode {
         case sto:
-            let (src, srcType) = stack.pop()
-            var (destName, destType) = stack.pop()
+            let srcValue = stack.popStackValue()
+            let destValue = stack.popStackValue()
+            let src = stack.assignmentSourceText(srcValue)
+            var destName = stack.assignmentTargetText(destValue)
+            let srcType = srcValue.type
+            let destType = destValue.type
             switch destType {
             case "CHAR":
                 if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
@@ -91,25 +95,36 @@ struct PseudoCodeGenerator {
             }
             return "\(destName) := \(src)"
         case sas:
-            let (src, _) = stack.pop()
-            let (dest, _) = stack.pop()
+            let srcValue = stack.popStackValue()
+            let destValue = stack.popStackValue()
+            let src = stack.assignmentSourceText(srcValue)
+            let dest = stack.assignmentTargetText(destValue)
             setLocType(src, "STRING")
             setLocType(dest, "STRING")
             return "\(dest) := \(src)"
         case mov:
-            let (src, _) = stack.pop()
-            let (dst, _) = stack.pop()
+            let srcValue = stack.popStackValue()
+            let dstValue = stack.popStackValue()
+            let src = stack.assignmentSourceText(srcValue)
+            let dst = stack.assignmentTargetText(dstValue)
             return "\(dst) := \(src)"
         case stp:
-            let (a, _) = stack.pop()
+            let aValue = stack.popStackValue()
             let (bbit, _) = stack.pop()
             let (bwid, _) = stack.pop()
-            let (b, _) = stack.pop()
+            let bValue = stack.popStackValue()
+            let a = stack.assignmentSourceText(aValue)
+            let b = stack.assignmentTargetText(bValue)
             return "\(b):\(bwid):\(bbit) := \(a)"
         case stb:
-            let (src, _) = stack.pop(true)
-            let (dstoffs, dstoffstype) = stack.pop()
-            let (dstaddr, dstaddrtype) = stack.pop()
+            let srcValue = stack.popStackValue()
+            let dstoffsValue = stack.popStackValue()
+            let dstaddrValue = stack.popStackValue()
+            let src = stack.assignmentSourceText(srcValue, withoutParentheses: true)
+            let dstoffs = stack.assignmentSourceText(dstoffsValue)
+            let dstaddr = stack.assignmentTargetText(dstaddrValue)
+            let dstoffstype = dstoffsValue.type
+            let dstaddrtype = dstaddrValue.type
             if dstaddrtype == "STRING" && dstoffstype == "INTEGER" {
                 if let offset = Int(dstoffs), offset > 0 {
                     if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
@@ -128,7 +143,8 @@ struct PseudoCodeGenerator {
                 (src, _) = stack.popReal()
             } else {
                 for _ in 0..<stmCount {
-                    let (element, _) = stack.pop(true)
+                    let elementValue = stack.popStackValue()
+                    let element = stack.assignmentSourceText(elementValue, withoutParentheses: true)
                     let elementParts = element.split(separator: "{")
                     if String(elementParts[0]) != prevElement {
                         prevElement = String(elementParts[0])
@@ -137,7 +153,9 @@ struct PseudoCodeGenerator {
                 }
                 src = srcdata.joined(separator: ", ")
             }
-            let (dst, t) = stack.pop()  // destination address
+            let dstValue = stack.popStackValue()
+            let dst = stack.assignmentTargetText(dstValue)
+            let t = dstValue.type
             if stmCount == 2 && srcdata.count == 2 && t == "REAL" {
                 // need to see if the elements parse as a real number
                 if let val1 = UInt16(srcdata[0]), let val2 = UInt16(srcdata[1]) {
@@ -460,19 +478,29 @@ struct PseudoCodeGenerator {
             // MARK: - Load / push opcodes
             
         case sldc0...sldc127:
-            stack.push((String(inst.opcode), "INTEGER"))
+            stack.push((String(inst.opcode), "INTEGER"), kind: .constant)
             return nil
         case lao, lae, lda, lla:
             // addresses
             if let loc = inst.memLocation {
                 let stackLabel = findStackLabel(loc)
-                stack.push((stackLabel.0, (stackLabel.1 ?? "") ), isPointer: true)
+                stack.push(
+                    (stackLabel.0, (stackLabel.1 ?? "")),
+                    isPointer: true,
+                    kind: .address,
+                    location: loc
+                )
                 allLocations.insert(loc)
             }
             return nil
         case ldo, lod, lde, ldl, sldl1...sldl16, sldo1...sldo16:
             if let loc = inst.memLocation {
-                stack.push(findStackLabel(loc))
+                stack.push(StackValue(
+                    text: findStackLabel(loc).0,
+                    type: findStackLabel(loc).1,
+                    kind: .value,
+                    location: loc
+                ))
                 allLocations.insert(loc)
             }
             return nil
@@ -481,82 +509,108 @@ struct PseudoCodeGenerator {
             let count = inst.params[0]
             for i in (0..<count).reversed() {
                 let val = inst.params[1 + i]
-                stack.push(("\(val)", "INTEGER"))
+                stack.push(("\(val)", "INTEGER"), kind: .constant)
             }
             return nil
         case ldci:
             let val = inst.params[0]
-            stack.push(("\(val)", "INTEGER"))
+            stack.push(("\(val)", "INTEGER"), kind: .constant)
             return nil
         case ldcn:
-            stack.push(("NIL", "POINTER"))
+            stack.push(("NIL", "POINTER"), kind: .pointer)
             return nil
         case lsa:
             let s = inst.stringParameter ?? ""
-            stack.push(("\'\(s)\'", "STRING"))
+            stack.push(("\'\(s)\'", "STRING"), kind: .constant)
             return nil
         case lpa:
             let txtRep = inst.stringParameter ?? ""
-            stack.push(("'\(txtRep)'", "PACKED ARRAY"))
+            stack.push(("'\(txtRep)'", "PACKED ARRAY"), kind: .constant)
             return nil
         case ldm:
             let ldmCount = inst.params[0]
-            let (wdOrigin, _) = stack.pop()
+            let origin = stack.popStackValue()
+            let wdOrigin = stack.parenthesizedText(origin)
             for i in 0..<ldmCount {
-                stack.push(("\(wdOrigin){\(i)}", "INTEGER"))
+                stack.push(StackValue(
+                    text: "\(wdOrigin){\(i)}",
+                    type: "INTEGER",
+                    kind: .value,
+                    location: origin.location
+                ))
             }
             return nil
         case ldb:
-            let (a, _) = stack.pop()
-            let (b, _) = stack.pop()
-            stack.push(("\(b)[\(a)]", "BYTE"))
+            let index = stack.popStackValue()
+            let base = stack.popStackValue()
+            stack.push(StackValue(
+                text: "\(stack.parenthesizedText(base))[\(stack.parenthesizedText(index))]",
+                type: "BYTE",
+                kind: .value,
+                location: base.location
+            ))
             return nil
         case ldp:
             let (abit, _) = stack.pop()
             let (awid, _) = stack.pop()
-            let (a, _) = stack.pop()
-            stack.push(("\(a):\(awid):\(abit)", "INTEGER"))
+            let base = stack.popStackValue()
+            stack.push(StackValue(
+                text: "\(stack.parenthesizedText(base)):\(awid):\(abit)",
+                type: "INTEGER",
+                kind: .value,
+                location: base.location
+            ))
             return nil
         case inc:
             let val = inst.params[0]
-            let (a, t) = stack.pop()
+            let base = stack.popStackValue()
+            let a = stack.parenthesizedText(base)
+            let t = base.type
+            let resultKind = stack.derivedAddressKind(from: base)
             if let t = t, t.hasPrefix("ARRAY") {
-                stack.push(("\(a)[\(val)]", String(t.split(separator: " ").last!)))
+                stack.push(StackValue(text: "\(a)[\(val)]", type: String(t.split(separator: " ").last!), kind: resultKind, location: base.location))
             } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[val] {
-                stack.push(("\(a).\(field.name)", field.type))
+                stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: resultKind, location: base.location))
             }
             else {
-                stack.push(("\(a) + \(val)", t))
+                stack.push(StackValue(text: "\(a) + \(val)", type: t, kind: resultKind, location: base.location))
             }
             return nil
         case ind:
             let val = inst.params[0]
-            let (a, t) = stack.pop()
+            let base = stack.popStackValue()
+            let a = stack.parenthesizedText(base)
+            let t = base.type
             if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[val] {
-                stack.push(("\(a).\(field.name)", field.type))
+                stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
                 return nil
             }
-            stack.push(("\(a) + \(val)", "INTEGER"))
+            stack.push(StackValue(text: "*(\(a) + \(val))", type: "INTEGER", kind: .value, location: base.location))
             return nil
         case ixa:
             let _ = inst.params[0]
-            let (eltIndex, _) = stack.pop()
-            let (arrayBase, t) = stack.pop()
+            let index = stack.popStackValue()
+            let base = stack.popStackValue()
+            let eltIndex = stack.parenthesizedText(index)
+            let arrayBase = stack.parenthesizedText(base)
+            let t = base.type
+            let resultKind = stack.derivedAddressKind(from: base)
             if let type = t, type.starts(with: "ARRAY") {
                 let elementType = String(type.split(separator: " ").last!)
-                stack.push(("\(arrayBase)[\(eltIndex)]", elementType))
+                stack.push(StackValue(text: "\(arrayBase)[\(eltIndex)]", type: elementType, kind: resultKind, location: base.location))
                 return nil
             }
-            stack.push(("\(arrayBase)[\(eltIndex)]", t))
+            stack.push(StackValue(text: "\(arrayBase)[\(eltIndex)]", type: t, kind: resultKind, location: base.location))
             return nil
         case ixp:
             let elementsPerWord = inst.params[0]
             let fieldWidth = inst.params[1]
-            let (idx, _) = stack.pop()
-            let basePtr = stack.pop()
+            let idxValue = stack.popStackValue()
+            let idx = stack.assignmentSourceText(idxValue)
+            let basePtr = stack.popStackValue()
             stack.push(basePtr)
-            stack.push(("\(fieldWidth)", "INTEGER"))
-            stack.push(("\(idx)*\(elementsPerWord)", "INTEGER"))
+            stack.push(("\(fieldWidth)", "INTEGER"), kind: .constant)
+            stack.push(("\(idx)*\(elementsPerWord)", "INTEGER"), kind: .expression)
             return nil
         case ixs:
             let (index, _) = stack.peek()
@@ -566,13 +620,15 @@ struct PseudoCodeGenerator {
             return nil
         case sind0...sind7:
             let offs = inst.params[0]
-            let (a, t) = stack.pop()
+            let base = stack.popStackValue()
+            let a = stack.parenthesizedText(base)
+            let t = base.type
             if let t = t, t.hasPrefix("ARRAY") {
-                stack.push(("\(a)[\(offs)]", String(t.split(separator: " ").last!)))
+                stack.push(StackValue(text: "\(a)[\(offs)]", type: String(t.split(separator: " ").last!), kind: .value, location: base.location))
             } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[offs] {
-                stack.push(("\(a).\(field.name)", field.type))
+                stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
             } else {
-                stack.push(("*(\(a) + \(offs))", t))
+                stack.push(StackValue(text: "*(\(a) + \(offs))", type: t, kind: .value, location: base.location))
             }
             return nil
 

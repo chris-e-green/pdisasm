@@ -12,6 +12,13 @@ struct CSVRow: Identifiable {
 @MainActor
 @Observable
 final class MetadataViewModel {
+    private enum MetadataColumn {
+        static let type = "type"
+        static let typeSource = "typeSource"
+        static let returnType = "returnType"
+        static let returnTypeSource = "returnTypeSource"
+    }
+
     // MARK: - State
 
     /// Available CSV files discovered in the metadata directory.
@@ -80,15 +87,20 @@ final class MetadataViewModel {
                 rows = []
                 return
             }
-            columns = header.components(separatedBy: ",")
+            let loadedColumns = header.components(separatedBy: ",")
+            columns = loadedColumns
             rows = lines.dropFirst().map { line in
                 let fields = parseCSVLine(line)
                 var dict: [String: String] = [:]
-                for (i, col) in columns.enumerated() {
+                for (i, col) in loadedColumns.enumerated() {
                     dict[col] = i < fields.count ? fields[i] : ""
                 }
                 return CSVRow(values: dict)
             }
+            ensureSourceColumn(for: MetadataColumn.type, sourceColumn: MetadataColumn.typeSource)
+            ensureSourceColumn(for: MetadataColumn.returnType, sourceColumn: MetadataColumn.returnTypeSource)
+            fillMissingSourceValues(typeColumn: MetadataColumn.type, sourceColumn: MetadataColumn.typeSource)
+            fillMissingSourceValues(typeColumn: MetadataColumn.returnType, sourceColumn: MetadataColumn.returnTypeSource)
             isDirty = false
             errorMessage = nil
         } catch {
@@ -100,13 +112,21 @@ final class MetadataViewModel {
 
     func updateValue(_ row: CSVRow, column: String, newValue: String) {
         guard let idx = rows.firstIndex(where: { $0.id == row.id }) else { return }
+        guard rows[idx].values[column] != newValue else { return }
         rows[idx].values[column] = newValue
+        markUserTypeSourceIfNeeded(rowIndex: idx, editedColumn: column, newValue: newValue)
         isDirty = true
     }
 
     func addRow() {
         var dict: [String: String] = [:]
         for col in columns { dict[col] = "" }
+        if columns.contains(MetadataColumn.typeSource) {
+            dict[MetadataColumn.typeSource] = "unknown"
+        }
+        if columns.contains(MetadataColumn.returnTypeSource) {
+            dict[MetadataColumn.returnTypeSource] = "unknown"
+        }
         rows.append(CSVRow(values: dict))
         isDirty = true
     }
@@ -174,5 +194,50 @@ final class MetadataViewModel {
             return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }
         return field
+    }
+
+    private func ensureSourceColumn(for typeColumn: String, sourceColumn: String) {
+        guard columns.contains(typeColumn), !columns.contains(sourceColumn) else { return }
+        if let typeIndex = columns.firstIndex(of: typeColumn) {
+            columns.insert(sourceColumn, at: columns.index(after: typeIndex))
+        } else {
+            columns.append(sourceColumn)
+        }
+    }
+
+    private func markUserTypeSourceIfNeeded(rowIndex: Int, editedColumn: String, newValue: String) {
+        switch editedColumn {
+        case MetadataColumn.type:
+            markTypeSource(
+                rowIndex: rowIndex,
+                sourceColumn: MetadataColumn.typeSource,
+                typeValue: newValue
+            )
+        case MetadataColumn.returnType:
+            markTypeSource(
+                rowIndex: rowIndex,
+                sourceColumn: MetadataColumn.returnTypeSource,
+                typeValue: newValue
+            )
+        default:
+            return
+        }
+    }
+
+    private func markTypeSource(rowIndex: Int, sourceColumn: String, typeValue: String) {
+        guard columns.contains(sourceColumn) else { return }
+        let trimmed = typeValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        rows[rowIndex].values[sourceColumn] =
+            trimmed.isEmpty || trimmed == "UNKNOWN" ? "unknown" : "user"
+    }
+
+    private func fillMissingSourceValues(typeColumn: String, sourceColumn: String) {
+        guard columns.contains(typeColumn), columns.contains(sourceColumn) else { return }
+        for index in rows.indices where rows[index].values[sourceColumn] == nil {
+            let typeValue = rows[index].values[typeColumn] ?? ""
+            let trimmed = typeValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            rows[index].values[sourceColumn] =
+                trimmed.isEmpty || trimmed == "UNKNOWN" ? "unknown" : "metadata"
+        }
     }
 }

@@ -20,14 +20,10 @@
 ## Console
 
 ## Core
-- Work out what to do with type conflicts, rather than just logging them.
 - Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or
   mantissa) - this is currently being treated as an integer access, which is obviously wrong.
 - Refactor where pseudocode is generated, particularly where types are determined in multiple places.
 - Implement support for reading the unit interface section (where it exists)
-- When the user overrides a name (and particularly type) that type should take precedence over automatic
-  type determination. This probably mean there'd need to be a way to distinguish automatic from manual entries.
-- Automatic typing of parameters/returns should update the signature of the procedure/function.
 - Rethink: should 'system' be just segment 0, or all 'reserved' segments (0, 2-6, 58-63) and maybe even the
   pre-assigned Apple Intrinsic Units (20-22, 28-31)? If so, we need to be careful not to clobber existing
   entries if we (eg) load SYSTEM.PASCAL, SYSTEM.LIBRARY and an app.
@@ -41,12 +37,16 @@
 - Look at changing storage of metadata to be in a database (which should hopefully fix the issue of
   duplication of addresses etc, by enforcing unique keys).
 - Look at what's required to be able to store metadata in iCloud.
-- Fix the handling of addresses vs values in pseudocode.
 - Look at improving the stack implementation (particularly for variables on the stack) so that their
   names are determined at print time, allowing them to reflect the final name/datatype.
 
 ## Completed
 
+- ~~Track type source/precedence so user and metadata types take precedence over automatic type determination.~~
+- ~~Mark GUI metadata type edits as user-sourced metadata.~~
+- ~~Automatic typing of parameters/returns should update the signature of the procedure/function.~~
+- ~~Work out what to do with type conflicts, rather than just logging them.~~
+- ~~Fix the handling of addresses vs values in pseudocode.~~
 - ~~Look at whether it's now viable to write-back datatypes etc at the end of the run.~~
 - ~~Storing sets doesn't work properly.~~
 - ~~Something's wrong with the procedure determination for the global memory locations in SYSTEM.PASCAL. ~~
