@@ -9,7 +9,7 @@ Quick start
 ```bash
 swift build
 swift test
-swift run pdisasm --filename path/to/file.bin --verbose
+swift run pdisasm-cli path/to/file.bin --verbose
 ```
 
 See `Sources/pdisasm` for implementation details.

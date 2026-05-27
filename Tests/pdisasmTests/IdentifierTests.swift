@@ -50,4 +50,20 @@ final class IdentifierTests: XCTestCase {
         let set: Set<Identifier> = [a, b]
         XCTAssertEqual(set.count, 2)
     }
+
+    func testDecodingWithoutTypeSourceTreatsTypeAsMetadata() throws {
+        let json = #"{"name":"X","type":"INTEGER"}"#
+        let decoded = try JSONDecoder().decode(Identifier.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.type, "INTEGER")
+        XCTAssertEqual(decoded.typeSource, .metadata)
+    }
+
+    func testAssignTypePreservesHigherPrecedenceType() {
+        var id = Identifier(name: "X", type: "REAL", typeSource: .metadata)
+        let conflict = id.assignType("INTEGER", source: .inferred)
+        XCTAssertEqual(id.type, "REAL")
+        XCTAssertEqual(id.typeSource, .metadata)
+        XCTAssertEqual(conflict?.existingType, "REAL")
+        XCTAssertEqual(conflict?.proposedType, "INTEGER")
+    }
 }

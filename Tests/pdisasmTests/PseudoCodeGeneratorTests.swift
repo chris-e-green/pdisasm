@@ -112,6 +112,26 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "FLAG := TRUE")
     }
 
+    func testInferredTypeDoesNotOverrideMetadataType() {
+        let loc = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 5, name: "VALUE", type: "REAL", typeSource: .metadata)
+        var gen = makeGenerator(labels: [loc])
+        gen.setLocType("S1_P1_L1_A5", "INTEGER", evidence: "test inference")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertEqual(loc.typeSource, .metadata)
+        XCTAssertEqual(gen.typeConflicts.count, 1)
+        XCTAssertEqual(gen.typeConflicts.first?.existingType, "REAL")
+        XCTAssertEqual(gen.typeConflicts.first?.proposedType, "INTEGER")
+    }
+
+    func testInferredTypeFillsUnknownType() {
+        let loc = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 5, name: "VALUE")
+        var gen = makeGenerator(labels: [loc])
+        gen.setLocType("S1_P1_L1_A5", "INTEGER", evidence: "test inference")
+        XCTAssertEqual(loc.type, "INTEGER")
+        XCTAssertEqual(loc.typeSource, .inferred)
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
     // MARK: - Call procedure
 
     func testCallProcedureGeneratesCallString() {

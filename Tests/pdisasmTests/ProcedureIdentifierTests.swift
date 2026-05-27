@@ -92,6 +92,7 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(decoded.procName, "CALC")
         XCTAssertTrue(decoded.isFunction)
         XCTAssertEqual(decoded.returnType, "REAL")
+        XCTAssertEqual(decoded.returnTypeSource, .metadata)
         XCTAssertEqual(decoded.parameters.count, 1)
         XCTAssertEqual(decoded.parameters[0].name, "X")
     }
@@ -109,5 +110,74 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertNotNil(json)
         XCTAssertFalse(original.isFunction)
         XCTAssertNil(original.returnType)
+    }
+
+    func testAssignReturnTypePreservesMetadataOverInference() {
+        let proc = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            returnType: "REAL",
+            returnTypeSource: .metadata
+        )
+        let loc = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "INTEGER", typeSource: .inferred)
+        let conflict = proc.assignReturnType(
+            loc.type,
+            source: loc.typeSource,
+            location: loc,
+            evidence: "test"
+        )
+        XCTAssertEqual(proc.returnType, "REAL")
+        XCTAssertEqual(proc.returnTypeSource, .metadata)
+        XCTAssertEqual(conflict?.existingType, "REAL")
+        XCTAssertEqual(conflict?.proposedType, "INTEGER")
+    }
+
+    func testAssignParameterTypeFillsUnknown() {
+        let proc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [Identifier(name: "X", type: "UNKNOWN")]
+        )
+        let loc = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "INTEGER", typeSource: .inferred)
+        let conflict = proc.assignParameterType(
+            at: 0,
+            loc.type,
+            source: loc.typeSource,
+            location: loc,
+            evidence: "test"
+        )
+        XCTAssertNil(conflict)
+        XCTAssertEqual(proc.parameters[0].type, "INTEGER")
+        XCTAssertEqual(proc.parameters[0].typeSource, .inferred)
+    }
+
+    func testSynchronizeProcedureSignaturesUpdatesParameterAndReturnTypes() {
+        let proc = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "FIRST", type: "UNKNOWN"),
+                Identifier(name: "SECOND", type: "UNKNOWN"),
+            ],
+            returnType: "UNKNOWN"
+        )
+        let locations: Set<Location> = [
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "BOOLEAN", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "CHAR", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 4, type: "INTEGER", typeSource: .inferred),
+        ]
+
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [proc],
+            locations: locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(proc.returnType, "BOOLEAN")
+        XCTAssertEqual(proc.parameters[0].type, "INTEGER")
+        XCTAssertEqual(proc.parameters[1].type, "CHAR")
     }
 }

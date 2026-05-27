@@ -8,6 +8,7 @@ struct PseudoCodeGenerator {
     let knownRecords: Set<PascalRecord>
     var allLocations: Set<Location>
     var labelLookup: [String: Location]
+    var typeConflicts: [TypeConflict] = []
 
     init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>, labelLookup: [String: Location]) {
         self.allProcedures = allProcedures
@@ -37,19 +38,15 @@ struct PseudoCodeGenerator {
         }
     }
     
-    mutating func setLocType(_ locStr: String, _ type: String) {
+    mutating func setLocType(_ locStr: String, _ type: String, evidence: String = "") {
         // if the location is a memory reference, set the type.
         if locStr.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A[0-9]*$/) {
             // convert string location to Location
             let l = Location(from: locStr)
             // find in allLocations and set type
             let found = allLocations.first(where: { $0 == l })
-            if found?.type == nil || found?.type == "UNKNOWN" || found?.type == "" {
-                found?.type = type
-            } else {
-                if found?.type != type {
-                    print("Type conflict for \(locStr): existing type \(found?.type ?? "nil") vs new type \(type)")
-                }
+            if let conflict = found?.assignType(type, source: .inferred, evidence: evidence) {
+                typeConflicts.append(conflict)
             }
         }
     }

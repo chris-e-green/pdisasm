@@ -7,8 +7,8 @@
   details of that memory location.
 - Either support markdown rendering in the gui, or use equivalent formatting to make it more readable. (Eg
   the table of segments should be markdown in CLI mode but a proper table in GUI mode).
-- It wouold be useful to be able to add comments to lines that are saved with the metadata (probably at the
-  instruction level, althoguh the comments are actually going to relate to the pseudocode...)
+- It would be useful to be able to add comments to lines that are saved with the metadata (probably at the
+  instruction level, although the comments are actually going to relate to the pseudocode...)
 - Need to be able to select multiple lines to copy - at the moment the GUI treats each line as
   completely independent.
 - Want to be able to toggle display of the stack state in the p-code display.
@@ -26,7 +26,7 @@
 - Refactor where pseudocode is generated, particularly where types are determined in multiple places.
 - Implement support for reading the unit interface section (where it exists)
 - When the user overrides a name (and particularly type) that type should take precedence over automatic
-  type determination. This probably mean there'd need to be a way to distinguish automatic from manual entrie.
+  type determination. This probably mean there'd need to be a way to distinguish automatic from manual entries.
 - Automatic typing of parameters/returns should update the signature of the procedure/function.
 - Rethink: should 'system' be just segment 0, or all 'reserved' segments (0, 2-6, 58-63) and maybe even the
   pre-assigned Apple Intrinsic Units (20-22, 28-31)? If so, we need to be careful not to clobber existing
@@ -58,7 +58,7 @@
 - ~~Auto-map proc/func parameters to their memory locations~~
 - ~~Auto-detect the datatype of memory locations based on the operations called and from that info it should be possible to extrapolate it to populate the types of derived variables too (integer, real, char should be fairly simple, boolean might be a bit harder)~~
 - ~~make sure all opcodes are doing what they need to in terms of either pseudo-code or stack~~
-- ~~tidy up parentheses when they end up being duplicated unneccessarily~~
+- ~~tidy up parentheses when they end up being duplicated unnecessarily~~
 - ~~memLocation etc should be checking if the location already exists in allLocations before creating one - and using the one it finds if it's there~~
 - ~~when parameters are being automapped to locations, the location is being duplicated instead of replaced - sometimes actually a duplicated remapped entry too (eg L1=Sn_Pn_Ln_An, L1=PROC.FUNCn:UNKNOWN, or even L1=PROC.FUNCn:UNKNOWN,L1=PROC.FUNCn:UNKNOWN)~~
 - ~~function results are being mapped to memory locations but not the parameters~~

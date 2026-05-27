@@ -24,7 +24,7 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         let result = try disassemble(
             filename: fixtureURL.path,
             verbose: false,
-            rewrite: false
+            writeMetadata: false
         )
         let output = renderDisassembly(
             result,

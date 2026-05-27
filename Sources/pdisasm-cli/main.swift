@@ -5,17 +5,17 @@ import pdisasm
 struct PdisasmCLI: @preconcurrency ParsableCommand {
     @Argument(help: "The file to decompile.")
     var filename: String = "Tests/pdisasmTests/Fixtures/SYSTEM.LIBRARY-02-00.bin"
-    @Option(help: "Run with verbose output.")
+    @Flag(help: "Run with verbose output.")
     var verbose: Bool = false
-    @Option(help: "Rewrite reference data.")
+    @Flag(help: "Write and overwrite metadata files.")
     var rewrite: Bool = false
-    @Option(help: "Show markup in output.")
+    @Flag(help: "Show markup in output.")
     var showMarkup: Bool = false
-    @Option(help: "Show pcode in output.")
+    @Flag(help: "Show pcode in output.")
     var showPcode: Bool = false
-    @Option(help: "Show pseudocode in output.")
+    @Flag(help: "Show pseudocode in output.")
     var showPseudocode: Bool = false
-    @Option(help: "Show graphviz DOT file for call tree in output.")
+    @Flag(help: "Show graphviz DOT file for call tree in output.")
     var showDot: Bool = false
     @MainActor mutating func run() throws {
         print(

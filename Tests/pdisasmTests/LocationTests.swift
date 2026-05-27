@@ -138,6 +138,7 @@ final class LocationTests: XCTestCase {
         XCTAssertEqual(decoded.addr, 42)
         XCTAssertEqual(decoded.name, "TEST")
         XCTAssertEqual(decoded.type, "INTEGER")
+        XCTAssertEqual(decoded.typeSource, .metadata)
         XCTAssertEqual(original, decoded)
     }
 
@@ -149,5 +150,31 @@ final class LocationTests: XCTestCase {
         XCTAssertNil(decoded.procedure)
         XCTAssertNil(decoded.lexLevel)
         XCTAssertNil(decoded.addr)
+        XCTAssertEqual(decoded.typeSource, .unknown)
+    }
+
+    func testDecodingWithoutTypeSourceTreatsTypeAsMetadata() throws {
+        let json = #"{"segment":1,"procedure":2,"lexLevel":0,"addr":3,"name":"VALUE","type":"INTEGER"}"#
+        let decoded = try JSONDecoder().decode(Location.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.type, "INTEGER")
+        XCTAssertEqual(decoded.typeSource, .metadata)
+    }
+
+    func testAssignTypePreservesHigherPrecedenceType() {
+        let loc = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "REAL", typeSource: .metadata)
+        let conflict = loc.assignType("INTEGER", source: .inferred, evidence: "test")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertEqual(loc.typeSource, .metadata)
+        XCTAssertEqual(conflict?.existingType, "REAL")
+        XCTAssertEqual(conflict?.proposedType, "INTEGER")
+    }
+
+    func testAssignTypeAllowsHigherPrecedenceType() {
+        let loc = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "INTEGER", typeSource: .inferred)
+        let conflict = loc.assignType("REAL", source: .metadata, evidence: "test")
+        XCTAssertEqual(loc.type, "REAL")
+        XCTAssertEqual(loc.typeSource, .metadata)
+        XCTAssertEqual(conflict?.existingType, "INTEGER")
+        XCTAssertEqual(conflict?.proposedType, "REAL")
     }
 }

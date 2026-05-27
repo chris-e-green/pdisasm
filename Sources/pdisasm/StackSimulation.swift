@@ -1,12 +1,13 @@
 import Foundation
 
 // MARK: - Stack Simulation and Pseudo-Code Generation
+@discardableResult
 func simulateStackAndGeneratePseudocode(
     proc: Procedure,
     knownRecords: Set<PascalRecord>,
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>
-) {
+) -> [TypeConflict] {
     proc.entryPoints.insert(proc.enterIC)
     proc.entryPoints.insert(proc.exitIC)
 
@@ -54,4 +55,6 @@ func simulateStackAndGeneratePseudocode(
             "LAB\($0):"
         )
     }
+
+    return pseudoGen.typeConflicts
 }

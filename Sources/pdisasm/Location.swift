@@ -1,3 +1,52 @@
+public enum TypeSource: String, Codable, Sendable {
+    case unknown
+    case inferred
+    case procedureSignature
+    case metadata
+    case user
+
+    var precedence: Int {
+        switch self {
+        case .unknown: return 0
+        case .inferred: return 1
+        case .procedureSignature: return 2
+        case .metadata: return 3
+        case .user: return 4
+        }
+    }
+}
+
+public struct TypeConflict: Hashable, Sendable {
+    public let segment: Int
+    public let procedure: Int?
+    public let lexLevel: Int?
+    public let addr: Int?
+    public let existingType: String
+    public let existingSource: TypeSource
+    public let proposedType: String
+    public let proposedSource: TypeSource
+    public let evidence: String
+
+    init(
+        location: Location,
+        existingType: String,
+        existingSource: TypeSource,
+        proposedType: String,
+        proposedSource: TypeSource,
+        evidence: String
+    ) {
+        self.segment = location.segment
+        self.procedure = location.procedure
+        self.lexLevel = location.lexLevel
+        self.addr = location.addr
+        self.existingType = existingType
+        self.existingSource = existingSource
+        self.proposedType = proposedType
+        self.proposedSource = proposedSource
+        self.evidence = evidence
+    }
+}
+
 public final class Location: Hashable, CustomStringConvertible, Comparable,
     Codable
 {
@@ -8,9 +57,10 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
     public var isParam: Bool
     public var name: String
     public var type: String
+    public var typeSource: TypeSource
 
     enum CodingKeys: String, CodingKey {
-        case segment, procedure, lexLevel, addr, name, type
+        case segment, procedure, lexLevel, addr, name, type, typeSource
     }
 
     public static func < (lhs: Location, rhs: Location) -> Bool {
@@ -47,6 +97,14 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         self.isParam = false
         self.name = try container.decode(String.self, forKey: CodingKeys.name)
         self.type = try container.decode(String.self, forKey: CodingKeys.type)
+        if let rawTypeSource = try container.decodeIfPresent(
+            String.self,
+            forKey: CodingKeys.typeSource
+        ), !rawTypeSource.isEmpty {
+            self.typeSource = TypeSource(rawValue: rawTypeSource) ?? .metadata
+        } else {
+            self.typeSource = self.type.isEmpty || self.type == "UNKNOWN" ? .unknown : .metadata
+        }
     }
 
     public init(
@@ -56,7 +114,8 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         addr: Int? = nil,
         isParam: Bool = false,
         name: String = "",
-        type: String = ""
+        type: String = "",
+        typeSource: TypeSource? = nil
     ) {
         self.segment = segment
         self.procedure = procedure
@@ -65,6 +124,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         self.isParam = isParam
         self.name = name
         self.type = type
+        self.typeSource = typeSource ?? (type.isEmpty || type == "UNKNOWN" ? .unknown : .metadata)
     }
 
     public init(from str: String) {
@@ -74,6 +134,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         self.segment = 0
         self.name = ""
         self.type = ""
+        self.typeSource = .unknown
         if str.contains("_") {
             let sa = str.split(separator: "_")
             for sai in sa {
@@ -99,6 +160,7 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
         try container.encode(self.addr, forKey: CodingKeys.addr)
         try container.encode(self.name, forKey: CodingKeys.name)
         try container.encode(self.type, forKey: CodingKeys.type)
+        try container.encode(self.typeSource.rawValue, forKey: CodingKeys.typeSource)
     }
 
     public static func == (lhs: Location, rhs: Location) -> Bool {
@@ -136,5 +198,45 @@ public final class Location: Hashable, CustomStringConvertible, Comparable,
 
     public var description: String {
         type.isEmpty ? displayName : "\(displayName):\(type)"
+    }
+
+    @discardableResult
+    public func assignType(
+        _ proposedType: String,
+        source proposedSource: TypeSource,
+        evidence: String = ""
+    ) -> TypeConflict? {
+        let newType = proposedType.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newType.isEmpty && newType != "UNKNOWN" else { return nil }
+
+        let currentType = type.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentType.isEmpty || currentType == "UNKNOWN" {
+            type = newType
+            typeSource = proposedSource
+            return nil
+        }
+
+        if currentType == newType {
+            if proposedSource.precedence > typeSource.precedence {
+                typeSource = proposedSource
+            }
+            return nil
+        }
+
+        let conflict = TypeConflict(
+            location: self,
+            existingType: currentType,
+            existingSource: typeSource,
+            proposedType: newType,
+            proposedSource: proposedSource,
+            evidence: evidence
+        )
+
+        if proposedSource.precedence > typeSource.precedence {
+            type = newType
+            typeSource = proposedSource
+        }
+
+        return conflict
     }
 }

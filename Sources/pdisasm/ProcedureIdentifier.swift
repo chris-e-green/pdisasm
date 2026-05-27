@@ -16,7 +16,8 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         procedure: Int,
         procName: String? = nil,
         parameters: [Identifier] = [],
-        returnType: String? = nil
+        returnType: String? = nil,
+        returnTypeSource: TypeSource? = nil
     ) {
         self.isFunction = isFunction
         self.isAssembly = isAssembly
@@ -25,8 +26,10 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         self.procedure = procedure
         self.procName = procName
         self.parameters = parameters
+        self.returnTypeSource = .unknown
         if isFunction {
             self.returnType = returnType ?? "UNKNOWN"
+            self.returnTypeSource = returnTypeSource ?? (self.returnType == "UNKNOWN" ? .unknown : .metadata)
         }
     }
 
@@ -94,10 +97,18 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
                 return Identifier(name: parts[0], type: "")
             }
         }
-        self.returnType = try container.decode(
+        self.returnType = try container.decodeIfPresent(
             String.self,
             forKey: CodingKeys.returnType
         )
+        if let rawReturnTypeSource = try container.decodeIfPresent(
+            String.self,
+            forKey: CodingKeys.returnTypeSource
+        ), !rawReturnTypeSource.isEmpty {
+            self.returnTypeSource = TypeSource(rawValue: rawReturnTypeSource) ?? .metadata
+        } else {
+            self.returnTypeSource = (self.returnType ?? "").isEmpty || self.returnType == "UNKNOWN" ? .unknown : .metadata
+        }
         self.isAssembly = try container.decode(
             Bool.self,
             forKey: CodingKeys.isAssembly
@@ -108,6 +119,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         )
         if !self.isFunction {
             self.returnType = nil
+            self.returnTypeSource = .unknown
         }
     }
 
@@ -122,6 +134,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
             forKey: CodingKeys.parameters
         )
         try container.encode(self.returnType, forKey: CodingKeys.returnType)
+        try container.encode(self.returnTypeSource.rawValue, forKey: CodingKeys.returnTypeSource)
         try container.encode(self.isAssembly, forKey: CodingKeys.isAssembly)
         try container.encode(self.isFunction, forKey: CodingKeys.isFunction)
     }
@@ -132,6 +145,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         case procName = "procName"
         case parameters = "parameters"
         case returnType = "returnType"
+        case returnTypeSource = "returnTypeSource"
         case isAssembly = "isAssembly"
         case isFunction = "isFunction"
 
@@ -144,4 +158,69 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     public var procName: String?
     public var parameters: [Identifier] = []
     public var returnType: String?
+    public var returnTypeSource: TypeSource = .unknown
+
+    @discardableResult
+    public func assignReturnType(
+        _ proposedType: String,
+        source proposedSource: TypeSource,
+        location: Location,
+        evidence: String
+    ) -> TypeConflict? {
+        guard isFunction else { return nil }
+        let newType = proposedType.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newType.isEmpty && newType != "UNKNOWN" else { return nil }
+
+        let currentType = (returnType ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentType.isEmpty || currentType == "UNKNOWN" {
+            returnType = newType
+            returnTypeSource = proposedSource
+            return nil
+        }
+
+        if currentType == newType {
+            if proposedSource.precedence > returnTypeSource.precedence {
+                returnTypeSource = proposedSource
+            }
+            return nil
+        }
+
+        let conflict = TypeConflict(
+            location: location,
+            existingType: currentType,
+            existingSource: returnTypeSource,
+            proposedType: newType,
+            proposedSource: proposedSource,
+            evidence: evidence
+        )
+
+        if proposedSource.precedence > returnTypeSource.precedence {
+            returnType = newType
+            returnTypeSource = proposedSource
+        }
+
+        return conflict
+    }
+
+    @discardableResult
+    public func assignParameterType(
+        at index: Int,
+        _ proposedType: String,
+        source proposedSource: TypeSource,
+        location: Location,
+        evidence: String
+    ) -> TypeConflict? {
+        guard parameters.indices.contains(index) else { return nil }
+        if let conflict = parameters[index].assignType(proposedType, source: proposedSource) {
+            return TypeConflict(
+                location: location,
+                existingType: conflict.existingType,
+                existingSource: conflict.existingSource,
+                proposedType: conflict.proposedType,
+                proposedSource: conflict.proposedSource,
+                evidence: evidence
+            )
+        }
+        return nil
+    }
 }

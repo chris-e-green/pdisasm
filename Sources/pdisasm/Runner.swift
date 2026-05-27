@@ -162,6 +162,7 @@ func exportLabels(
         let enc = CSVEncoder {
             $0.headers = [
                 "segment", "procedure", "lexLevel", "addr", "name", "type",
+                "typeSource",
             ]
             $0.bufferingStrategy = .sequential
         }
@@ -224,7 +225,7 @@ func exportProcedures(
             configuration.headers = [
                 "segmentNumber", "segmentName", "procNumber", "procName",
                 "isFunction",
-                "isAssembly", "parameters", "returnType",
+                "isAssembly", "parameters", "returnType", "returnTypeSource",
             ]
         }
         try enc.encode(procedures, into: fileURL)
@@ -453,6 +454,60 @@ func normaliseMemoryLocations(
     }
 }
 
+func parameterLocationAddresses(for procedure: ProcedureIdentifier) -> [(index: Int, addr: Int)] {
+    let startAddr = procedure.isFunction ? 3 : 1
+    return procedure.parameters.indices.map { index in
+        (index: index, addr: startAddr + (procedure.parameters.count - 1 - index))
+    }
+}
+
+func synchronizeProcedureSignatures(
+    procedures: [ProcedureIdentifier],
+    locations: Set<Location>
+) -> [TypeConflict] {
+    var typeConflicts: [TypeConflict] = []
+
+    for procedure in procedures {
+        if procedure.isFunction,
+           let returnLocation = locations.first(where: {
+               $0.segment == procedure.segment
+                   && $0.procedure == procedure.procedure
+                   && $0.addr == 1
+           }) {
+            if let conflict = procedure.assignReturnType(
+                returnLocation.type,
+                source: returnLocation.typeSource,
+                location: returnLocation,
+                evidence: "\(procedure.shortDescription) inferred return location"
+            ) {
+                typeConflicts.append(conflict)
+            }
+        }
+
+        for (index, addr) in parameterLocationAddresses(for: procedure) {
+            guard let parameterLocation = locations.first(where: {
+                $0.segment == procedure.segment
+                    && $0.procedure == procedure.procedure
+                    && $0.addr == addr
+            }) else {
+                continue
+            }
+
+            if let conflict = procedure.assignParameterType(
+                at: index,
+                parameterLocation.type,
+                source: parameterLocation.typeSource,
+                location: parameterLocation,
+                evidence: "\(procedure.shortDescription) inferred parameter \(procedure.parameters[index].name)"
+            ) {
+                typeConflicts.append(conflict)
+            }
+        }
+    }
+
+    return typeConflicts
+}
+
 // MARK: - Public Entry Point
 
 /// Holds the structured results of a disassembly run.
@@ -464,13 +519,15 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let allLocations: Set<Location>
     public let allProcedures: [ProcedureIdentifier]
     public let allCallers: Set<Call>
+    public let typeConflicts: [TypeConflict]
 }
 
 /// Disassemble a binary file and return structured results without printing.
 public func disassemble(
     filename: String,
     verbose: Bool = false,
-    rewrite: Bool = true
+    writeMetadata: Bool = false,
+    overwriteMetadata: Bool = false
 ) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
@@ -491,6 +548,7 @@ public func disassemble(
     var allProcedures: [ProcedureIdentifier] = []
     var sysProcedures: [ProcedureIdentifier] = []
     var allCallers: Set<Call> = []
+    var typeConflicts: [TypeConflict] = []
     var dataSegments: [Int] = []
 
     var knownRecords: Set<PascalRecord> = [
@@ -585,7 +643,8 @@ public func disassemble(
         ])
     ]
 
-    // Try loading name maps (optional files in repo)
+    // Try loading name maps from Application Support. Missing metadata is fine;
+    // writeback is controlled separately by the caller.
     var globalNames: [Int: Identifier] = [:]
     let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
     let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
@@ -598,11 +657,6 @@ public func disassemble(
     let globalsFile = "globals_ver_\(version)"
     let appSupportDirectory = URL.applicationSupportDirectory
         .appendingPathComponent("pdisasm")
-    try FileManager.default.createDirectory(
-        at: appSupportDirectory,
-        withIntermediateDirectories: true,
-        attributes: nil
-    )
 
     importKnownRecords(
         fromJson: sysRecordsFile,
@@ -938,7 +992,13 @@ public func disassemble(
                             && $0.addr == 1
                     }) {
                         ret.name = pt.procName ?? pt.shortDescription
-                        ret.type = pt.returnType ?? "UNKNOWN"
+                        if let conflict = ret.assignType(
+                            pt.returnType ?? "UNKNOWN",
+                            source: pt.returnTypeSource,
+                            evidence: "\(pt.shortDescription) return"
+                        ) {
+                            typeConflicts.append(conflict)
+                        }
                         ret.isParam = true
                         allLocations.update(with: ret)
                     } else {
@@ -950,7 +1010,8 @@ public func disassemble(
                                 addr: 1,
                                 isParam: true,
                                 name: pt.procName ?? pt.shortDescription,
-                                type: pt.returnType ?? "UNKNOWN"
+                                type: pt.returnType ?? "UNKNOWN",
+                                typeSource: pt.returnTypeSource
                             )
                         )
                     }
@@ -961,7 +1022,13 @@ public func disassemble(
                                 && $0.addr == 2
                         }) {
                             ret.name = pt.procName ?? pt.shortDescription
-                            ret.type = pt.returnType ?? "REAL"
+                            if let conflict = ret.assignType(
+                                pt.returnType ?? "REAL",
+                                source: pt.returnTypeSource,
+                                evidence: "\(pt.shortDescription) real return"
+                            ) {
+                                typeConflicts.append(conflict)
+                            }
                             ret.isParam = true
                             allLocations.update(with: ret)
                         } else {
@@ -973,7 +1040,8 @@ public func disassemble(
                                     addr: 2,
                                     isParam: true,
                                     name: pt.procName ?? pt.shortDescription,
-                                    type: pt.returnType ?? "REAL"
+                                    type: pt.returnType ?? "REAL",
+                                    typeSource: pt.returnTypeSource
                                 )
                             )
                         }
@@ -986,7 +1054,13 @@ public func disassemble(
                             && $0.addr == paramAddr
                     }) {
                         par.name = param.name
-                        par.type = param.type
+                        if let conflict = par.assignType(
+                            param.type,
+                            source: param.typeSource,
+                            evidence: "\(pt.shortDescription) parameter \(param.name)"
+                        ) {
+                            typeConflicts.append(conflict)
+                        }
                         par.isParam = true
                         allLocations.update(with: par)
                     } else {
@@ -998,7 +1072,8 @@ public func disassemble(
                                 addr: paramAddr,
                                 isParam: true,
                                 name: param.name,
-                                type: param.type
+                                type: param.type,
+                                typeSource: param.typeSource
                             )
                         )
                     }
@@ -1017,14 +1092,19 @@ public func disassemble(
                 // skip assembly procedures
                 continue
             }
-            simulateStackAndGeneratePseudocode(
+            typeConflicts.append(contentsOf: simulateStackAndGeneratePseudocode(
                 proc: proc,
                 knownRecords: knownRecords,
                 allProcedures: &allProcedures,
                 allLocations: &allLocations
-            )
+            ))
         }
     }
+
+    typeConflicts.append(contentsOf: synchronizeProcedureSignatures(
+        procedures: allProcedures,
+        locations: allLocations
+    ))
 
     let result = DisassemblyResult(
         sourceFilename: fileIdentifier,
@@ -1033,57 +1113,80 @@ public func disassemble(
         dataSegments: dataSegments,
         allLocations: allLocations,
         allProcedures: allProcedures,
-        allCallers: allCallers
+        allCallers: allCallers,
+        typeConflicts: typeConflicts
     )
 
-    exportKnownRecords(
-        toJson: sysRecordsFile,
-        from: knownRecords.filter { $0.isSystemRecord == true },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
+    if writeMetadata {
+        try FileManager.default.createDirectory(
+            at: appSupportDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
 
-    exportKnownRecords(
-        toJson: allRecordsFile,
-        from: knownRecords.filter { $0.isSystemRecord == false },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
+        exportKnownRecords(
+            toJson: sysRecordsFile,
+            from: knownRecords.filter { $0.isSystemRecord == true },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
 
-    // we don't export segment 0 into the app file
-    // we also don't export locations without addresses (as they're actually procedures/functions)
-    // and we don't export entries that are marked as parameters because they're exported as part of the procedure
-    exportLabels(
-        toCSV: allLabelsCSVFile,
-        from: allLocations.filter { !systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
-    // the system file contains segment 0, as long as they're not parameters or without an address
-    exportLabels(
-        toCSV: sysLabelsCSVFile,
-        from: allLocations.filter { systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
+        exportKnownRecords(
+            toJson: allRecordsFile,
+            from: knownRecords.filter { $0.isSystemRecord == false },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
 
-    // the app procedures contains any procedure/function that's not in segment 0
-    exportProcedures(
-        toCSV: allProceduresCSVFile,
-        from: allProcedures.filter { !systemSegments.contains($0.segment) },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
+        // we don't export segment 0 into the app file
+        // we also don't export locations without addresses (as they're actually procedures/functions)
+        // and we don't export entries that are marked as parameters because they're exported as part of the procedure
+        exportLabels(
+            toCSV: allLabelsCSVFile,
+            from: allLocations.filter { !systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+        // the system file contains segment 0, as long as they're not parameters or without an address
+        exportLabels(
+            toCSV: sysLabelsCSVFile,
+            from: allLocations.filter { systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
 
-    // the system procedures contains all procedures/functions except segment 0
-    exportProcedures(
-        toCSV: sysProceduresCSVFile,
-        from: allProcedures.filter { systemSegments.contains($0.segment) },
-        overwrite: rewrite,
-        appSupportDirectory: appSupportDirectory
-    )
+        // the app procedures contains any procedure/function that's not in segment 0
+        exportProcedures(
+            toCSV: allProceduresCSVFile,
+            from: allProcedures.filter { !systemSegments.contains($0.segment) },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        // the system procedures contains all procedures/functions except segment 0
+        exportProcedures(
+            toCSV: sysProceduresCSVFile,
+            from: allProcedures.filter { systemSegments.contains($0.segment) },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+    }
 
     return result
+}
+
+@available(*, deprecated, renamed: "disassemble(filename:verbose:writeMetadata:overwriteMetadata:)")
+public func disassemble(
+    filename: String,
+    verbose: Bool = false,
+    rewrite: Bool
+) throws -> DisassemblyResult {
+    try disassemble(
+        filename: filename,
+        verbose: verbose,
+        writeMetadata: rewrite,
+        overwriteMetadata: rewrite
+    )
 }
 
 /// Render a ``DisassemblyResult`` to a String using the shared output logic.
@@ -1130,7 +1233,8 @@ public func runPdisasm(
     let result = try disassemble(
         filename: filename,
         verbose: verbose,
-        rewrite: rewrite
+        writeMetadata: rewrite,
+        overwriteMetadata: rewrite
     )
 
     outputResults(
