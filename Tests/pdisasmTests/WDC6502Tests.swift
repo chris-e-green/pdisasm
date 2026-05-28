@@ -120,6 +120,35 @@ final class WDC6502Tests: XCTestCase {
         XCTAssertEqual(proc.identifier?.procName, "PROC31")
     }
 
+    func testDecodeAssemblerProcedureUsesSegmentTableNameForDefaultIdentifier() throws {
+        var bytes: [UInt8] = []
+        bytes += [0x60]          // RTS
+        bytes += [0x00, 0x00]    // interp
+        bytes += [0x00, 0x00]    // proc
+        bytes += [0x00, 0x00]    // seg
+        bytes += [0x00, 0x00]    // base
+        let enterSelfRefPos = bytes.count
+        bytes += [UInt8(enterSelfRefPos), 0x00]  // enterIC = 0
+        bytes += [0x1F, 0x00]    // proc num / lex level
+
+        let code = Data(bytes)
+        var proc = Procedure()
+        var assemblerEntryPoints: Set<Int> = []
+
+        try decodeAssemblerProcedure(
+            segmentNumber: 20,
+            segmentName: "GRAPHICS",
+            procedureNumber: 31,
+            proc: &proc,
+            code: code,
+            addr: code.count - 2,
+            assemblerEntryPoints: &assemblerEntryPoints
+        )
+
+        XCTAssertEqual(proc.identifier?.segmentName, "GRAPHICS")
+        XCTAssertEqual(proc.identifier?.shortDescription, "GRAPHICS.PROC31")
+    }
+
     // MARK: - Branch destination calculation
 
     func testBranchForwardDestination() throws {

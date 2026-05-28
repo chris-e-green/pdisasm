@@ -498,6 +498,7 @@ private func processAssemblerDataRegion(
 
 func decodeAssemblerProcedure(
     segmentNumber: Int,
+    segmentName: String? = nil,
     procedureNumber: Int,
     proc: inout Procedure,
     code: Data,
@@ -514,6 +515,9 @@ func decodeAssemblerProcedure(
         // Preserve metadata-provided function/procedure classification.
         existingIdentifier.isAssembly = true
         existingIdentifier.segment = segmentNumber
+        if existingIdentifier.segmentName?.isEmpty != false {
+            existingIdentifier.segmentName = segmentName
+        }
         existingIdentifier.procedure = procedureNumber
         proc.identifier = existingIdentifier
     } else {
@@ -521,6 +525,7 @@ func decodeAssemblerProcedure(
             isFunction: false,
             isAssembly: true,
             segment: segmentNumber,
+            segmentName: segmentName,
             procedure: procedureNumber
         )
     }

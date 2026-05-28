@@ -869,6 +869,7 @@ public func disassemble(
                 }
                 try? decodeAssemblerProcedure(
                     segmentNumber: seg.segNum,
+                    segmentName: seg.name,
                     procedureNumber: procNumber,
                     proc: &proc,
                     code: segCodeBlock,
