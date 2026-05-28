@@ -111,7 +111,7 @@ final class DisassemblyViewModel {
 
     func selectOutputLine(lineID: Int, at index: Int, extending: Bool, toggling: Bool) {
         if extending {
-            let anchor = selectionAnchorIndex ?? index
+            let anchor = selectionAnchorIndex ?? firstSelectedOutputLineIndex() ?? index
             selectOutputLineRange(from: anchor, to: index)
             return
         }
@@ -152,6 +152,10 @@ final class DisassemblyViewModel {
         guard !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func firstSelectedOutputLineIndex() -> Int? {
+        filteredLines.firstIndex { selectedOutputLineIDs.contains($0.id) }
     }
 
     func commitSearch() {

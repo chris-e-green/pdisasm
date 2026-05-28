@@ -6,6 +6,7 @@ import pdisasm
 public struct ContentView: View {
     @State private var viewModel = DisassemblyViewModel()
     @Bindable var appState: GUIAppState
+    @FocusState private var isSearchFieldFocused: Bool
 
     public init(appState: GUIAppState) {
         self.appState = appState
@@ -47,6 +48,7 @@ public struct ContentView: View {
                 TextField("Search disassembly", text: $viewModel.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: 200)
+                    .focused($isSearchFieldFocused)
                     .onSubmit { viewModel.commitSearch() }
 
                 if matchCount > 0 {
@@ -103,7 +105,6 @@ public struct ContentView: View {
                     Label("Copy", systemImage: "doc.on.doc")
                 }
                 .disabled(viewModel.selectedOutputLineCount == 0)
-                .keyboardShortcut("c", modifiers: .command)
 
                 Toggle("Markup", isOn: $viewModel.showMarkup)
                 Toggle("P-Code", isOn: $viewModel.showPCode)
@@ -130,6 +131,28 @@ public struct ContentView: View {
         .focusedSceneValue(\.openFileAction) {
             viewModel.showFileImporter = true
         }
+        .focusedSceneValue(\.copyOutputSelectionAction) {
+            viewModel.copySelectedOutputLines()
+        }
+        .focusedSceneValue(\.hasOutputSelection, viewModel.selectedOutputLineCount > 0)
+        .focusedSceneValue(\.findDisassemblyAction) {
+            isSearchFieldFocused = true
+        }
+        .focusedSceneValue(\.findNextDisassemblyMatchAction) {
+            viewModel.nextMatch()
+        }
+        .focusedSceneValue(\.findPreviousDisassemblyMatchAction) {
+            viewModel.previousMatch()
+        }
+        .focusedSceneValue(\.hasDisassemblySearchMatches, !viewModel.searchMatchIndices.isEmpty)
+        .focusedSceneValue(\.disassemblyDisplayOptions, DisassemblyDisplayOptions(
+            showMarkup: $viewModel.showMarkup,
+            showPCode: $viewModel.showPCode,
+            showStackState: $viewModel.showStackState,
+            showPseudoCode: $viewModel.showPseudoCode,
+            showVariables: $viewModel.showVariables,
+            verbose: $viewModel.verbose
+        ))
         .onAppear {
             viewModel.restoreLastFile()
             appState.relevantMetadataFiles = viewModel.relevantMetadataFiles
@@ -283,6 +306,10 @@ struct DetailView: View {
                     dragSelectionAnchorIndex = outputRowIndex(at: value.startLocation) ?? currentIndex
                 }
 
+                guard !isClick(value) else {
+                    return
+                }
+
                 let anchorIndex = dragSelectionAnchorIndex ?? currentIndex
                 viewModel.selectOutputLineRange(from: anchorIndex, to: currentIndex)
             }
@@ -359,9 +386,81 @@ public struct OpenFileActionKey: FocusedValueKey {
     public typealias Value = () -> Void
 }
 
+public struct CopyOutputSelectionActionKey: FocusedValueKey {
+    public typealias Value = () -> Void
+}
+
+public struct HasOutputSelectionKey: FocusedValueKey {
+    public typealias Value = Bool
+}
+
+public struct FindDisassemblyActionKey: FocusedValueKey {
+    public typealias Value = () -> Void
+}
+
+public struct FindNextDisassemblyMatchActionKey: FocusedValueKey {
+    public typealias Value = () -> Void
+}
+
+public struct FindPreviousDisassemblyMatchActionKey: FocusedValueKey {
+    public typealias Value = () -> Void
+}
+
+public struct HasDisassemblySearchMatchesKey: FocusedValueKey {
+    public typealias Value = Bool
+}
+
+public struct DisassemblyDisplayOptions {
+    public var showMarkup: Binding<Bool>
+    public var showPCode: Binding<Bool>
+    public var showStackState: Binding<Bool>
+    public var showPseudoCode: Binding<Bool>
+    public var showVariables: Binding<Bool>
+    public var verbose: Binding<Bool>
+}
+
+public struct DisassemblyDisplayOptionsKey: FocusedValueKey {
+    public typealias Value = DisassemblyDisplayOptions
+}
+
 public extension FocusedValues {
     var openFileAction: (() -> Void)? {
         get { self[OpenFileActionKey.self] }
         set { self[OpenFileActionKey.self] = newValue }
+    }
+
+    var copyOutputSelectionAction: (() -> Void)? {
+        get { self[CopyOutputSelectionActionKey.self] }
+        set { self[CopyOutputSelectionActionKey.self] = newValue }
+    }
+
+    var hasOutputSelection: Bool? {
+        get { self[HasOutputSelectionKey.self] }
+        set { self[HasOutputSelectionKey.self] = newValue }
+    }
+
+    var findDisassemblyAction: (() -> Void)? {
+        get { self[FindDisassemblyActionKey.self] }
+        set { self[FindDisassemblyActionKey.self] = newValue }
+    }
+
+    var findNextDisassemblyMatchAction: (() -> Void)? {
+        get { self[FindNextDisassemblyMatchActionKey.self] }
+        set { self[FindNextDisassemblyMatchActionKey.self] = newValue }
+    }
+
+    var findPreviousDisassemblyMatchAction: (() -> Void)? {
+        get { self[FindPreviousDisassemblyMatchActionKey.self] }
+        set { self[FindPreviousDisassemblyMatchActionKey.self] = newValue }
+    }
+
+    var hasDisassemblySearchMatches: Bool? {
+        get { self[HasDisassemblySearchMatchesKey.self] }
+        set { self[HasDisassemblySearchMatchesKey.self] = newValue }
+    }
+
+    var disassemblyDisplayOptions: DisassemblyDisplayOptions? {
+        get { self[DisassemblyDisplayOptionsKey.self] }
+        set { self[DisassemblyDisplayOptionsKey.self] = newValue }
     }
 }

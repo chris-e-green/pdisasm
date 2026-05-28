@@ -122,6 +122,14 @@ public func renderStructuredLines(
     var nextID = 0
 
     func addLine(_ kind: LineKind, _ text: String, anchor: String? = nil) {
+        if text.contains("\n") {
+            let parts = text.split(separator: "\n", omittingEmptySubsequences: false)
+            for (index, part) in parts.enumerated() {
+                addLine(kind, String(part), anchor: index == 0 ? anchor : nil)
+            }
+            return
+        }
+
         lines.append(OutputLine(id: nextID, kind: kind, text: text, anchor: anchor))
         nextID += 1
     }
