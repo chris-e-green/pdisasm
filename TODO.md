@@ -9,9 +9,6 @@
   the table of segments should be markdown in CLI mode but a proper table in GUI mode).
 - It would be useful to be able to add comments to lines that are saved with the metadata (probably at the
   instruction level, although the comments are actually going to relate to the pseudocode...)
-- Need to be able to select multiple lines to copy - at the moment the GUI treats each line as
-  completely independent.
-- Want to be able to toggle display of the stack state in the p-code display.
 - In GUI, allow editing of names and types.
 - Check that the markdown switch only enables/disables markdown, and leaves pseudocode intact.
 - Maybe the GUI layout should be separated into multiple windows - one for the files, one for segments,
@@ -42,6 +39,9 @@
 
 ## Completed
 
+- ~~Need to be able to select multiple lines to copy - at the moment the GUI treats each line as
+  completely independent.~~
+- ~~Want to be able to toggle display of the stack state in the p-code display.~~
 - ~~Handle situations where a REAL value is accessed at the bit level (eg. to extract the exponent or mantissa).~~
 - ~~Track type source/precedence so user and metadata types take precedence over automatic type determination.~~
 - ~~Mark GUI metadata type edits as user-sourced metadata.~~

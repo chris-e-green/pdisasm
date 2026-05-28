@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import pdisasm
@@ -24,6 +25,9 @@ final class DisassemblyViewModel {
     /// The anchor ID of the procedure to scroll to (e.g. "2.3"). Set by sidebar selection.
     var selectedProcedure: String?
     var procedureScrollRequest: Int = 0
+
+    var selectedOutputLineIDs: Set<Int> = []
+    private var selectionAnchorIndex: Int?
 
     // MARK: - Search
 
@@ -94,6 +98,62 @@ final class DisassemblyViewModel {
         procedureScrollRequest += 1
     }
 
+    var selectedOutputLineCount: Int {
+        filteredLines.filter { selectedOutputLineIDs.contains($0.id) }.count
+    }
+
+    var selectedOutputText: String {
+        filteredLines
+            .filter { selectedOutputLineIDs.contains($0.id) }
+            .map(\.text)
+            .joined(separator: "\n")
+    }
+
+    func selectOutputLine(lineID: Int, at index: Int, extending: Bool, toggling: Bool) {
+        if extending {
+            let anchor = selectionAnchorIndex ?? index
+            selectOutputLineRange(from: anchor, to: index)
+            return
+        }
+
+        if toggling {
+            if selectedOutputLineIDs.contains(lineID) {
+                selectedOutputLineIDs.remove(lineID)
+            } else {
+                selectedOutputLineIDs.insert(lineID)
+            }
+            selectionAnchorIndex = index
+            return
+        }
+
+        selectedOutputLineIDs = [lineID]
+        selectionAnchorIndex = index
+    }
+
+    func selectOutputLineRange(from anchor: Int, to index: Int) {
+        guard filteredLines.indices.contains(anchor),
+            filteredLines.indices.contains(index)
+        else {
+            return
+        }
+
+        let bounds = min(anchor, index)...max(anchor, index)
+        selectedOutputLineIDs = Set(bounds.map { filteredLines[$0].id })
+        selectionAnchorIndex = anchor
+    }
+
+    func clearOutputSelection() {
+        selectedOutputLineIDs.removeAll()
+        selectionAnchorIndex = nil
+    }
+
+    func copySelectedOutputLines() {
+        let text = selectedOutputText
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     func commitSearch() {
         searchDebounceTask?.cancel()
         committedSearchText = searchText
@@ -152,6 +212,11 @@ final class DisassemblyViewModel {
 
     private func rebuildFilteredLinesAndSearchMatches() {
         filteredLines = filterLines()
+        let visibleLineIDs = Set(filteredLines.map(\.id))
+        selectedOutputLineIDs.formIntersection(visibleLineIDs)
+        if let selectionAnchorIndex, !filteredLines.indices.contains(selectionAnchorIndex) {
+            self.selectionAnchorIndex = nil
+        }
         rebuildSearchMatches(resetCurrentIndex: false)
     }
 
@@ -345,6 +410,7 @@ final class DisassemblyViewModel {
         filteredLines = []
         searchMatchIndices = []
         searchMatchIndexSet = []
+        clearOutputSelection()
         currentMatchIndex = 0
         segments = []
 

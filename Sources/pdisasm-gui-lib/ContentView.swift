@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import pdisasm
@@ -96,6 +97,14 @@ public struct ContentView: View {
                 }
                 .help("Choose search status width")
 
+                Button {
+                    viewModel.copySelectedOutputLines()
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .disabled(viewModel.selectedOutputLineCount == 0)
+                .keyboardShortcut("c", modifiers: .command)
+
                 Toggle("Markup", isOn: $viewModel.showMarkup)
                 Toggle("P-Code", isOn: $viewModel.showPCode)
                 Toggle("Stack", isOn: $viewModel.showStackState)
@@ -169,6 +178,10 @@ struct SidebarView: View {
 
 struct DetailView: View {
     @Bindable var viewModel: DisassemblyViewModel
+    @State private var dragSelectionAnchorIndex: Int?
+    @State private var dragSelectionDidStart = false
+    private let outputRowHeight: CGFloat = 20
+    private let outputContentVerticalPadding: CGFloat = 4
 
     var body: some View {
         Group {
@@ -198,19 +211,45 @@ struct DetailView: View {
                                     let lineID = line.anchor ?? "line-\(line.id)"
                                     let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
                                     let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
+                                    let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
                                     Text(line.text)
                                         .font(.system(.body, design: .monospaced))
                                         .fixedSize(horizontal: true, vertical: false)
                                         .frame(minWidth: geo.size.width, alignment: .leading)
+                                        .frame(height: outputRowHeight, alignment: .center)
                                         .padding(.horizontal, 8)
-                                        .padding(.vertical, 1)
-                                        .background(isCurrentMatch ? Color.yellow.opacity(0.4) : isMatch ? Color.yellow.opacity(0.2) : backgroundColor(for: line.kind))
+                                        .background(rowBackgroundColor(
+                                            for: line.kind,
+                                            isSelected: isSelected,
+                                            isMatch: isMatch,
+                                            isCurrentMatch: isCurrentMatch
+                                        ))
+                                        .contentShape(Rectangle())
+                                        .contextMenu {
+                                            Button("Copy Selected Lines") {
+                                                if !isSelected {
+                                                    viewModel.selectOutputLine(
+                                                        lineID: line.id,
+                                                        at: index,
+                                                        extending: false,
+                                                        toggling: false
+                                                    )
+                                                }
+                                                viewModel.copySelectedOutputLines()
+                                            }
+
+                                            Button("Clear Selection") {
+                                                viewModel.clearOutputSelection()
+                                            }
+                                            .disabled(viewModel.selectedOutputLineCount == 0)
+                                        }
                                         .id(lineID)
                                 }
                             }
-                            .textSelection(.enabled)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, outputContentVerticalPadding)
                             .frame(minWidth: geo.size.width, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .highPriorityGesture(outputDragSelectionGesture())
                         }
                         .onChange(of: viewModel.procedureScrollRequest) { _, _ in
                             if let anchor = viewModel.selectedProcedure {
@@ -230,6 +269,71 @@ struct DetailView: View {
                 }
             }
         }
+    }
+
+    private func outputDragSelectionGesture() -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard let currentIndex = outputRowIndex(at: value.location) else {
+                    return
+                }
+
+                if !dragSelectionDidStart {
+                    dragSelectionDidStart = true
+                    dragSelectionAnchorIndex = outputRowIndex(at: value.startLocation) ?? currentIndex
+                }
+
+                let anchorIndex = dragSelectionAnchorIndex ?? currentIndex
+                viewModel.selectOutputLineRange(from: anchorIndex, to: currentIndex)
+            }
+            .onEnded { value in
+                if isClick(value) {
+                    let index = outputRowIndex(at: value.location)
+                        ?? outputRowIndex(at: value.startLocation)
+                    if let index, viewModel.filteredLines.indices.contains(index) {
+                        let line = viewModel.filteredLines[index]
+                        let modifiers = NSEvent.modifierFlags
+                        viewModel.selectOutputLine(
+                            lineID: line.id,
+                            at: index,
+                            extending: modifiers.contains(.shift),
+                            toggling: modifiers.contains(.command)
+                        )
+                    }
+                }
+
+                dragSelectionAnchorIndex = nil
+                dragSelectionDidStart = false
+            }
+    }
+
+    private func isClick(_ value: DragGesture.Value) -> Bool {
+        abs(value.translation.width) < 3 && abs(value.translation.height) < 3
+    }
+
+    private func outputRowIndex(at location: CGPoint) -> Int? {
+        guard !viewModel.filteredLines.isEmpty else { return nil }
+
+        let rowIndex = Int((location.y - outputContentVerticalPadding) / outputRowHeight)
+        return min(max(rowIndex, 0), viewModel.filteredLines.count - 1)
+    }
+
+    private func rowBackgroundColor(
+        for kind: LineKind,
+        isSelected: Bool,
+        isMatch: Bool,
+        isCurrentMatch: Bool
+    ) -> Color {
+        if isSelected {
+            return Color.accentColor.opacity(0.25)
+        }
+        if isCurrentMatch {
+            return Color.yellow.opacity(0.4)
+        }
+        if isMatch {
+            return Color.yellow.opacity(0.2)
+        }
+        return backgroundColor(for: kind)
     }
 
     private func backgroundColor(for kind: LineKind) -> Color {
