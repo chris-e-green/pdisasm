@@ -29,6 +29,11 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(pid.description, "PROCEDURE SEG2.PROC5")
     }
 
+    func testDescriptionProcedureOneDefaultsToSegmentName() {
+        let pid = ProcedureIdentifier(isFunction: false, segment: 20, segmentName: "TURTLEGR", procedure: 1)
+        XCTAssertEqual(pid.description, "PROCEDURE TURTLEGR.TURTLEGR")
+    }
+
     func testDescriptionFunctionDefaultNames() {
         let pid = ProcedureIdentifier(isFunction: true, segment: 2, procedure: 5)
         XCTAssertTrue(pid.description.contains("FUNCTION SEG2.FUNC5"))
@@ -45,6 +50,11 @@ final class ProcedureIdentifierTests: XCTestCase {
     func testShortDescriptionWithoutNames() {
         let pid = ProcedureIdentifier(isFunction: true, segment: 2, procedure: 5)
         XCTAssertEqual(pid.shortDescription, "SEG2.FUNC5")
+    }
+
+    func testShortDescriptionProcedureOneDefaultsToSegmentName() {
+        let pid = ProcedureIdentifier(isFunction: false, segment: 20, segmentName: "TURTLEGR", procedure: 1)
+        XCTAssertEqual(pid.shortDescription, "TURTLEGR.TURTLEGR")
     }
 
     func testShortDescriptionEmptySegmentName() {

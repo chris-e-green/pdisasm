@@ -38,7 +38,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
             (isFunction
                 ? "FUNCTION "
                 : "PROCEDURE ") + (segmentName ?? "SEG" + String(segment)) + "."
-            + (procName ?? (isFunction ? "FUNC" : "PROC") + String(procedure))
+            + defaultedProcedureName
         if !parameters.isEmpty {
             s +=
                 "(" + parameters.map({ $0.description }).joined(separator: "; ")
@@ -57,12 +57,18 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
             result += segmentName!
         }
         result += "."
-        if procName == nil || procName!.isEmpty {
-            result += (isFunction ? "FUNC" : "PROC") + String(procedure)
-        } else {
-            result += procName!
-        }
+        result += defaultedProcedureName
         return result
+    }
+
+    private var defaultedProcedureName: String {
+        if let procName, !procName.isEmpty {
+            return procName
+        }
+        if procedure == 1, let segmentName, !segmentName.isEmpty {
+            return segmentName
+        }
+        return (isFunction ? "FUNC" : "PROC") + String(procedure)
     }
 
     required public init(from decoder: Decoder) throws {
