@@ -190,4 +190,166 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(proc.parameters[0].type, "INTEGER")
         XCTAssertEqual(proc.parameters[1].type, "CHAR")
     }
+
+    func testSynchronizeProcedureSignaturesPrefersTypedLocationsOverUnknown() {
+        let proc = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "VALUE", type: "UNKNOWN"),
+            ],
+            returnType: "UNKNOWN"
+        )
+        let locations: Set<Location> = [
+            Location(segment: 1, procedure: 2, lexLevel: nil, addr: 1, type: "UNKNOWN", typeSource: .unknown),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "BOOLEAN", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: nil, addr: 3, type: "UNKNOWN", typeSource: .unknown),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "INTEGER", typeSource: .inferred),
+        ]
+
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [proc],
+            locations: locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(proc.description, "FUNCTION SEG1.FUNC2(VALUE:INTEGER): BOOLEAN")
+        XCTAssertEqual(proc.returnTypeSource, .inferred)
+        XCTAssertEqual(proc.parameters[0].typeSource, .inferred)
+    }
+
+    func testSynchronizeProcedureSignaturesMapsRealWordPairToSingleParameter() {
+        let proc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "PARAM1", type: "UNKNOWN"),
+                Identifier(name: "PARAM2", type: "UNKNOWN"),
+            ]
+        )
+        let locations: Set<Location> = [
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "REAL", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 2, type: "UNKNOWN", typeSource: .unknown),
+        ]
+
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [proc],
+            locations: locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(proc.parameters.count, 1)
+        XCTAssertEqual(proc.parameters[0].name, "PARAM1")
+        XCTAssertEqual(proc.parameters[0].type, "REAL")
+        XCTAssertEqual(proc.description, "PROCEDURE SEG1.PROC2(PARAM1:REAL)")
+    }
+
+    func testSynchronizeProcedureSignaturesKeepsEarlierParametersBeforeRealPair() {
+        let proc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "PARAM1", type: "UNKNOWN"),
+                Identifier(name: "PARAM2", type: "UNKNOWN"),
+                Identifier(name: "PARAM3", type: "UNKNOWN"),
+            ]
+        )
+        let locations: Set<Location> = [
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "REAL", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 2, type: "UNKNOWN", typeSource: .unknown),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "INTEGER", typeSource: .inferred),
+        ]
+
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [proc],
+            locations: locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(proc.parameters.count, 2)
+        XCTAssertEqual(proc.parameters[0].description, "PARAM1:INTEGER")
+        XCTAssertEqual(proc.parameters[1].description, "PARAM2:REAL")
+    }
+
+    func testParameterLocationAddressesUseRealWordSize() {
+        let proc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "COUNT", type: "INTEGER"),
+                Identifier(name: "VALUE", type: "REAL"),
+            ]
+        )
+
+        let addresses = parameterLocationAddresses(for: proc)
+
+        XCTAssertEqual(addresses.map(\.index), [0, 1])
+        XCTAssertEqual(addresses.map(\.addr), [3, 1])
+    }
+
+    func testSynchronizeProcedureSignaturesUsesRealSizedParameterAddresses() {
+        let proc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(name: "COUNT", type: "UNKNOWN"),
+                Identifier(name: "VALUE", type: "REAL", typeSource: .inferred),
+            ]
+        )
+        let locations: Set<Location> = [
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 1, type: "REAL", typeSource: .inferred),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 2, type: "UNKNOWN", typeSource: .unknown),
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, type: "INTEGER", typeSource: .inferred),
+        ]
+
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [proc],
+            locations: locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(proc.parameters[0].description, "COUNT:INTEGER")
+        XCTAssertEqual(proc.parameters[1].description, "VALUE:REAL")
+    }
+
+    func testApplyProcedureSignatureLocationsRelabelsRealParameterBaseAndRemovesSecondWord() {
+        let identifier = ProcedureIdentifier(
+            isFunction: true,
+            segment: 29,
+            segmentName: "TRANSCEN",
+            procedure: 2,
+            parameters: [
+                Identifier(name: "PARAM1", type: "REAL", typeSource: .inferred),
+            ],
+            returnType: "UNKNOWN"
+        )
+        let proc = Procedure()
+        proc.lexicalLevel = 1
+        proc.identifier = identifier
+        let codeSegment = CodeSegment(
+            procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: []),
+            procedures: [proc]
+        )
+        var locations: Set<Location> = [
+            Location(segment: 29, procedure: 2, lexLevel: nil, addr: 1, isParam: true, name: "TRANSCEN.FUNC2", type: "UNKNOWN"),
+            Location(segment: 29, procedure: 2, lexLevel: nil, addr: 3, isParam: true, name: "PARAM2", type: "REAL", typeSource: .inferred),
+            Location(segment: 29, procedure: 2, lexLevel: nil, addr: 4, isParam: true, name: "PARAM1", type: "UNKNOWN"),
+        ]
+
+        let conflicts = applyProcedureSignatureLocations(
+            procedures: [identifier],
+            codeSegments: [29: codeSegment],
+            locations: &locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(locations.first(where: { $0.addr == 3 })?.description, "PARAM1:REAL")
+        XCTAssertEqual(locations.first(where: { $0.addr == 3 })?.lexLevel, 1)
+        XCTAssertNil(locations.first(where: { $0.addr == 4 }))
+    }
 }

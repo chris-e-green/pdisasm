@@ -38,17 +38,154 @@ struct PseudoCodeGenerator {
         }
     }
     
+    mutating func setLocType(_ location: Location?, _ type: String, evidence: String = "") {
+        guard let location else { return }
+        let found = allLocations.first(where: { $0 == location }) ?? location
+        if let conflict = found.assignType(type, source: .inferred, evidence: evidence) {
+            typeConflicts.append(conflict)
+        }
+        allLocations.update(with: found)
+    }
+
     mutating func setLocType(_ locStr: String, _ type: String, evidence: String = "") {
         // if the location is a memory reference, set the type.
-        if locStr.contains(/^S[0-9]*_P[0-9]*_L[0-9]*_A[0-9]*$/) {
+        if locStr.contains(/^S[0-9]+_P[0-9]+(_L[0-9]+)?_A[0-9]+$/) {
             // convert string location to Location
             let l = Location(from: locStr)
             // find in allLocations and set type
-            let found = allLocations.first(where: { $0 == l })
-            if let conflict = found?.assignType(type, source: .inferred, evidence: evidence) {
-                typeConflicts.append(conflict)
-            }
+            setLocType(l, type, evidence: evidence)
         }
+    }
+
+    mutating func inferStackValueType(_ value: StackValue, _ type: String, evidence: String = "") {
+        if let location = value.location {
+            setLocType(location, type, evidence: evidence)
+        } else {
+            setLocType(value.text, type, evidence: evidence)
+        }
+    }
+
+    func typedOperandText(_ value: StackValue, _ type: String, stack: StackSimulator) -> String {
+        var operandType = value.type ?? type
+        if operandType == "UNKNOWN" {
+            operandType = type
+        }
+        return stack.parenthesizedText(StackValue(
+            text: value.text,
+            type: operandType,
+            kind: value.kind,
+            location: value.location
+        ))
+    }
+
+    mutating func inferRealOperand(_ stack: StackSimulator, evidence: String = "") {
+        let value = stack.peekStackValue()
+        if value.type == "REAL" {
+            inferStackValueType(value, "REAL", evidence: evidence)
+            return
+        }
+
+        let nextValue = stack.peekStackValue(1)
+        inferRealRepresentationType(value, evidence: evidence)
+        inferRealRepresentationType(nextValue, evidence: evidence)
+        inferRealAggregatePairType(value, nextValue, evidence: evidence)
+    }
+
+    mutating func inferRealRepresentationType(_ value: StackValue, evidence: String = "") {
+        if let realWord = value.payload.realWord {
+            if let baseLocation = realWord.baseLocation {
+                setLocType(baseLocation, "REAL", evidence: evidence)
+            } else {
+                setLocType(realWord.baseText, "REAL", evidence: evidence)
+            }
+            return
+        }
+
+        if let baseName = StackSimulator().realRepresentationStorageBaseName(value) {
+            setLocType(baseName, "REAL", evidence: evidence)
+        }
+    }
+
+    func aggregateWord(_ value: StackValue) -> (base: String, offset: Int)? {
+        guard value.text.hasSuffix("}") else {
+            return nil
+        }
+        guard let openBrace = value.text.lastIndex(of: "{") else {
+            return nil
+        }
+        let base = String(value.text[..<openBrace])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let offsetStart = value.text.index(after: openBrace)
+        let offsetEnd = value.text.index(before: value.text.endIndex)
+        let offsetText = value.text[offsetStart..<offsetEnd]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, let offset = Int(offsetText) else {
+            return nil
+        }
+        return (base, offset)
+    }
+
+    mutating func inferRealAggregatePairType(
+        _ value: StackValue,
+        _ nextValue: StackValue,
+        evidence: String = ""
+    ) {
+        guard let word = aggregateWord(value),
+            let nextWord = aggregateWord(nextValue),
+            word.base == nextWord.base,
+            Set([word.offset, nextWord.offset]) == Set([0, 1])
+        else {
+            return
+        }
+
+        if let location = value.location ?? nextValue.location {
+            setLocType(location, "REAL", evidence: evidence)
+            return
+        }
+
+        if let location = allLocations.first(where: { $0.displayName == word.base }) {
+            setLocType(location, "REAL", evidence: evidence)
+        } else {
+            setLocType(word.base, "REAL", evidence: evidence)
+        }
+    }
+
+    func isRealAggregatePair(_ value: StackValue, _ nextValue: StackValue) -> Bool {
+        guard let word = aggregateWord(value),
+            let nextWord = aggregateWord(nextValue),
+            word.base == nextWord.base,
+            Set([word.offset, nextWord.offset]) == Set([0, 1])
+        else {
+            return false
+        }
+        return true
+    }
+
+    mutating func popRealOperand(
+        _ stack: inout StackSimulator,
+        evidence: String
+    ) -> (val: String, type: String?) {
+        let value = stack.peekStackValue()
+        if value.kind == .expression
+            && (value.type == nil || value.type == "UNKNOWN")
+        {
+            let popped = stack.popStackValue()
+            inferStackValueType(popped, "REAL", evidence: evidence)
+            return (
+                stack.assignmentSourceText(StackValue(
+                    text: popped.text,
+                    type: "REAL",
+                    kind: popped.kind,
+                    location: popped.location,
+                    payload: popped.payload
+                ), withoutParentheses: true),
+                "REAL"
+            )
+        }
+
+        let result = stack.popReal()
+        setLocType(result.val, "REAL", evidence: evidence)
+        return result
     }
 
     func representationWordText(
@@ -80,6 +217,18 @@ struct PseudoCodeGenerator {
             procedure: location.procedure,
             lexLevel: location.lexLevel,
             addr: address + offsetValue
+        )
+    }
+
+    func representationWordValue(
+        _ base: StackValue,
+        offset: Int,
+        stack: StackSimulator
+    ) -> StackValue {
+        stack.realWordValue(
+            base: base,
+            wordIndex: offset,
+            physicalLocation: representationWordLocation(base, offset: "\(offset)")
         )
     }
 
@@ -204,11 +353,29 @@ struct PseudoCodeGenerator {
             var prevElement: String = ""
             var srcdata: [String] = []
             let (_, t1) = stack.peek()
-            let topRealBase = stack.realRepresentationBaseName(stack.peekStackValue().text)
-            let nextRealBase = stack.realRepresentationBaseName(stack.peekStackValue(1).text)
+            let topValue = stack.peekStackValue()
+            let nextValue = stack.peekStackValue(1)
+            let topRealBase = stack.realRepresentationBaseName(stack.peekStackValue())
+            let nextRealBase = stack.realRepresentationBaseName(stack.peekStackValue(1))
             let storesRealRepresentation = topRealBase != nil && topRealBase == nextRealBase
+            var storedType: String? = nil
             if stmCount == 2 && (t1 == "REAL" || storesRealRepresentation) {
                 (src, _) = stack.popReal()
+                storedType = "REAL"
+            } else if stmCount == 2,
+                (topValue.type == nil || topValue.type == "UNKNOWN"),
+                nextValue.isAddressLike
+            {
+                let srcValue = stack.popStackValue()
+                inferStackValueType(srcValue, "REAL", evidence: "STM 2-word source")
+                storedType = "REAL"
+                src = stack.assignmentSourceText(StackValue(
+                    text: srcValue.text,
+                    type: "REAL",
+                    kind: srcValue.kind,
+                    location: srcValue.location,
+                    payload: srcValue.payload
+                ), withoutParentheses: true)
             } else {
                 for _ in 0..<stmCount {
                     let elementValue = stack.popStackValue()
@@ -224,6 +391,10 @@ struct PseudoCodeGenerator {
             let dstValue = stack.popStackValue()
             let dst = stack.assignmentTargetText(dstValue)
             let t = dstValue.type
+            if storedType == "REAL" {
+                setLocType(dstValue.location, "REAL", evidence: "STM 2-word destination")
+                setLocType(dst, "REAL", evidence: "STM 2-word destination")
+            }
             if stmCount == 2 && srcdata.count == 2 && t == "REAL" {
                 // need to see if the elements parse as a real number
                 if let val1 = UInt16(srcdata[0]), let val2 = UInt16(srcdata[1]) {
@@ -301,17 +472,17 @@ struct PseudoCodeGenerator {
             stack.push(("ABR(\(a))", "REAL"))
             return nil
         case adi:
-            let (a, _) = stack.pop("INTEGER")
-            setLocType(a, "INTEGER")
-            let (b, _) = stack.pop("INTEGER")
-            setLocType(b, "INTEGER")
+            let aValue = stack.popStackValue()
+            inferStackValueType(aValue, "INTEGER", evidence: "ADI operand")
+            let a = typedOperandText(aValue, "INTEGER", stack: stack)
+            let bValue = stack.popStackValue()
+            inferStackValueType(bValue, "INTEGER", evidence: "ADI operand")
+            let b = typedOperandText(bValue, "INTEGER", stack: stack)
             stack.push(("\(b) + \(a)", "INTEGER"))
             return nil
         case adr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
-            let (b, _) = stack.popReal()
-            setLocType(b, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "ADR operand")
+            let (b, _) = popRealOperand(&stack, evidence: "ADR operand")
             stack.push(("\(a) + \(b)", "REAL"))
             return nil
         case land:
@@ -334,24 +505,26 @@ struct PseudoCodeGenerator {
             stack.push(("NOT \(a)", "BOOLEAN"))
             return nil
         case dvi:
-            let (a, _) = stack.pop("INTEGER")
-            setLocType(a, "INTEGER")
-            let (b, _) = stack.pop("INTEGER")
-            setLocType(b, "INTEGER")
+            let aValue = stack.popStackValue()
+            inferStackValueType(aValue, "INTEGER", evidence: "DVI operand")
+            let a = typedOperandText(aValue, "INTEGER", stack: stack)
+            let bValue = stack.popStackValue()
+            inferStackValueType(bValue, "INTEGER", evidence: "DVI operand")
+            let b = typedOperandText(bValue, "INTEGER", stack: stack)
             stack.push(("\(b) DIV \(a)", "INTEGER"))
             return nil
         case dvr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
-            let (b, _) = stack.popReal()
-            setLocType(b, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "DVR operand")
+            let (b, _) = popRealOperand(&stack, evidence: "DVR operand")
             stack.push(("\(b) / \(a)", "REAL"))
             return nil
         case modi:
-            let (a, _) = stack.pop("INTEGER")
-            setLocType(a, "INTEGER")
-            let (b, _) = stack.pop("INTEGER")
-            setLocType(b, "INTEGER")
+            let aValue = stack.popStackValue()
+            inferStackValueType(aValue, "INTEGER", evidence: "MODI operand")
+            let a = typedOperandText(aValue, "INTEGER", stack: stack)
+            let bValue = stack.popStackValue()
+            inferStackValueType(bValue, "INTEGER", evidence: "MODI operand")
+            let b = typedOperandText(bValue, "INTEGER", stack: stack)
             stack.push(("\(b) MOD \(a)", "INTEGER"))
             return nil
         case mpi:
@@ -362,10 +535,8 @@ struct PseudoCodeGenerator {
             stack.push(("\(b) * \(a)", "INTEGER"))
             return nil
         case mpr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
-            let (b, _) = stack.popReal()
-            setLocType(b, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "MPR operand")
+            let (b, _) = popRealOperand(&stack, evidence: "MPR operand")
             stack.push(("\(b) * \(a)", "REAL"))
             return nil
         case ngi:
@@ -374,8 +545,7 @@ struct PseudoCodeGenerator {
             stack.push(("-\(a)", "INTEGER"))
             return nil
         case ngr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "NGR operand")
             stack.push(("-\(a)", "REAL"))
             return nil
         case sbi:
@@ -386,10 +556,8 @@ struct PseudoCodeGenerator {
             stack.push(("\(b) - \(a)", "INTEGER"))
             return nil
         case sbr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
-            let (b, _) = stack.popReal()
-            setLocType(b, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "SBR operand")
+            let (b, _) = popRealOperand(&stack, evidence: "SBR operand")
             stack.push(("\(b) - \(a)", "REAL"))
             return nil
         case sqi:
@@ -398,8 +566,7 @@ struct PseudoCodeGenerator {
             stack.push(("\(a) * \(a)", "INTEGER"))
             return nil
         case sqr:
-            let (a, _) = stack.popReal()
-            setLocType(a, "REAL")
+            let (a, _) = popRealOperand(&stack, evidence: "SQR operand")
             stack.push(("\(a) * \(a)", "REAL"))
             return nil
         case flo:
@@ -600,17 +767,16 @@ struct PseudoCodeGenerator {
             let origin = stack.popStackValue()
             let wdOrigin = stack.parenthesizedText(origin)
             for i in 0..<ldmCount {
-                let text = origin.type == "REAL"
-                    ? representationWordText(origin, offset: "\(i)", stack: stack)
-                    : "\(wdOrigin){\(i)}"
-                stack.push(StackValue(
-                    text: text,
-                    type: "INTEGER",
-                    kind: .value,
-                    location: origin.type == "REAL"
-                        ? representationWordLocation(origin, offset: "\(i)")
-                        : origin.location
-                ))
+                if origin.type == "REAL" {
+                    stack.push(representationWordValue(origin, offset: i, stack: stack))
+                } else {
+                    stack.push(StackValue(
+                        text: "\(wdOrigin){\(i)}",
+                        type: "INTEGER",
+                        kind: .value,
+                        location: origin.location
+                    ))
+                }
             }
             return nil
         case ldb:
@@ -659,14 +825,16 @@ struct PseudoCodeGenerator {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
                 return nil
             }
-            stack.push(StackValue(
-                text: representationWordText(base, offset: "\(val)", stack: stack),
-                type: "INTEGER",
-                kind: .value,
-                location: base.type == "REAL"
-                    ? representationWordLocation(base, offset: "\(val)")
-                    : base.location
-            ))
+            if base.type == "REAL" {
+                stack.push(representationWordValue(base, offset: val, stack: stack))
+            } else {
+                stack.push(StackValue(
+                    text: representationWordText(base, offset: "\(val)", stack: stack),
+                    type: "INTEGER",
+                    kind: .value,
+                    location: base.location
+                ))
+            }
             return nil
         case ixa:
             let _ = inst.params[0]
@@ -709,14 +877,16 @@ struct PseudoCodeGenerator {
             } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[offs] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
             } else {
-                stack.push(StackValue(
-                    text: representationWordText(base, offset: "\(offs)", stack: stack),
-                    type: t == "REAL" ? "INTEGER" : t,
-                    kind: .value,
-                    location: t == "REAL"
-                        ? representationWordLocation(base, offset: "\(offs)")
-                        : base.location
-                ))
+                if t == "REAL" {
+                    stack.push(representationWordValue(base, offset: offs, stack: stack))
+                } else {
+                    stack.push(StackValue(
+                        text: representationWordText(base, offset: "\(offs)", stack: stack),
+                        type: t,
+                        kind: .value,
+                        location: base.location
+                    ))
+                }
             }
             return nil
 
@@ -763,10 +933,12 @@ struct PseudoCodeGenerator {
             let (_, b) = stack.popSet()
             stack.push(("\(b) \(opString) \(a)", "BOOLEAN"))
         } else if dataType == "REAL" {
+            inferRealOperand(stack, evidence: "REAL comparison operand")
             let (a, _) = stack.popReal()
-            setLocType(a, dataType)
+            setLocType(a, dataType, evidence: "REAL comparison operand")
+            inferRealOperand(stack, evidence: "REAL comparison operand")
             let (b, _) = stack.popReal()
-            setLocType(b, dataType)
+            setLocType(b, dataType, evidence: "REAL comparison operand")
             stack.push(("\(b) \(opString) \(a)", "BOOLEAN"))
         } else {
             let (a, _) = stack.pop()
@@ -829,16 +1001,19 @@ struct PseudoCodeGenerator {
             // so we probably need to pop it as a set, not just blindly.
             switch called.parameters[i].type {
             case "CHAR":
-                let (a, _) = stack.pop()
+                let value = stack.popStackValue()
+                inferStackValueType(value, "CHAR", evidence: "\(called.shortDescription) argument \(called.parameters[i].name)")
+                let a = typedOperandText(value, "CHAR", stack: stack)
                 if let ch = Int(a), ch >= 0x20 && ch <= 0x7E {
                     aParams.append("'\(String(format: "%c", ch))'")
                 } else {
                     aParams.append(a)
                 }
-                setLocType(a, "CHAR")
                 i -= 1
             case "BOOLEAN":
-                let (a, _) = stack.pop()
+                let value = stack.popStackValue()
+                inferStackValueType(value, "BOOLEAN", evidence: "\(called.shortDescription) argument \(called.parameters[i].name)")
+                let a = typedOperandText(value, "BOOLEAN", stack: stack)
                 if a == "0" {
                     aParams.append("FALSE")
                 } else if a == "1" {
@@ -846,12 +1021,11 @@ struct PseudoCodeGenerator {
                 } else {
                     aParams.append(a)
                 }
-                setLocType(a, "BOOLEAN")
                 i -= 1
             case "REAL":
                 let (a, _) = stack.popReal()
                 aParams.append(a)
-                setLocType(a, "REAL")
+                setLocType(a, "REAL", evidence: "\(called.shortDescription) argument \(called.parameters[i].name)")
                 i -= 1
             case let pfx where pfx.hasPrefix("SET"):
                 let (a, at) = stack.peek()
@@ -869,18 +1043,70 @@ struct PseudoCodeGenerator {
                     }
                 }
             default:
-                let (a, _) = stack.pop()
-                aParams.append(a)
-                setLocType(a, called.parameters[i].type)
-                i -= 1
+                let inferredType = stack.peekStackValue().type ?? called.parameters[i].type
+                let topValue = stack.peekStackValue()
+                let nextValue = stack.peekStackValue(1)
+                if inferredType == "REAL"
+                    || (i > 0
+                        && isAutoGeneratedParameter(called.parameters[i - 1])
+                        && isAutoGeneratedParameter(called.parameters[i])
+                        && isRealAggregatePair(topValue, nextValue))
+                {
+                    if isRealAggregatePair(topValue, nextValue) {
+                        inferRealAggregatePairType(
+                            topValue,
+                            nextValue,
+                            evidence: "\(called.shortDescription) inferred REAL argument"
+                        )
+                    }
+                    let (a, _) = stack.popReal()
+                    aParams.append(a)
+                    if i > 0,
+                       isAutoGeneratedParameter(called.parameters[i - 1]),
+                       isAutoGeneratedParameter(called.parameters[i]) {
+                        _ = called.parameters[i - 1].assignType("REAL", source: .inferred)
+                        called.parameters.remove(at: i)
+                        i -= 2
+                    } else {
+                        _ = called.parameters[i].assignType("REAL", source: .inferred)
+                        i -= 1
+                    }
+                    setLocType(a, "REAL", evidence: "\(called.shortDescription) inferred argument")
+                } else {
+                    let value = stack.popStackValue()
+                    let type = called.parameters[i].type
+                    if let actualType = value.type,
+                       !actualType.isEmpty,
+                       actualType != "UNKNOWN",
+                       type == "UNKNOWN" {
+                        _ = called.parameters[i].assignType(actualType, source: .inferred)
+                        inferStackValueType(value, actualType, evidence: "\(called.shortDescription) argument \(called.parameters[i].name)")
+                        let a = typedOperandText(value, actualType, stack: stack)
+                        aParams.append(a)
+                    } else {
+                        inferStackValueType(value, type, evidence: "\(called.shortDescription) argument \(called.parameters[i].name)")
+                        let a = typedOperandText(value, type, stack: stack)
+                        aParams.append(a)
+                    }
+                    i -= 1
+                }
             }
         }
 
         let callSignature =
             "\(called.shortDescription)(\(aParams.reversed().joined(separator:", ")))"
 
-        if called.isFunction {
-            stack.push((callSignature, called.returnType))
+            if called.isFunction {
+            stack.push(StackValue(
+                text: callSignature,
+                type: called.returnType,
+                kind: .expression,
+                location: Location(
+                    segment: called.segment,
+                    procedure: called.procedure,
+                    addr: 1
+                )
+            ))
             return nil
         } else {
             return callSignature

@@ -308,6 +308,250 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "MYSEG.DOWORK(42)")
     }
 
+    func testCallProcedureInfersArgumentTypeFromKnownParameterType() {
+        let arg = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 5,
+            name: "ARG",
+            type: "UNKNOWN"
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "ARG", type: "UNKNOWN", kind: .value, location: arg))
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            segmentName: "MYSEG",
+            procedure: 5,
+            procName: "DOWORK",
+            parameters: [Identifier(name: "X", type: "INTEGER", typeSource: .inferred)]
+        )
+        let dest = Location(segment: 1, procedure: 5)
+        let inst = Instruction(opcode: cip, mnemonic: "CIP", destination: dest)
+        var gen = makeGenerator(procs: [calledProc], labels: [arg])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "MYSEG.DOWORK(ARG)")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.type, "INTEGER")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.typeSource, .inferred)
+    }
+
+    func testCallProcedureConsumesTwoWordRealArgument() {
+        let intArg = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 3,
+            name: "COUNT",
+            type: "INTEGER"
+        )
+        let realArg = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 1,
+            name: "VALUE",
+            type: "REAL"
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "COUNT", type: "INTEGER", kind: .value, location: intArg))
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "VALUE", type: "REAL", kind: .address, location: realArg),
+            wordIndex: 0,
+            physicalLocation: realArg
+        ))
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "VALUE", type: "REAL", kind: .address, location: realArg),
+            wordIndex: 1,
+            physicalLocation: Location(segment: 1, procedure: 2, lexLevel: 0, addr: 2)
+        ))
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            segmentName: "MYSEG",
+            procedure: 5,
+            procName: "DOWORK",
+            parameters: [
+                Identifier(name: "COUNT", type: "INTEGER"),
+                Identifier(name: "VALUE", type: "REAL"),
+            ]
+        )
+        let inst = Instruction(
+            opcode: cip,
+            mnemonic: "CIP",
+            destination: Location(segment: 1, procedure: 5)
+        )
+        var gen = makeGenerator(procs: [calledProc], labels: [intArg, realArg])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "MYSEG.DOWORK(COUNT, VALUE)")
+        XCTAssertTrue(stack.stack.isEmpty)
+    }
+
+    func testUnknownFunctionCallInfersRealArgumentAndRealReturnStore() {
+        let returnLocation = Location(
+            segment: 29,
+            procedure: 2,
+            lexLevel: 1,
+            addr: 1,
+            name: "TRANSCEN.FUNC2",
+            type: "UNKNOWN"
+        )
+        let param = Location(
+            segment: 29,
+            procedure: 2,
+            lexLevel: 1,
+            addr: 3,
+            name: "PARAM1",
+            type: "REAL",
+            typeSource: .inferred
+        )
+        let func9Return = Location(
+            segment: 29,
+            procedure: 9,
+            addr: 1,
+            type: "UNKNOWN"
+        )
+        let func9 = ProcedureIdentifier(
+            isFunction: true,
+            segment: 29,
+            segmentName: "TRANSCEN",
+            procedure: 9,
+            parameters: [
+                Identifier(name: "PARAM1", type: "UNKNOWN"),
+                Identifier(name: "PARAM2", type: "UNKNOWN"),
+                Identifier(name: "PARAM3", type: "UNKNOWN"),
+            ],
+            returnType: "UNKNOWN"
+        )
+        var gen = makeGenerator(
+            procs: [func9],
+            labels: [returnLocation, param, func9Return]
+        )
+        var stack = StackSimulator()
+
+        _ = gen.generateForInstruction(Instruction(opcode: lla, mnemonic: "LLA", memLocation: returnLocation), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: lla, mnemonic: "LLA", memLocation: param), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: ldm, mnemonic: "LDM", params: [2]), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: ngr, mnemonic: "NGR"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: 1, mnemonic: "SLDC 01"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: ngi, mnemonic: "NGI"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: sldc0, mnemonic: "SLDC 00"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: sldc0, mnemonic: "SLDC 00"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(
+            Instruction(
+                opcode: cgp,
+                mnemonic: "CGP",
+                destination: Location(segment: 29, procedure: 9)
+            ),
+            stack: &stack,
+            loc: nil
+        )
+        let store = gen.generateForInstruction(
+            Instruction(opcode: stm, mnemonic: "STM", params: [2]),
+            stack: &stack,
+            loc: nil
+        )
+
+        XCTAssertEqual(store, "TRANSCEN.FUNC2 := TRANSCEN.FUNC9(-PARAM1, -1)")
+        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertEqual(func9.parameters.map(\.description), ["PARAM1:REAL", "PARAM3:INTEGER"])
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == func9Return })?.type, "REAL")
+    }
+
+    func testUnknownFunctionCallInfersAggregateRealArgumentAndRealReturnBeforeMultiply() {
+        let returnLocation = Location(
+            segment: 29,
+            procedure: 7,
+            lexLevel: 1,
+            addr: 1,
+            name: "TRANSCEN.FUNC7",
+            type: "UNKNOWN"
+        )
+        let param = Location(
+            segment: 29,
+            procedure: 7,
+            lexLevel: 1,
+            addr: 3,
+            name: "PARAM1",
+            type: "UNKNOWN"
+        )
+        let func6Return = Location(
+            segment: 29,
+            procedure: 6,
+            addr: 1,
+            type: "UNKNOWN"
+        )
+        let func6 = ProcedureIdentifier(
+            isFunction: true,
+            segment: 29,
+            segmentName: "TRANSCEN",
+            procedure: 6,
+            parameters: [
+                Identifier(name: "PARAM1", type: "UNKNOWN"),
+                Identifier(name: "PARAM2", type: "UNKNOWN"),
+            ],
+            returnType: "UNKNOWN"
+        )
+        var gen = makeGenerator(
+            procs: [func6],
+            labels: [returnLocation, param, func6Return]
+        )
+        var stack = StackSimulator()
+
+        _ = gen.generateForInstruction(Instruction(opcode: lla, mnemonic: "LLA", memLocation: returnLocation), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: lla, mnemonic: "LLA", memLocation: param), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: ldm, mnemonic: "LDM", params: [2]), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: sldc0, mnemonic: "SLDC 00"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: sldc0, mnemonic: "SLDC 00"), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(
+            Instruction(
+                opcode: cgp,
+                mnemonic: "CGP",
+                destination: Location(segment: 29, procedure: 6)
+            ),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(
+            Instruction(opcode: ldc, mnemonic: "LDC", params: [2, 0, 0]),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(Instruction(opcode: mpr, mnemonic: "MPR"), stack: &stack, loc: nil)
+        let store = gen.generateForInstruction(
+            Instruction(opcode: stm, mnemonic: "STM", params: [2]),
+            stack: &stack,
+            loc: nil
+        )
+
+        XCTAssertEqual(store, "TRANSCEN.FUNC7 := TRANSCEN.FUNC6(PARAM1) * 0.0")
+        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertEqual(func6.parameters.map(\.description), ["PARAM1:REAL"])
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == returnLocation })?.type, "REAL")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == param })?.type, "REAL")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == func6Return })?.type, "REAL")
+
+        let func7 = ProcedureIdentifier(
+            isFunction: true,
+            segment: 29,
+            segmentName: "TRANSCEN",
+            procedure: 7,
+            procName: "FUNC7",
+            parameters: [Identifier(name: "PARAM1", type: "REAL")],
+            returnType: "UNKNOWN"
+        )
+        let conflicts = synchronizeProcedureSignatures(
+            procedures: [func7],
+            locations: gen.allLocations
+        )
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(func7.returnType, "REAL")
+    }
+
     func testCallFunctionPushesResult() {
         var stack = StackSimulator()
         // Function calls expect return space + something on stack
@@ -422,6 +666,45 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         let (val, _) = stack.pop()
         XCTAssertEqual(val, "(10 MOD 3)")
+    }
+
+    func testIntegerArithmeticInfersParameterOperandTypes() {
+        assertIntegerArithmeticInfersParameterOperandTypes(opcode: adi, mnemonic: "ADI")
+        assertIntegerArithmeticInfersParameterOperandTypes(opcode: dvi, mnemonic: "DVI")
+        assertIntegerArithmeticInfersParameterOperandTypes(opcode: modi, mnemonic: "MODI")
+    }
+
+    private func assertIntegerArithmeticInfersParameterOperandTypes(opcode: UInt8, mnemonic: String) {
+        let lhs = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: nil,
+            addr: 3,
+            isParam: true,
+            name: "LHS",
+            type: "UNKNOWN"
+        )
+        let rhs = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: nil,
+            addr: 4,
+            isParam: true,
+            name: "RHS",
+            type: "UNKNOWN"
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "LHS", type: "UNKNOWN", kind: .value, location: lhs))
+        stack.push(StackValue(text: "RHS", type: "UNKNOWN", kind: .value, location: rhs))
+        let inst = Instruction(opcode: opcode, mnemonic: mnemonic)
+        var gen = makeGenerator(labels: [lhs, rhs])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == lhs })?.type, "INTEGER")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == rhs })?.type, "INTEGER")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == lhs })?.typeSource, .inferred)
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == rhs })?.typeSource, .inferred)
     }
 
     func testABI() {
@@ -586,6 +869,99 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         let (val, _) = stack.pop()
         XCTAssertEqual(val, "(A <= B)")
+    }
+
+    func testREALComparisonInfersRepresentationOperandTypes() {
+        let left = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 5,
+            name: "LEFT",
+            type: "UNKNOWN"
+        )
+        let right = Location(
+            segment: 1,
+            procedure: 1,
+            lexLevel: 1,
+            addr: 7,
+            name: "RIGHT",
+            type: "UNKNOWN"
+        )
+        var stack = StackSimulator()
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "LEFT", type: "UNKNOWN", kind: .address, location: left),
+            wordIndex: 0,
+            physicalLocation: left
+        ))
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "LEFT", type: "UNKNOWN", kind: .address, location: left),
+            wordIndex: 1,
+            physicalLocation: Location(segment: 1, procedure: 1, lexLevel: 1, addr: 6)
+        ))
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "RIGHT", type: "UNKNOWN", kind: .address, location: right),
+            wordIndex: 0,
+            physicalLocation: right
+        ))
+        stack.push(stack.realWordValue(
+            base: StackValue(text: "RIGHT", type: "UNKNOWN", kind: .address, location: right),
+            wordIndex: 1,
+            physicalLocation: Location(segment: 1, procedure: 1, lexLevel: 1, addr: 8)
+        ))
+
+        let inst = Instruction(opcode: les, mnemonic: "LES", comparatorDataType: "REAL")
+        var gen = makeGenerator(labels: [left, right])
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "(LEFT < RIGHT)")
+        XCTAssertEqual(type, "BOOLEAN")
+        XCTAssertEqual(left.type, "REAL")
+        XCTAssertEqual(right.type, "REAL")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+    }
+
+    func testREALComparisonInfersUnknownLDMOperandAsReal() {
+        let param = Location(
+            segment: 29,
+            procedure: 2,
+            lexLevel: 1,
+            addr: 3,
+            isParam: true,
+            name: "PARAM2",
+            type: "UNKNOWN"
+        )
+        var stack = StackSimulator()
+        var gen = makeGenerator(labels: [param])
+
+        _ = gen.generateForInstruction(
+            Instruction(opcode: lla, mnemonic: "LLA", memLocation: param),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(
+            Instruction(opcode: ldm, mnemonic: "LDM", params: [2]),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(
+            Instruction(opcode: ldc, mnemonic: "LDC", params: [2, 0, 0]),
+            stack: &stack,
+            loc: nil
+        )
+        _ = gen.generateForInstruction(
+            Instruction(opcode: les, mnemonic: "LES", comparatorDataType: "REAL"),
+            stack: &stack,
+            loc: nil
+        )
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "(PARAM2 < 0.0)")
+        XCTAssertEqual(type, "BOOLEAN")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == param })?.type, "REAL")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == param })?.typeSource, .inferred)
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
     }
 
     func testEQUI() {
@@ -904,6 +1280,14 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(stack.peekStackValue(1).text, "REAL_WORD(RVALUE, 0)")
         XCTAssertEqual(stack.peekStackValue(0).text, "REAL_WORD(RVALUE, 1)")
         XCTAssertEqual(stack.peekStackValue(0).location?.displayName, "S1_P1_L1_A6")
+        if case let .realWord(baseText, wordIndex, baseLocation, physicalLocation) = stack.peekStackValue(0).payload {
+            XCTAssertEqual(baseText, "RVALUE")
+            XCTAssertEqual(wordIndex, 1)
+            XCTAssertEqual(baseLocation?.displayName, "RVALUE")
+            XCTAssertEqual(physicalLocation?.displayName, "S1_P1_L1_A6")
+        } else {
+            XCTFail("Expected structured REAL word payload")
+        }
         XCTAssertEqual(loc.type, "REAL")
     }
 

@@ -20,11 +20,36 @@ enum StackValueKind: String {
     }
 }
 
+enum StackValuePayload {
+    case none
+    case realWord(
+        baseText: String,
+        wordIndex: Int,
+        baseLocation: Location?,
+        physicalLocation: Location?
+    )
+
+    var realWord: (
+        baseText: String,
+        wordIndex: Int,
+        baseLocation: Location?,
+        physicalLocation: Location?
+    )? {
+        switch self {
+        case .none:
+            return nil
+        case let .realWord(baseText, wordIndex, baseLocation, physicalLocation):
+            return (baseText, wordIndex, baseLocation, physicalLocation)
+        }
+    }
+}
+
 struct StackValue {
     var text: String
     var type: String?
     var kind: StackValueKind
     var location: Location?
+    var payload: StackValuePayload = .none
 
     var encodedType: String {
         type ?? "UNKNOWN"
@@ -46,6 +71,9 @@ struct StackValue {
         fields.append("K: \(kind.displayCode)")
         if let location {
             fields.append("L: \(location.displayName)")
+        }
+        if let realWord = payload.realWord {
+            fields.append("R: \(realWord.baseText)#\(realWord.wordIndex)")
         }
         return "{" + fields.joined(separator: ", ") + "}"
     }
@@ -157,8 +185,35 @@ struct StackSimulator {
         value.isAddressLike || value.type == "POINTER" ? .address : value.kind
     }
 
+    func realWordValue(
+        base: StackValue,
+        wordIndex: Int,
+        physicalLocation: Location?
+    ) -> StackValue {
+        let baseText = parenthesizedText(base)
+        return StackValue(
+            text: "REAL_WORD(\(baseText), \(wordIndex))",
+            type: "INTEGER",
+            kind: .value,
+            location: physicalLocation,
+            payload: .realWord(
+                baseText: baseText,
+                wordIndex: wordIndex,
+                baseLocation: base.location,
+                physicalLocation: physicalLocation
+            )
+        )
+    }
+
     func realRepresentationBaseName(_ text: String) -> String? {
         realRepresentationWord(text)?.base
+    }
+
+    func realRepresentationBaseName(_ value: StackValue) -> String? {
+        if let realWord = value.payload.realWord {
+            return realWord.baseLocation?.displayName ?? realWord.baseText
+        }
+        return realRepresentationBaseName(value.text)
     }
 
     func realRepresentationWord(_ text: String) -> (base: String, offset: Int)? {
@@ -180,6 +235,16 @@ struct StackSimulator {
         return (base, offset)
     }
 
+    func realRepresentationWord(_ value: StackValue) -> (base: String, offset: Int)? {
+        if let realWord = value.payload.realWord {
+            return (
+                realWord.baseLocation?.displayName ?? realWord.baseText,
+                realWord.wordIndex
+            )
+        }
+        return realRepresentationWord(value.text)
+    }
+
     func realRepresentationStorageBaseName(_ text: String) -> String? {
         guard let word = realRepresentationWord(text) else {
             return nil
@@ -196,21 +261,18 @@ struct StackSimulator {
     }
 
     func realRepresentationStorageBaseName(_ value: StackValue) -> String? {
-        guard realRepresentationWord(value.text) != nil else {
-            return nil
+        if let realWord = value.payload.realWord {
+            return realWord.baseLocation?.displayName ?? realWord.baseText
         }
         if let baseName = realRepresentationStorageBaseName(value.text) {
             return baseName
-        }
-        if let location = value.location {
-            return location.displayName
         }
         return nil
     }
 
     func realRepresentationPairBaseName(_ a: StackValue, _ b: StackValue) -> String? {
-        guard let aWord = realRepresentationWord(a.text),
-            let bWord = realRepresentationWord(b.text)
+        guard let aWord = realRepresentationWord(a),
+            let bWord = realRepresentationWord(b)
         else {
             return nil
         }

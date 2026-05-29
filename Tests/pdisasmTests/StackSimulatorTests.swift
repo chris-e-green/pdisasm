@@ -157,6 +157,41 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertEqual(typ, "REAL")
     }
 
+    func testPopRealMergesStructuredRealWordPayloads() {
+        let base = Location(segment: 29, procedure: 4, lexLevel: 1, addr: 8)
+        let secondWord = Location(segment: 29, procedure: 4, lexLevel: 1, addr: 9)
+        var sim = StackSimulator()
+        sim.push(StackValue(
+            text: "opaque-low",
+            type: "INTEGER",
+            kind: .value,
+            location: base,
+            payload: .realWord(
+                baseText: "X",
+                wordIndex: 0,
+                baseLocation: base,
+                physicalLocation: base
+            )
+        ))
+        sim.push(StackValue(
+            text: "opaque-high",
+            type: "INTEGER",
+            kind: .value,
+            location: secondWord,
+            payload: .realWord(
+                baseText: "X",
+                wordIndex: 1,
+                baseLocation: base,
+                physicalLocation: secondWord
+            )
+        ))
+
+        let (val, typ) = sim.popReal()
+
+        XCTAssertEqual(val, "S29_P4_L1_A8")
+        XCTAssertEqual(typ, "REAL")
+    }
+
     // MARK: - popSet
 
     func testPopSetNumericWithRanges() {

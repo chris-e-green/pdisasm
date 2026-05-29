@@ -19,6 +19,12 @@ func simulateStackAndGeneratePseudocode(
     )
     var controlFlow = ControlFlowAnalyzer()
 
+    for instruction in proc.instructions.values {
+        instruction.pseudoCode = nil
+        instruction.stackState = nil
+        instruction.prePseudoCode.removeAll()
+    }
+
     let sortedInstructions = proc.instructions.sorted(by: { $0.key < $1.key })
 
     for idx in sortedInstructions.indices {
