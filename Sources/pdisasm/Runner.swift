@@ -1,4 +1,3 @@
-import Algorithms
 import Foundation
 
 func registerProcedureIdentifier(
@@ -10,100 +9,6 @@ func registerProcedureIdentifier(
         $0.segment == identifier.segment && $0.procedure == identifier.procedure
     }) {
         allProcedures.append(identifier)
-    }
-}
-
-func resolveAssemblerProcedureTargets(
-    in codeSeg: CodeSegment,
-    allProcedures: inout [ProcedureIdentifier],
-    allCallers: inout Set<Call>
-) {
-    let assemblerProcedures = codeSeg.procedures
-        .filter { $0.identifier?.isAssembly == true && $0.segmentEndAddress != nil }
-        .sorted { ($0.segmentEndAddress ?? Int.max) < ($1.segmentEndAddress ?? Int.max) }
-
-    guard !assemblerProcedures.isEmpty else { return }
-
-    var lowerBound = 0
-    for proc in assemblerProcedures {
-        proc.segmentStartAddress = lowerBound
-        lowerBound = proc.segmentEndAddress ?? lowerBound
-        registerProcedureIdentifier(proc, in: &allProcedures)
-    }
-
-    func owningProcedure(for targetAddress: Int) -> Procedure? {
-        assemblerProcedures.first(where: {
-            guard let start = $0.segmentStartAddress,
-                let end = $0.segmentEndAddress
-            else {
-                return false
-            }
-            return start <= targetAddress && targetAddress < end
-        })
-    }
-
-    func appendComment(_ text: String, to instruction: Instruction) {
-        if let existing = instruction.comment, !existing.isEmpty {
-            if !existing.contains(text) {
-                instruction.comment = existing + "; " + text
-            }
-        } else {
-            instruction.comment = text
-        }
-    }
-
-    // Process all procedures (not just assembler) to find cross-procedure calls
-    // This includes Pascal procedures that may have inline assembler or that may call
-    // into assembler routines
-    for proc in codeSeg.procedures {
-        guard let sourceIdentifier = proc.identifier else { continue }
-        let origin = Location(
-            segment: sourceIdentifier.segment,
-            procedure: sourceIdentifier.procedure,
-            lexLevel: proc.lexicalLevel
-        )
-
-        for instruction in proc.instructions.values where instruction.isPascal == false {
-            guard [0x20, 0x4c].contains(instruction.opcode),
-                let targetAddress = instruction.params.first,
-                let targetProcedure = owningProcedure(for: targetAddress),
-                let targetIdentifier = targetProcedure.identifier
-            else {
-                continue
-            }
-
-            instruction.destination = Location(
-                segment: targetIdentifier.segment,
-                procedure: targetIdentifier.procedure,
-                lexLevel: targetProcedure.lexicalLevel,
-                addr: targetAddress
-            )
-
-            let crossesProcedure = targetIdentifier.segment != sourceIdentifier.segment
-                || targetIdentifier.procedure != sourceIdentifier.procedure
-
-            if instruction.opcode == 0x4c, crossesProcedure
-            {
-                appendComment("tailcall", to: instruction)
-            }
-
-            if crossesProcedure && [0x20, 0x4c].contains(instruction.opcode)
-            {
-                // Mark the target address as an entry point in the target procedure
-                targetProcedure.entryPoints.insert(targetAddress)
-
-                allCallers.insert(
-                    Call(
-                        from: origin,
-                        to: Location(
-                            segment: targetIdentifier.segment,
-                            procedure: targetIdentifier.procedure,
-                            lexLevel: targetProcedure.lexicalLevel
-                        )
-                    )
-                )
-            }
-        }
     }
 }
 
