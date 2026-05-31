@@ -742,36 +742,8 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let typeConflicts: [TypeConflict]
 }
 
-/// Disassemble a binary file and return structured results without printing.
-public func disassemble(
-    filename: String,
-    verbose: Bool = false,
-    writeMetadata: Bool = false,
-    overwriteMetadata: Bool = false
-) throws -> DisassemblyResult {
-    var fileURL: URL
-    var binaryData: CodeData
-    do {
-        fileURL = URL(fileURLWithPath: filename)
-        binaryData = try CodeData(data: Data(contentsOf: fileURL))
-    } catch {
-        throw error
-    }
-
-    let systemSegments = [0, 2, 3, 4, 5, 6, 20, 21, 22, 28, 29, 30, 31]
-
-    let segDict = try readCodeFileStructure(codeData: binaryData)
-
-    var allCodeSegs: [Int: CodeSegment] = [:]
-    var allLocations: Set<Location> = []
-    var sysLocations: Set<Location> = []
-    var allProcedures: [ProcedureIdentifier] = []
-    var sysProcedures: [ProcedureIdentifier] = []
-    var allCallers: Set<Call> = []
-    var typeConflicts: [TypeConflict] = []
-    var dataSegments: [Int] = []
-
-    var knownRecords: Set<PascalRecord> = [
+private func defaultKnownRecords() -> Set<PascalRecord> {
+    [
         PascalRecord(name: "FIB", members: [
             0: Identifier(name:"FWINDOW", type: "WINDOWP"),
             1: Identifier(name:"FEOLN", type: "BOOLEAN"),
@@ -862,65 +834,158 @@ public func disassemble(
             48: Identifier(name:"SEGTABLE", type: "ARRAY OF SEG_ENTRY"),
         ])
     ]
+}
 
-    // Try loading name maps from Application Support. Missing metadata is fine;
-    // writeback is controlled separately by the caller.
-    var globalNames: [Int: Identifier] = [:]
-    let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
-    let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
-    let allLabelsCSVFile = "labels_\(fileIdentifier)"
-    let sysLabelsCSVFile = "labels_ver_\(version)"
-    let allProceduresCSVFile = "procedures_\(fileIdentifier)"
-    let sysProceduresCSVFile = "procedures_ver_\(version)"
-    let sysRecordsFile = "records_ver_\(version)"
-    let allRecordsFile = "records_\(fileIdentifier)"
-    let globalsFile = "globals_ver_\(version)"
-    let appSupportDirectory = URL.applicationSupportDirectory
-        .appendingPathComponent("pdisasm")
+private struct MetadataContext {
+    let systemSegments = [0, 2, 3, 4, 5, 6, 20, 21, 22, 28, 29, 30, 31]
+    let fileIdentifier: String
+    let allLabelsCSVFile: String
+    let sysLabelsCSVFile: String
+    let allProceduresCSVFile: String
+    let sysProceduresCSVFile: String
+    let sysRecordsFile: String
+    let allRecordsFile: String
+    let globalsFile: String
+    let appSupportDirectory: URL
 
-    importKnownRecords(
-        fromJson: sysRecordsFile,
-        to: &knownRecords,
-        appSupportDirectory: appSupportDirectory
-    )
-    importKnownRecords(
-        fromJson: allRecordsFile,
-        to: &knownRecords,
-        appSupportDirectory: appSupportDirectory
-    )
-    importLabels(
-        fromCSV: allLabelsCSVFile,
-        to: &allLocations,
-        appSupportDirectory: appSupportDirectory
-    )
-    importLabels(
-        fromCSV: sysLabelsCSVFile,
-        to: &sysLocations,
-        appSupportDirectory: appSupportDirectory
-    )
+    init(fileURL: URL, segDict: SegDictionary) {
+        let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
+        let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
+        self.fileIdentifier = fileIdentifier
+        allLabelsCSVFile = "labels_\(fileIdentifier)"
+        sysLabelsCSVFile = "labels_ver_\(version)"
+        allProceduresCSVFile = "procedures_\(fileIdentifier)"
+        sysProceduresCSVFile = "procedures_ver_\(version)"
+        sysRecordsFile = "records_ver_\(version)"
+        allRecordsFile = "records_\(fileIdentifier)"
+        globalsFile = "globals_ver_\(version)"
+        appSupportDirectory = URL.applicationSupportDirectory
+            .appendingPathComponent("pdisasm")
+    }
 
-    allLocations.formUnion(sysLocations)
+    func load(
+        knownRecords: inout Set<PascalRecord>,
+        allLocations: inout Set<Location>,
+        allProcedures: inout [ProcedureIdentifier],
+        globalNames: inout [Int: Identifier]
+    ) {
+        var sysLocations: Set<Location> = []
+        var sysProcedures: [ProcedureIdentifier] = []
 
-    importGlobalLabels(
-        fromJson: globalsFile,
-        to: &globalNames,
-        appSupportDirectory: appSupportDirectory
-    )
+        importKnownRecords(
+            fromJson: sysRecordsFile,
+            to: &knownRecords,
+            appSupportDirectory: appSupportDirectory
+        )
+        importKnownRecords(
+            fromJson: allRecordsFile,
+            to: &knownRecords,
+            appSupportDirectory: appSupportDirectory
+        )
+        importLabels(
+            fromCSV: allLabelsCSVFile,
+            to: &allLocations,
+            appSupportDirectory: appSupportDirectory
+        )
+        importLabels(
+            fromCSV: sysLabelsCSVFile,
+            to: &sysLocations,
+            appSupportDirectory: appSupportDirectory
+        )
+        allLocations.formUnion(sysLocations)
 
-    importProcedures(
-        fromCSV: allProceduresCSVFile,
-        to: &allProcedures,
-        appSupportDirectory: appSupportDirectory
-    )
-    importProcedures(
-        fromCSV: sysProceduresCSVFile,
-        to: &sysProcedures,
-        appSupportDirectory: appSupportDirectory
-    )
+        importGlobalLabels(
+            fromJson: globalsFile,
+            to: &globalNames,
+            appSupportDirectory: appSupportDirectory
+        )
 
-    allProcedures.append(contentsOf: sysProcedures)
+        importProcedures(
+            fromCSV: allProceduresCSVFile,
+            to: &allProcedures,
+            appSupportDirectory: appSupportDirectory
+        )
+        importProcedures(
+            fromCSV: sysProceduresCSVFile,
+            to: &sysProcedures,
+            appSupportDirectory: appSupportDirectory
+        )
+        allProcedures.append(contentsOf: sysProcedures)
+    }
 
-    // For each segment, extract code blocks and decode procedures
+    func write(
+        knownRecords: Set<PascalRecord>,
+        allLocations: Set<Location>,
+        allProcedures: [ProcedureIdentifier],
+        overwriteMetadata: Bool
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: appSupportDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        exportKnownRecords(
+            toJson: sysRecordsFile,
+            from: knownRecords.filter { $0.isSystemRecord == true },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        exportKnownRecords(
+            toJson: allRecordsFile,
+            from: knownRecords.filter { $0.isSystemRecord == false },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        exportLabels(
+            toCSV: allLabelsCSVFile,
+            from: allLocations.filter {
+                !systemSegments.contains($0.segment)
+                    && $0.addr != nil
+                    && $0.isParam == false
+            }.sorted { $0 < $1 },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+        exportLabels(
+            toCSV: sysLabelsCSVFile,
+            from: allLocations.filter {
+                systemSegments.contains($0.segment)
+                    && $0.addr != nil
+                    && $0.isParam == false
+            }.sorted { $0 < $1 },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        exportProcedures(
+            toCSV: allProceduresCSVFile,
+            from: allProcedures.filter { !systemSegments.contains($0.segment) },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+        exportProcedures(
+            toCSV: sysProceduresCSVFile,
+            from: allProcedures.filter { systemSegments.contains($0.segment) },
+            overwrite: overwriteMetadata,
+            appSupportDirectory: appSupportDirectory
+        )
+    }
+}
+
+private func decodeCodeSegments(
+    segDict: SegDictionary,
+    binaryData: CodeData,
+    verbose: Bool,
+    allLocations: inout Set<Location>,
+    allProcedures: inout [ProcedureIdentifier],
+    allCallers: inout Set<Call>,
+    dataSegments: inout [Int]
+) throws -> [Int: CodeSegment] {
+    var allCodeSegs: [Int: CodeSegment] = [:]
+
     for segment in segDict.segTable.sorted(by: { $0.key < $1.key }) {
         let seg = segment.value
         var extraCodeOffset = 0
@@ -929,9 +994,6 @@ public func disassemble(
             length: seg.codeLength
         )
 
-        // If the extracted code block is missing or too small to contain the
-        // expected trailer bytes, skip this segment to avoid out-of-bounds
-        // subscripting on `Data` (which can crash at runtime on some platforms).
         if code.count < 2 {
             if verbose {
                 print(
@@ -943,38 +1005,16 @@ public func disassemble(
 
         if seg.segmentKind == .dataseg  {
             dataSegments.append(Int(seg.segNum))
-            // data segments don't have content within the file - the runtime just reserves memory
-            // for them, so we don't need to try to read anything for them. There are no procedures,
-            // so we can skip to the next segment.
             if verbose {
                 print("Segment \(seg.name) (segNum=\(seg.segNum)): segment kind is .dataseg")
             }
             continue
         }
 
-        // count of procedures in this segment
         let procCount = Int(code[code.endIndex - 1])
-
-        // wrap the code in a CodeData to make it easier to read from it.
         let codeData = CodeData(data: code, instructionPointer: 0, header: 0)
 
-        // This applies to the core pascal operating system file (SYSTEM.PASCAL).
-        // Segment 0 (the PASCALSYSTEM segment) is actually split between
-        // slots 0 and 15 in the segment table. The part that's in slot 15
-        // has a name that is eight spaces - so more or less hidden.
-        // The runtime loads these parts into memory locations that vary
-        // from version to version.
-        // The procedure table in slot 0's part contains references to
-        // procedures contained in slot 15, stored as negative addresses.
-        // (On a 6502, the negative addresses just wrap around to where
-        // the runtime has loaded the second part.)
-        // We deal with this in our code by determining an offset that we can
-        // add to any negative address in the procedure table to turn it
-        // into a positive address within the slot 15 part.
-
         var extraCode: Data = Data()
-        // slots 0 and 15 may need to be handled differently - IF they are
-        // part of the PASCALSY segment.
         if seg.segNum == 0 && seg.name == "PASCALSY" {
             if let extraSeg = segDict.segTable[15] {
                 extraCode = binaryData.getCodeBlock(
@@ -990,13 +1030,10 @@ public func disassemble(
             }
         }
         if seg.segNum == 15 && seg.name == "" {
-            // if we are processing the 'hidden' part of PASCALSY from
-            // slot 15, skip it, because we will have processed all of
-            // its procedures when we dealt with slot 0.
             continue
         }
 
-        let codeSeg: CodeSegment = CodeSegment(
+        let codeSeg = CodeSegment(
             procedureDictionary: ProcedureDictionary(
                 procedureCount: procCount,
                 procedurePointers: []
@@ -1028,8 +1065,6 @@ public func disassemble(
             }
         }
 
-        // track assembly entry points across procedures within a segment because they can call
-        // each other directly by absolute address, without going through the procedure table. This means we won't be able to assign them to a procedure based on calls from other procedures, so we need to track them separately and assign them to a pseudo-procedure for the assembler code at the end.
         var asmEntryPoints: Set<Int> = []
 
         for (procIdx, procPtr) in codeSeg.procedureDictionary.procedurePointers
@@ -1039,9 +1074,6 @@ public func disassemble(
             var proc = Procedure()
             var segCodeBlock: Data
             var procStartOffset = procPtr
-            // if the procStartOffset is negative, this is a reference to the 'extra' part of the PASCALSY
-            // segment stored in slot 15, so we need to add the extraCodeOffset to it and read from the
-            // extraCode block instead of the main code block.
             if procStartOffset < 0 {
                 segCodeBlock = extraCode
                 procStartOffset = procStartOffset + extraCodeOffset
@@ -1049,7 +1081,6 @@ public func disassemble(
                 segCodeBlock = code
             }
 
-            // Basic validation
             let minNeededIndex = procStartOffset - 8
             let maxNeededIndex = procStartOffset + 1
             if minNeededIndex < 0 || maxNeededIndex >= segCodeBlock.count {
@@ -1067,14 +1098,11 @@ public func disassemble(
                 procNumber = Int(segCodeBlock[procStartOffset])
             }
 
-            // if it's assembler, proc# is based on the index alone.
             if procNumber == 0 && seg.machineType == 7 {
                 procNumber = procIdx + 1
                 isAssembler = true
             }
 
-            // set proc headers for any procedures we already know about
-            // this will make it easier to assign their memory locations.
             if let predefinedProc = allProcedures.first(where: {
                 $0.segment == seg.segNum && $0.procedure == procNumber
             }) {
@@ -1131,50 +1159,41 @@ public func disassemble(
         allCodeSegs[Int(seg.segNum)] = codeSeg
     }
 
-    // Amend relative memory locations in instructions by lex level (which we
-    // can't do until all procedures are decoded and we know the procedure calling hierarchy)
-    for (_, codeSeg) in allCodeSegs {
+    return allCodeSegs
+}
+
+private func applyCallerLexLevels(
+    codeSegments: [Int: CodeSegment],
+    allCallers: inout Set<Call>
+) {
+    for (_, codeSeg) in codeSegments {
         for proc in codeSeg.procedures {
-            if let pt = proc.identifier {
-                allCallers = Set(allCallers.map { call in
-                    if call.target.segment == pt.segment
-                        && call.target.procedure == pt.procedure
-                        && call.target.lexLevel == nil
-                    {
-                        call.target.lexLevel = proc.lexicalLevel
-                    }
-                    if call.origin.segment == pt.segment
-                        && call.origin.procedure == pt.procedure
-                        && call.origin.lexLevel == nil
-                    {
-                        call.origin.lexLevel = proc.lexicalLevel
-                    }
-                    return call
-                })
-//                allCallers.forEach { call in
-//                    if call.target.segment == pt.segment
-//                        && call.target.procedure == pt.procedure
-//                        && call.target.lexLevel == nil
-//                    {
-//                        allCallers.remove(call)
-//                        call.target.lexLevel = proc.lexicalLevel
-//                        allCallers.insert(call)
-//                    }
-//                    if call.origin.segment == pt.segment
-//                        && call.origin.procedure == pt.procedure
-//                        && call.origin.lexLevel == nil
-//                    {
-//                        allCallers.remove(call)
-//                        call.origin.lexLevel = proc.lexicalLevel
-//                        allCallers.insert(call)
-//                    }
-//                }
-            }
+            guard let pt = proc.identifier else { continue }
+            allCallers = Set(allCallers.map { call in
+                if call.target.segment == pt.segment
+                    && call.target.procedure == pt.procedure
+                    && call.target.lexLevel == nil
+                {
+                    call.target.lexLevel = proc.lexicalLevel
+                }
+                if call.origin.segment == pt.segment
+                    && call.origin.procedure == pt.procedure
+                    && call.origin.lexLevel == nil
+                {
+                    call.origin.lexLevel = proc.lexicalLevel
+                }
+                return call
+            })
         }
     }
+}
 
-    // And now we can resolve any missing procedure values.
-    for (_, codeSeg) in allCodeSegs {
+private func normaliseDecodedLocations(
+    codeSegments: [Int: CodeSegment],
+    allCallers: Set<Call>,
+    allLocations: inout Set<Location>
+) {
+    for (_, codeSeg) in codeSegments {
         for proc in codeSeg.procedures {
             normaliseMemoryLocations(proc, allCallers)
             let missingLexLevelLocations = allLocations.filter({
@@ -1188,37 +1207,61 @@ public func disassemble(
                 loc.lexLevel = proc.lexicalLevel
                 allLocations.insert(loc)
             }
-//            let missingLex = allLocations.filter({ $0.isParam == false &&
-//                $0.lexLevel == nil && $0.segment == proc.identifier?.segment
-//                    && $0.procedure == proc.identifier?.procedure
-//            })
-//            missingLex.forEach { loc in
-//                allLocations.remove(loc)
-//                let updatedLoc = loc
-//                updatedLoc.lexLevel = proc.lexicalLevel
-//                allLocations.insert(updatedLoc)
-//            }
         }
     }
+}
 
-    // Now we can update memory locations that correspond to procedure/function parameters and returns.
-    for (_, codeSeg) in allCodeSegs {
+private func applyInitialProcedureSignatureLocations(
+    codeSegments: [Int: CodeSegment],
+    allLocations: inout Set<Location>
+) -> [TypeConflict] {
+    var typeConflicts: [TypeConflict] = []
+
+    for (_, codeSeg) in codeSegments {
         for proc in codeSeg.procedures {
-            if let pt = proc.identifier {
-                var paramAddr = 1
+            guard let pt = proc.identifier else { continue }
+            var paramAddr = 1
 
-                // if it's a function, set locations 1 (and 2 for reals) to retval
-
-                if pt.isFunction == true {
+            if pt.isFunction == true {
+                if let ret = allLocations.first(where: {
+                    $0.segment == pt.segment && $0.procedure == pt.procedure
+                        && $0.addr == 1
+                }) {
+                    ret.name = pt.procName ?? pt.shortDescription
+                    if let conflict = ret.assignType(
+                        pt.returnType ?? "UNKNOWN",
+                        source: pt.returnTypeSource,
+                        evidence: "\(pt.shortDescription) return"
+                    ) {
+                        typeConflicts.append(conflict)
+                    }
+                    ret.isParam = true
+                    allLocations.update(with: ret)
+                } else {
+                    allLocations.insert(
+                        Location(
+                            segment: pt.segment,
+                            procedure: pt.procedure,
+                            lexLevel: proc.lexicalLevel,
+                            addr: 1,
+                            isParam: true,
+                            name: pt.procName ?? pt.shortDescription,
+                            type: pt.returnType ?? "UNKNOWN",
+                            typeSource: pt.returnTypeSource
+                        )
+                    )
+                }
+                if proc.identifier?.returnType == "REAL" {
                     if let ret = allLocations.first(where: {
-                        $0.segment == pt.segment && $0.procedure == pt.procedure
-                            && $0.addr == 1
+                        $0.segment == pt.segment
+                            && $0.procedure == pt.procedure
+                            && $0.addr == 2
                     }) {
                         ret.name = pt.procName ?? pt.shortDescription
                         if let conflict = ret.assignType(
-                            pt.returnType ?? "UNKNOWN",
+                            pt.returnType ?? "REAL",
                             source: pt.returnTypeSource,
-                            evidence: "\(pt.shortDescription) return"
+                            evidence: "\(pt.shortDescription) real return"
                         ) {
                             typeConflicts.append(conflict)
                         }
@@ -1230,137 +1273,184 @@ public func disassemble(
                                 segment: pt.segment,
                                 procedure: pt.procedure,
                                 lexLevel: proc.lexicalLevel,
-                                addr: 1,
+                                addr: 2,
                                 isParam: true,
                                 name: pt.procName ?? pt.shortDescription,
-                                type: pt.returnType ?? "UNKNOWN",
+                                type: pt.returnType ?? "REAL",
                                 typeSource: pt.returnTypeSource
                             )
                         )
                     }
-                    if proc.identifier?.returnType == "REAL" {
-                        if let ret = allLocations.first(where: {
-                            $0.segment == pt.segment
-                                && $0.procedure == pt.procedure
-                                && $0.addr == 2
-                        }) {
-                            ret.name = pt.procName ?? pt.shortDescription
-                            if let conflict = ret.assignType(
-                                pt.returnType ?? "REAL",
-                                source: pt.returnTypeSource,
-                                evidence: "\(pt.shortDescription) real return"
-                            ) {
-                                typeConflicts.append(conflict)
-                            }
-                            ret.isParam = true
-                            allLocations.update(with: ret)
-                        } else {
-                            allLocations.insert(
-                                Location(
-                                    segment: pt.segment,
-                                    procedure: pt.procedure,
-                                    lexLevel: proc.lexicalLevel,
-                                    addr: 2,
-                                    isParam: true,
-                                    name: pt.procName ?? pt.shortDescription,
-                                    type: pt.returnType ?? "REAL",
-                                    typeSource: pt.returnTypeSource
-                                )
-                            )
-                        }
-                    }
-                    paramAddr = 3
                 }
-                for param in pt.parameters.reversed() {
-                    if let par = allLocations.first(where: {
-                        $0.segment == pt.segment && $0.procedure == pt.procedure
-                            && $0.addr == paramAddr
-                    }) {
-                        par.name = param.name
-                        if let conflict = par.assignType(
-                            param.type,
-                            source: param.typeSource,
-                            evidence: "\(pt.shortDescription) parameter \(param.name)"
-                        ) {
-                            typeConflicts.append(conflict)
-                        }
-                        par.isParam = true
-                        allLocations.update(with: par)
-                    } else {
-                        allLocations.insert(
-                            Location(
-                                segment: pt.segment,
-                                procedure: pt.procedure,
-                                lexLevel: proc.lexicalLevel,
-                                addr: paramAddr,
-                                isParam: true,
-                                name: param.name,
-                                type: param.type,
-                                typeSource: param.typeSource
-                            )
+                paramAddr = 3
+            }
+            for param in pt.parameters.reversed() {
+                if let par = allLocations.first(where: {
+                    $0.segment == pt.segment && $0.procedure == pt.procedure
+                        && $0.addr == paramAddr
+                }) {
+                    par.name = param.name
+                    if let conflict = par.assignType(
+                        param.type,
+                        source: param.typeSource,
+                        evidence: "\(pt.shortDescription) parameter \(param.name)"
+                    ) {
+                        typeConflicts.append(conflict)
+                    }
+                    par.isParam = true
+                    allLocations.update(with: par)
+                } else {
+                    allLocations.insert(
+                        Location(
+                            segment: pt.segment,
+                            procedure: pt.procedure,
+                            lexLevel: proc.lexicalLevel,
+                            addr: paramAddr,
+                            isParam: true,
+                            name: param.name,
+                            type: param.type,
+                            typeSource: param.typeSource
                         )
-                    }
-                    paramAddr += parameterWordSize(param)
+                    )
                 }
+                paramAddr += parameterWordSize(param)
             }
         }
     }
+
+    return typeConflicts
+}
+
+private func simulatePascalProcedures(
+    codeSegments: [Int: CodeSegment],
+    knownRecords: Set<PascalRecord>,
+    allProcedures: inout [ProcedureIdentifier],
+    allLocations: inout Set<Location>
+) -> [TypeConflict] {
+    var typeConflicts: [TypeConflict] = []
+
+    for (_, codeSeg) in codeSegments {
+        for proc in codeSeg.procedures {
+            if proc.identifier?.isAssembly == true {
+                continue
+            }
+            typeConflicts.append(contentsOf: simulateStackAndGeneratePseudocode(
+                proc: proc,
+                knownRecords: knownRecords,
+                allProcedures: &allProcedures,
+                allLocations: &allLocations
+            ))
+        }
+    }
+
+    return typeConflicts
+}
+
+private func synchronizeSignaturesAndLocations(
+    allProcedures: [ProcedureIdentifier],
+    codeSegments: [Int: CodeSegment],
+    allLocations: inout Set<Location>
+) -> [TypeConflict] {
+    var typeConflicts: [TypeConflict] = []
+    typeConflicts.append(contentsOf: synchronizeProcedureSignatures(
+        procedures: allProcedures,
+        locations: allLocations
+    ))
+    typeConflicts.append(contentsOf: applyProcedureSignatureLocations(
+        procedures: allProcedures,
+        codeSegments: codeSegments,
+        locations: &allLocations
+    ))
+    return typeConflicts
+}
+
+/// Disassemble a binary file and return structured results without printing.
+public func disassemble(
+    filename: String,
+    verbose: Bool = false,
+    writeMetadata: Bool = false,
+    overwriteMetadata: Bool = false
+) throws -> DisassemblyResult {
+    var fileURL: URL
+    var binaryData: CodeData
+    do {
+        fileURL = URL(fileURLWithPath: filename)
+        binaryData = try CodeData(data: Data(contentsOf: fileURL))
+    } catch {
+        throw error
+    }
+
+    let segDict = try readCodeFileStructure(codeData: binaryData)
+    let metadata = MetadataContext(fileURL: fileURL, segDict: segDict)
+
+    var allLocations: Set<Location> = []
+    var allProcedures: [ProcedureIdentifier] = []
+    var allCallers: Set<Call> = []
+    var typeConflicts: [TypeConflict] = []
+    var dataSegments: [Int] = []
+    var knownRecords = defaultKnownRecords()
+
+    // Try loading name maps from Application Support. Missing metadata is fine;
+    // writeback is controlled separately by the caller.
+    var globalNames: [Int: Identifier] = [:]
+    metadata.load(
+        knownRecords: &knownRecords,
+        allLocations: &allLocations,
+        allProcedures: &allProcedures,
+        globalNames: &globalNames
+    )
+
+    let allCodeSegs = try decodeCodeSegments(
+        segDict: segDict,
+        binaryData: binaryData,
+        verbose: verbose,
+        allLocations: &allLocations,
+        allProcedures: &allProcedures,
+        allCallers: &allCallers,
+        dataSegments: &dataSegments
+    )
+
+    applyCallerLexLevels(codeSegments: allCodeSegs, allCallers: &allCallers)
+    normaliseDecodedLocations(
+        codeSegments: allCodeSegs,
+        allCallers: allCallers,
+        allLocations: &allLocations
+    )
+    typeConflicts.append(contentsOf: applyInitialProcedureSignatureLocations(
+        codeSegments: allCodeSegs,
+        allLocations: &allLocations
+    ))
 
     // Do stack simulation and pseudocode generation
     // once we have all procedures decoded.
     // As the stack plays a role in control flow, we need to handle them at the same time.
-    for (_, codeSeg) in allCodeSegs {
-        for proc in codeSeg.procedures {
-            if proc.identifier?.isAssembly == true {
-                // skip assembly procedures
-                continue
-            }
-            typeConflicts.append(contentsOf: simulateStackAndGeneratePseudocode(
-                proc: proc,
-                knownRecords: knownRecords,
-                allProcedures: &allProcedures,
-                allLocations: &allLocations
-            ))
-        }
-    }
-
-    typeConflicts.append(contentsOf: synchronizeProcedureSignatures(
-        procedures: allProcedures,
-        locations: allLocations
-    ))
-    typeConflicts.append(contentsOf: applyProcedureSignatureLocations(
-        procedures: allProcedures,
+    typeConflicts.append(contentsOf: simulatePascalProcedures(
         codeSegments: allCodeSegs,
-        locations: &allLocations
+        knownRecords: knownRecords,
+        allProcedures: &allProcedures,
+        allLocations: &allLocations
+    ))
+    typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
+        allProcedures: allProcedures,
+        codeSegments: allCodeSegs,
+        allLocations: &allLocations
     ))
 
     // Regenerate pseudocode with the inferred signatures and corrected parameter labels.
-    for (_, codeSeg) in allCodeSegs {
-        for proc in codeSeg.procedures {
-            if proc.identifier?.isAssembly == true {
-                continue
-            }
-            typeConflicts.append(contentsOf: simulateStackAndGeneratePseudocode(
-                proc: proc,
-                knownRecords: knownRecords,
-                allProcedures: &allProcedures,
-                allLocations: &allLocations
-            ))
-        }
-    }
-
-    typeConflicts.append(contentsOf: synchronizeProcedureSignatures(
-        procedures: allProcedures,
-        locations: allLocations
-    ))
-    typeConflicts.append(contentsOf: applyProcedureSignatureLocations(
-        procedures: allProcedures,
+    typeConflicts.append(contentsOf: simulatePascalProcedures(
         codeSegments: allCodeSegs,
-        locations: &allLocations
+        knownRecords: knownRecords,
+        allProcedures: &allProcedures,
+        allLocations: &allLocations
+    ))
+    typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
+        allProcedures: allProcedures,
+        codeSegments: allCodeSegs,
+        allLocations: &allLocations
     ))
 
     let result = DisassemblyResult(
-        sourceFilename: fileIdentifier,
+        sourceFilename: metadata.fileIdentifier,
         segDictionary: segDict,
         codeSegments: allCodeSegs,
         dataSegments: dataSegments,
@@ -1371,57 +1461,11 @@ public func disassemble(
     )
 
     if writeMetadata {
-        try FileManager.default.createDirectory(
-            at: appSupportDirectory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-
-        exportKnownRecords(
-            toJson: sysRecordsFile,
-            from: knownRecords.filter { $0.isSystemRecord == true },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
-        )
-
-        exportKnownRecords(
-            toJson: allRecordsFile,
-            from: knownRecords.filter { $0.isSystemRecord == false },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
-        )
-
-        // we don't export segment 0 into the app file
-        // we also don't export locations without addresses (as they're actually procedures/functions)
-        // and we don't export entries that are marked as parameters because they're exported as part of the procedure
-        exportLabels(
-            toCSV: allLabelsCSVFile,
-            from: allLocations.filter { !systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
-        )
-        // the system file contains segment 0, as long as they're not parameters or without an address
-        exportLabels(
-            toCSV: sysLabelsCSVFile,
-            from: allLocations.filter { systemSegments.contains($0.segment) && $0.addr != nil && $0.isParam == false }.sorted { $0 < $1 },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
-        )
-
-        // the app procedures contains any procedure/function that's not in segment 0
-        exportProcedures(
-            toCSV: allProceduresCSVFile,
-            from: allProcedures.filter { !systemSegments.contains($0.segment) },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
-        )
-
-        // the system procedures contains all procedures/functions except segment 0
-        exportProcedures(
-            toCSV: sysProceduresCSVFile,
-            from: allProcedures.filter { systemSegments.contains($0.segment) },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+        try metadata.write(
+            knownRecords: knownRecords,
+            allLocations: allLocations,
+            allProcedures: allProcedures,
+            overwriteMetadata: overwriteMetadata
         )
     }
 
