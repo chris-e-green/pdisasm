@@ -93,6 +93,65 @@ struct OpcodeDecoder {
         }
     }
 
+    private func jumpDestination(offsetAt offsetIndex: Int, ic: Int, addr: Int) throws -> Int {
+        let offset = Int(try codeData.readByte(at: offsetIndex))
+        if offset > 0x7f {
+            let jte = addr + offset - 256
+            return jte - Int(try codeData.readWord(at: jte))
+        }
+        return ic + offset + 2
+    }
+
+    private func globalLocation(
+        segment: Int,
+        proc: Procedure,
+        addr: Int
+    ) -> Location {
+        Location(
+            segment: segment,
+            procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0,
+            lexLevel: 0,
+            addr: addr
+        )
+    }
+
+    private func intermediateLocation(
+        currSeg: Segment,
+        proc: Procedure,
+        lexLevelOffset: UInt8,
+        addr: Int
+    ) -> Location {
+        let refLexLevel = proc.lexicalLevel - Int(lexLevelOffset)
+        return Location(
+            segment: refLexLevel < 0 ? 0 : currSeg.segNum,
+            lexLevel: refLexLevel,
+            addr: addr
+        )
+    }
+
+    private func localLocation(
+        segment: Int,
+        procedure: Int?,
+        lexLevel: Int,
+        addr: Int
+    ) -> Location {
+        Location(
+            segment: segment,
+            procedure: procedure,
+            lexLevel: lexLevel,
+            addr: addr
+        )
+    }
+
+    private func comparatorInstruction(_ mnemonic: String, at ic: Int) -> DecodedInstruction {
+        DecodedInstruction(
+            mnemonic: mnemonic,
+            bytesConsumed: 0,
+            requiresComparator: true,
+            comparatorOffset: ic + 1
+        )
+    }
+
     func decode(
         opcode: UInt8,
         at ic: Int,
@@ -161,14 +220,7 @@ struct OpcodeDecoder {
                 comment: "Adjust set to \(count) words"
             )
         case fjp:
-            let offset = Int(try codeData.readByte(at: ic + 1))
-            var dest: Int = 0
-            if offset > 0x7f {
-                let jte = addr + offset - 256
-                dest = jte - Int(try codeData.readWord(at: jte))
-            } else {
-                dest = ic + offset + 2
-            }
+            let dest = try jumpDestination(offsetAt: ic + 1, ic: ic, addr: addr)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "FJP",
@@ -205,7 +257,7 @@ struct OpcodeDecoder {
             )
         case lao:
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
+            let loc = globalLocation(segment: segment, proc: proc, addr: val)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "LAO",
@@ -261,7 +313,7 @@ struct OpcodeDecoder {
         case ldo:
             // LDO
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
+            let loc = globalLocation(segment: segment, proc: proc, addr: val)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "LDO",
@@ -283,7 +335,7 @@ struct OpcodeDecoder {
         case sro:
             // SRO
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
+            let loc = globalLocation(segment: segment, proc: proc, addr: val)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "SRO",
@@ -305,14 +357,7 @@ struct OpcodeDecoder {
             tempIC += 2
             tempParams.append(tempIC)
 
-            var dest: Int = 0
-            let offset = Int(try codeData.readByte(at: tempIC + 1))
-            if offset > 0x7f {
-                let jte = addr + offset - 256
-                dest = jte - Int(try codeData.readWord(at: jte))
-            } else {
-                dest = tempIC + offset + 2
-            }
+            let dest = try jumpDestination(offsetAt: tempIC + 1, ic: tempIC, addr: addr)
             tempParams.append(dest)
             tempIC += 2
             if first > last {
@@ -357,39 +402,21 @@ struct OpcodeDecoder {
             )
         case eql:
             // EQL
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "EQL",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("EQL", at: ic)
         case geq:
             // GEQ
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "GEQ",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("GEQ", at: ic)
         case grt:
             // GRT
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "GRT",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("GRT", at: ic)
         case lda:
             // LDA
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let byte1 = try codeData.readByte(at: ic + 1)
-            let refLexLevel = proc.lexicalLevel - Int(byte1)
-            let loc = Location(
-                segment: refLexLevel < 0 ? 0 : currSeg.segNum,
-                lexLevel: refLexLevel,
+            let loc = intermediateLocation(
+                currSeg: currSeg,
+                proc: proc,
+                lexLevelOffset: byte1,
                 addr: val
             )
             return DecodedInstruction(
@@ -419,30 +446,18 @@ struct OpcodeDecoder {
             )
         case leq:
             // LEQ
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "LEQ",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("LEQ", at: ic)
         case les:
             // LES
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "LES",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("LES", at: ic)
         case lod:
             // LOD
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let byte1 = try codeData.readByte(at: ic + 1)
-            let refLexLevel = proc.lexicalLevel - Int(byte1)
-            let loc = Location(
-                segment: refLexLevel < 0 ? 0 : currSeg.segNum,
-                lexLevel: refLexLevel,
+            let loc = intermediateLocation(
+                currSeg: currSeg,
+                proc: proc,
+                lexLevelOffset: byte1,
                 addr: val
             )
             return DecodedInstruction(
@@ -455,21 +470,15 @@ struct OpcodeDecoder {
             )
         case neq:
             // NEQ
-            return DecodedInstruction(
-//                opcode: opcode,
-                mnemonic: "NEQ",
-                bytesConsumed: 0,
-                requiresComparator: true,
-                comparatorOffset: ic + 1
-            )
+            return comparatorInstruction("NEQ", at: ic)
         case str:
             // STR
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let byte1 = try codeData.readByte(at: ic + 1)
-            let refLexLevel = proc.lexicalLevel - Int(byte1)
-            let loc = Location(
-                segment: refLexLevel < 0 ? 0 : currSeg.segNum,
-                lexLevel: refLexLevel,
+            let loc = intermediateLocation(
+                currSeg: currSeg,
+                proc: proc,
+                lexLevelOffset: byte1,
                 addr: val
             )
             return DecodedInstruction(
@@ -481,14 +490,7 @@ struct OpcodeDecoder {
                 memLocation: loc
             )
         case ujp:
-            let offset = Int(try codeData.readByte(at: ic + 1))
-            var dest: Int = 0
-            if offset > 0x7f {
-                let jte = addr + offset - 256
-                dest = jte - Int(try codeData.readWord(at: jte))
-            } else {
-                dest = ic + offset + 2
-            }
+            let dest = try jumpDestination(offsetAt: ic + 1, ic: ic, addr: addr)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "UJP",
@@ -547,7 +549,7 @@ struct OpcodeDecoder {
             )
         case lla:
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(
+            let loc = localLocation(
                 segment: currSeg.segNum,
                 procedure: procedure,
                 lexLevel: proc.lexicalLevel,
@@ -572,7 +574,7 @@ struct OpcodeDecoder {
             )
         case ldl:
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(
+            let loc = localLocation(
                 segment: segment,
                 procedure: procedure,
                 lexLevel: proc.lexicalLevel,
@@ -588,7 +590,7 @@ struct OpcodeDecoder {
             )
         case stl:
             let (val, inc) = try codeData.readBig(at: ic + 1)
-            let loc = Location(
+            let loc = localLocation(
                 segment: segment,
                 procedure: procedure,
                 lexLevel: proc.lexicalLevel,
@@ -685,7 +687,7 @@ struct OpcodeDecoder {
         case sldl1...sldl16:
             let b = Int(opcode)
             let val = b - Int(sldl1) + 1
-            let loc = Location(
+            let loc = localLocation(
                 segment: segment,
                 procedure: procedure,
                 lexLevel: proc.lexicalLevel,
@@ -702,7 +704,7 @@ struct OpcodeDecoder {
         case sldo1...sldo16:
             let b2 = Int(opcode)
             let val = b2 - Int(sldo1) + 1
-            let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
+            let loc = globalLocation(segment: segment, proc: proc, addr: val)
             return DecodedInstruction(
 //                opcode: opcode,
                 mnemonic: "SLDO",

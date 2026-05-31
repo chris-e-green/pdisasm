@@ -87,7 +87,7 @@ private func typeConflictText(_ conflict: TypeConflict) -> String {
 /// Classifies the kind of each output line so the GUI can filter and colour them.
 public enum LineKind: Sendable, CaseIterable {
     case markup        // headings, code fences, segment table
-    case pcode         // disassembled P-code instructions
+    case pcode         // disassembled P-code / assembly instructions
     case pseudocode    // generated pseudocode
     case variable      // variable / location declarations
     case global        // global variable listings
@@ -349,7 +349,7 @@ public func renderStructuredLines(
                                     allProcedures: result.allProcedures
                                 )
                             }
-                            addLine(.pseudocode, pcLine)
+                            addLine(.pcode, pcLine)
                         }
                     }
 
@@ -385,6 +385,70 @@ public func renderStructuredLines(
 
     return lines
 }
+
+private func makeDisassemblyResult(
+    sourceFilename: String,
+    segDictionary: SegDictionary,
+    codeSegs: [Int: CodeSegment],
+    dataSegs: [Int],
+    allLocations: Set<Location>,
+    allProcedures: [ProcedureIdentifier],
+    allCallers: Set<Call>,
+    typeConflicts: [TypeConflict]
+) -> DisassemblyResult {
+    DisassemblyResult(
+        sourceFilename: sourceFilename,
+        segDictionary: segDictionary,
+        codeSegments: codeSegs,
+        dataSegments: dataSegs,
+        allLocations: allLocations,
+        allProcedures: allProcedures,
+        allCallers: allCallers,
+        typeConflicts: typeConflicts
+    )
+}
+
+private func shouldEmitLine(
+    _ line: OutputLine,
+    showMarkup: Bool,
+    showPCode: Bool,
+    showPseudoCode: Bool
+) -> Bool {
+    switch line.kind {
+    case .markup:     return showMarkup
+    case .pcode:      return showPCode
+    case .pseudocode: return showPseudoCode
+    case .variable:   return true
+    case .global:     return true
+    case .header:     return true
+    case .diagnostic: return true
+    }
+}
+
+private func renderDotLines(allCallers: Set<Call>) -> [String] {
+    var lines = ["digraph {"]
+    allCallers.sorted(by: { $0.origin < $1.origin }).forEach {
+        if $0.target.segment == $0.origin.segment
+            && $0.target.lexLevel ?? -999 < $0.origin.lexLevel ?? -999
+        {
+            return
+        }
+        lines.append("\"\($0.origin)\" -> \"\($0.target)\"")
+    }
+    lines.append("}")
+    return lines
+}
+
+private func writeLines<Target: TextOutputStream>(
+    _ lines: [String],
+    to stream: inout Target
+) {
+    for line in lines {
+        stream.write(line)
+        stream.write("\n")
+    }
+}
+
 func outputResults(
     sourceFilename: String,
     segDictionary: SegDictionary,
@@ -439,293 +503,35 @@ func outputResults<Target: TextOutputStream>(
     showPseudoCode: Bool = true,
     showDot: Bool = false
 ) {
-    func emit(_ items: Any..., terminator: String = "\n") {
-        let line = items.map { "\($0)" }.joined(separator: " ")
-        stream.write(line + terminator)
-    }
-
-    func prettyStack(_ s: [String]) -> String {
-        "[" + s.joined(separator: ", ") + "]"
-    }
-
     if showDot {
-        emit("digraph {")
-        allCallers.sorted(by: { $0.origin < $1.origin }).forEach {
-            if $0.target.segment == $0.origin.segment
-                && $0.target.lexLevel ?? -999 < $0.origin.lexLevel ?? -999
-            {
-                // ignore it
-            } else {
-                emit("\"\($0.origin)\" -> \"\($0.target)\"")
-            }
-        }
-        emit("}")
-    }
-    if showMarkup {
-        emit("#  \(sourceFilename) \n")
-        emit(segDictionary)
-
-        if !typeConflicts.isEmpty {
-            emit("## Type Conflicts\n")
-        }
+        writeLines(renderDotLines(allCallers: allCallers), to: &stream)
     }
 
-    if !typeConflicts.isEmpty {
-        for conflict in sortedTypeConflicts(typeConflicts) {
-            emit("; \(typeConflictText(conflict))")
+    let result = makeDisassemblyResult(
+        sourceFilename: sourceFilename,
+        segDictionary: segDictionary,
+        codeSegs: codeSegs,
+        dataSegs: dataSegs,
+        allLocations: allLocations,
+        allProcedures: allProcedures,
+        allCallers: allCallers,
+        typeConflicts: typeConflicts
+    )
+
+    let lines = renderStructuredLines(
+        from: result,
+        showStackState: showStackState,
+        verbose: verbose
+    )
+    let filteredLines = lines
+        .filter {
+            shouldEmitLine(
+                $0,
+                showMarkup: showMarkup,
+                showPCode: showPCode,
+                showPseudoCode: showPseudoCode
+            )
         }
-        emit("")
-    }
-
-    if showMarkup {
-        emit("## Globals\n")
-    }
-
-    allLocations.filter({ $0.lexLevel == -1 && $0.segment == 0 }).sorted()
-        .forEach({ loc in
-            emit("G\(loc.addr ?? -1)=\(loc.description)")
-        })
-    emit("")
-
-    for ds in dataSegs.sorted(by: { $0 < $1 }) {
-        emit("## Data Segment \(ds)\n")
-        allLocations.filter({ $0.segment == ds }).sorted().forEach( { loc in
-            emit("D\(loc.addr ?? -1)=\(loc.description)")
-        })
-    }
-    emit("")
-    
-    for (s, codeSeg) in codeSegs.sorted(by: { $0.key < $1.key }) {
-        if verbose {
-            segDictionary.segTable.first(where: { $0.value.segNum == s }).map {
-                emit($0.value)
-            }
-        }
-        if showMarkup {
-            let segName =
-                segDictionary.segTable.first(where: { $0.value.segNum == s })?
-                .value.name ?? "Unknown"
-            emit("## Segment \(segName) (\(s))\n")
-        }
-
-        if codeSeg.procedures.count > 0 {
-            for proc in codeSeg.procedures {
-                // emit proc/func header and procedure attributes
-                let procDesc = allProcedures.first(where: {
-                    $0.segment == s && $0.procedure == proc.identifier?.procedure
-                })
-                emit(
-                    "### "
-                        + (procDesc?.description ?? proc.identifier?.description
-                            ?? "")
-                        + " (* S=\(s), P=\(proc.identifier?.procedure ?? -99), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)"
-                )
-
-                // emit callers
-                var callerNames: [String] = []
-                allCallers.filter(
-                    {
-                        $0.target.procedure == proc.identifier?.procedure
-                            && $0.target.segment == s
-                    }
-                ).forEach(
-                    { callerEntry in
-                        if let callerName = allProcedures.first(where: {
-                            $0.segment == callerEntry.origin.segment
-                                && $0.procedure == callerEntry.origin.procedure
-                        }) {
-                            callerNames.append(callerName.shortDescription)
-                        }
-                    }
-                )
-                if !callerNames.isEmpty {
-                    emit("Callers: \(callerNames.joined(separator: ", "))")
-                }
-
-                if showMarkup {
-                    emit("```")
-                }
-
-                // emit variables declared in this procedure
-                allLocations.filter({
-                    $0.procedure == proc.identifier?.procedure && $0.segment == s
-                        && $0.addr != nil
-                }).sorted().forEach({ loc in
-                    emit("L\(loc.addr ?? -1)=\(loc.description)")
-                })
-
-                if showMarkup {
-                    emit("```")
-                }
-
-                // Variable listing is generated from `allLocations` and `allLabels`.
-                if proc.identifier?.isAssembly == false {
-                    if showMarkup {
-                        emit("```pascal")
-                    }
-                    if showPseudoCode {
-                        emit("BEGIN")
-                    }
-                } else {
-                    if showMarkup {
-                        emit("```assembly")
-                    }
-                    emit("; ASSEMBLER PROCEDURE")
-                }
-
-                var indentLevel: Int = 1
-
-                for (address, inst) in proc.instructions.sorted(by: {
-                    $0.key < $1.key
-                }) {
-                    if showPseudoCode {
-                        for pseudo in inst.prePseudoCode.reversed() {
-                            if pseudo.starts(with: "END")
-                                || pseudo.starts(with: "UNTIL")
-                            {
-                                indentLevel -= 1
-                            }
-                            let indent = String(
-                                repeating: " ",
-                                count: indentLevel * 2
-                            )
-                            emit("\(indent)\(pseudo)")
-                            if pseudo.hasSuffix("BEGIN")
-                                || pseudo.starts(with: "REPEAT")
-                            {
-                                indentLevel += 1
-                            }
-                        }
-                    }
-
-                    if showPCode || proc.identifier?.isAssembly == true {
-                        if proc.entryPoints.contains(address) {
-                            emit("->", terminator: " ")
-                        } else {
-                            emit("  ", terminator: " ")
-                        }
-
-                        emit(String(format: "%04x:", address), terminator: " ")
-                        if inst.isPascal {
-                            emit(
-                                inst.mnemonic.padding(
-                                    toLength: 8,
-                                    withPad: " ",
-                                    startingAt: 0
-                                ),
-                                terminator: ""
-                            )
-                            var paramStrings: [String] = [""]
-                            var paramStrIndex = 0
-                            for p in inst.params {
-                                if p > 0xff {
-                                    if paramStrings[paramStrIndex].count > 12 {
-                                        paramStrings.append("")
-                                        paramStrIndex += 1
-                                    }
-                                    paramStrings[paramStrIndex] += String(
-                                        format: "%04x ",
-                                        p
-                                    )
-                                } else {
-                                    if paramStrings[paramStrIndex].count > 14 {
-                                        paramStrings.append("")
-                                        paramStrIndex += 1
-                                    }
-                                    paramStrings[paramStrIndex] += String(
-                                        format: "%02x ",
-                                        p
-                                    )
-                                }
-                            }
-
-                            emit(
-                                paramStrings[0].padding(
-                                    toLength: 16,
-                                    withPad: " ",
-                                    startingAt: 0
-                                ),
-                                terminator: ""
-                            )
-                            if let c = inst.comment {
-                                emit("; \(c)", terminator: "")
-                            }
-                            if let n = inst.memLocation {
-                                emit(" \(n.name)", terminator: "")
-                            }
-                            if let d = inst.destination {
-                                if let dest = allProcedures.first(where: {
-                                    $0.segment == d.segment
-                                        && $0.procedure == d.procedure
-                                }) {
-                                    emit(
-                                        " \(dest.shortDescription)",
-                                        terminator: ""
-                                    )
-                                } else {
-                                    emit(" \(d.description)", terminator: "")
-                                }
-                            }
-                            if showStackState {
-                                emit(" " + prettyStack(inst.stackState ?? []))
-                            } else {
-                                emit("")
-                            }
-                            if paramStrings.count > 1 {
-                                for i in 1..<paramStrings.count {
-                                    emit(
-                                        String(repeating: " ", count: 17)
-                                            + paramStrings[i]
-                                    )
-                                }
-                            }
-                        } else {
-                            emit(inst.mnemonic, terminator: "")
-                            if let comment = inst.comment {
-                                emit(" ; \(comment)", terminator: "")
-                            }
-                            if let destination = inst.destination {
-                                emit(
-                                    assemblerDestinationText(
-                                        for: inst,
-                                        destination: destination,
-                                        allProcedures: allProcedures
-                                    )
-                                )
-                            } else {
-                                emit("")
-                            }
-                        }
-                    }
-                    if showPseudoCode {
-                        if let pseudo = inst.pseudoCode {
-                            if pseudo.starts(with: "END")
-                                || pseudo.starts(with: "UNTIL")
-                            {
-                                indentLevel -= 1
-                            }
-                            emit(
-                                String(repeating: " ", count: indentLevel * 2)
-                                    + pseudo
-                            )
-                            if pseudo.hasSuffix("BEGIN")
-                                || pseudo.starts(with: "REPEAT")
-                                || pseudo.starts(with: "CASE")
-                            {
-                                indentLevel += 1
-                            }
-                        }
-                    }
-                }
-
-                if showPseudoCode {
-                    emit("END")
-                }
-                if showMarkup {
-                    emit("```")
-                    emit("")
-                }
-            }
-        }
-    }
+        .map(\.text)
+    writeLines(filteredLines, to: &stream)
 }
