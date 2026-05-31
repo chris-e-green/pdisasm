@@ -113,208 +113,169 @@ func resolveAssemblerProcedureTargets(
 /// so the `pdisasm-cli` executable can delegate to it.
 // MARK: - Metadata I/O Helpers
 
-func importLabels(
-    fromCSV CSVFile: String,
-    to labels: inout Set<Location>,
-    appSupportDirectory: URL
-) {
-    do {
-        let fileURL = appSupportDirectory.appendingPathComponent(CSVFile).appendingPathExtension("csv")
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let dec = CSVDecoder()
-            dec.headerStrategy = .firstLine
-            if let labelsData = try? Data(
-                contentsOf: URL(fileURLWithPath: fileURL.path)
-            ) {
-                labels = try dec.decode(
-                    Set<Location>.self,
-                    from: labelsData
-                )
+private struct MetadataStore {
+    let appSupportDirectory: URL
+
+    func createDirectory() throws {
+        try FileManager.default.createDirectory(
+            at: appSupportDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+    }
+
+    func importLabels(fromCSV file: String, to labels: inout Set<Location>) {
+        do {
+            if let loadedLabels: Set<Location> = try readCSV(file) {
+                labels = loadedLabels
             }
+        } catch {
+            print("Error reading \(file): \(error)")
         }
-    } catch {
-        print("Error reading \(CSVFile): \(error)")
     }
-}
 
-func exportLabels(
-    toCSV CSVfile: String,
-    from labels: [Location],
-    overwrite: Bool = false,
-    appSupportDirectory: URL
-) {
-    do {
-        let fileURL = appSupportDirectory.appendingPathComponent(CSVfile).appendingPathExtension("csv")
-        if !overwrite && FileManager.default.fileExists(atPath: fileURL.path) {
-            return
-        }
-
-        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try? FileManager.default.removeItem(at: backupURL)
-        }
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try FileManager.default.copyItem(
-                at: fileURL,
-                to: backupURL
-            )
-        }
-        let enc = CSVEncoder {
-            $0.headers = [
-                "segment", "procedure", "lexLevel", "addr", "name", "type",
-                "typeSource",
-            ]
-            $0.bufferingStrategy = .sequential
-        }
-        try enc.encode(labels, into: fileURL)
-    } catch {
-        print("Error writing \(CSVfile): \(error)")
-    }
-}
-
-func importProcedures(
-    fromCSV CSVFile: String,
-    to allProcedures: inout [ProcedureIdentifier],
-    appSupportDirectory: URL
-) {
-    do {
-        let fileURL = appSupportDirectory.appendingPathComponent(CSVFile).appendingPathExtension("csv")
-
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let dec = CSVDecoder()
-            dec.headerStrategy = .firstLine
-            if let procData = try? Data(
-                contentsOf: URL(fileURLWithPath: fileURL.path)
-            ) {
-                allProcedures = try dec.decode(
-                    [ProcedureIdentifier].self,
-                    from: procData
-                )
+    func exportLabels(
+        toCSV file: String,
+        from labels: [Location],
+        overwrite: Bool = false
+    ) {
+        do {
+            let encoder = CSVEncoder {
+                $0.headers = [
+                    "segment", "procedure", "lexLevel", "addr", "name", "type",
+                    "typeSource",
+                ]
+                $0.bufferingStrategy = .sequential
             }
+            try writeCSV(labels, to: file, overwrite: overwrite, encoder: encoder)
+        } catch {
+            print("Error writing \(file): \(error)")
         }
-
-    } catch {
-        print("Error reading \(CSVFile): \(error)")
     }
-}
 
-func exportProcedures(
-    toCSV CSVfile: String,
-    from procedures: [ProcedureIdentifier],
-    overwrite: Bool = false,
-    appSupportDirectory: URL
-) {
-    do {
-        let fileURL = appSupportDirectory.appendingPathComponent(CSVfile).appendingPathExtension("csv")
-
-        // check if file exists and overwrite is false
-        if !overwrite
-            && FileManager.default.fileExists(atPath: fileURL.path)
-        {
-            return
+    func importProcedures(
+        fromCSV file: String,
+        to allProcedures: inout [ProcedureIdentifier]
+    ) {
+        do {
+            if let loadedProcedures: [ProcedureIdentifier] = try readCSV(file) {
+                allProcedures = loadedProcedures
+            }
+        } catch {
+            print("Error reading \(file): \(error)")
         }
-
-        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try? FileManager.default.removeItem(at: backupURL)
-        }
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try FileManager.default.copyItem(at: fileURL, to: backupURL)
-        }
-        let enc = CSVEncoder { configuration in
-            configuration.headers = [
-                "segmentNumber", "segmentName", "procNumber", "procName",
-                "isFunction",
-                "isAssembly", "parameters", "returnType", "returnTypeSource",
-            ]
-        }
-        try enc.encode(procedures, into: fileURL)
-
-    } catch {
-        print("Error writing \(CSVfile): \(error)")
     }
-}
 
-func importGlobalLabels(
-    fromJson globalsFile: String,
-    to globalNames: inout [Int: Identifier],
-    appSupportDirectory: URL
-) {
-    let fileURL = appSupportDirectory.appendingPathComponent(globalsFile).appendingPathExtension("json")
+    func exportProcedures(
+        toCSV file: String,
+        from procedures: [ProcedureIdentifier],
+        overwrite: Bool = false
+    ) {
+        do {
+            let encoder = CSVEncoder { configuration in
+                configuration.headers = [
+                    "segmentNumber", "segmentName", "procNumber", "procName",
+                    "isFunction",
+                    "isAssembly", "parameters", "returnType", "returnTypeSource",
+                ]
+            }
+            try writeCSV(procedures, to: file, overwrite: overwrite, encoder: encoder)
+        } catch {
+            print("Error writing \(file): \(error)")
+        }
+    }
 
-    if FileManager.default.fileExists(atPath: fileURL.path) {
+    func importGlobalLabels(
+        fromJson file: String,
+        to globalNames: inout [Int: Identifier]
+    ) {
+        if let loadedNames: [Int: Identifier] = try? readJSON(file) {
+            globalNames = loadedNames
+        }
+    }
 
+    func exportKnownRecords(
+        toJson file: String,
+        from knownRecords: Set<PascalRecord>,
+        overwrite: Bool = false
+    ) {
+        do {
+            try writeJSON(knownRecords, to: file, overwrite: overwrite)
+        } catch {
+            print("Error writing \(file): \(error)")
+        }
+    }
+
+    func importKnownRecords(
+        fromJson file: String,
+        to knownRecords: inout Set<PascalRecord>
+    ) {
+        if let newRecords: [PascalRecord] = try? readJSON(file) {
+            knownRecords.formUnion(newRecords)
+        }
+    }
+
+    private func fileURL(_ file: String, extension fileExtension: String) -> URL {
+        appSupportDirectory
+            .appendingPathComponent(file)
+            .appendingPathExtension(fileExtension)
+    }
+
+    private func readCSV<Value: Decodable>(_ file: String) throws -> Value? {
+        let url = fileURL(file, extension: "csv")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let decoder = CSVDecoder()
+        decoder.headerStrategy = .firstLine
+        let data = try Data(contentsOf: url)
+        return try decoder.decode(Value.self, from: data)
+    }
+
+    private func writeCSV<Value: Encodable>(
+        _ value: Value,
+        to file: String,
+        overwrite: Bool,
+        encoder: CSVEncoder
+    ) throws {
+        let url = fileURL(file, extension: "csv")
+        guard try prepareWrite(to: url, overwrite: overwrite) else { return }
+        try encoder.encode(value, into: url)
+    }
+
+    private func readJSON<Value: Decodable>(_ file: String) throws -> Value? {
+        let url = fileURL(file, extension: "json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let decoder = JSONDecoder()
-
-        if let globalData = try? Data(contentsOf: fileURL) {
-            globalNames =
-                (try? decoder.decode(
-                    [Int: Identifier].self,
-                    from: globalData
-                )) ?? [:]
-        }
+        let data = try Data(contentsOf: url)
+        return try decoder.decode(Value.self, from: data)
     }
-}
 
-func exportKnownRecords(
-    toJson Jsonfile: String,
-    from knownRecords: Set<PascalRecord>,
-    overwrite: Bool = false,
-    appSupportDirectory: URL
-) {
-    do {
-        let fileURL = appSupportDirectory.appendingPathComponent(Jsonfile).appendingPathExtension("json")
+    private func writeJSON<Value: Encodable>(
+        _ value: Value,
+        to file: String,
+        overwrite: Bool
+    ) throws {
+        let url = fileURL(file, extension: "json")
+        guard try prepareWrite(to: url, overwrite: overwrite) else { return }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        try encoder.encode(value).write(to: url, options: .atomic)
+    }
 
-        // check if file exists and overwrite is false
-        if !overwrite
-            && FileManager.default.fileExists(atPath: fileURL.path)
-        {
-            return
+    private func prepareWrite(to url: URL, overwrite: Bool) throws -> Bool {
+        if !overwrite && FileManager.default.fileExists(atPath: url.path) {
+            return false
         }
 
-        let backupURL = fileURL.appendingPathExtension("bak").appendingPathExtension(Date().ISO8601Format())
+        let backupURL = url
+            .appendingPathExtension("bak")
+            .appendingPathExtension(Date().ISO8601Format())
         if FileManager.default.fileExists(atPath: backupURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
         }
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try FileManager.default.copyItem(at: fileURL, to: backupURL)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.copyItem(at: url, to: backupURL)
         }
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.sortedKeys, .prettyPrinted]
-//        let enc = CSVEncoder { configuration in
-//            configuration.headers = [
-//                "segmentNumber", "segmentName", "procNumber", "procName",
-//                "isFunction",
-//                "isAssembly", "parameters", "returnType",
-//            ]
-//        }
-        try enc.encode(knownRecords).write(to: fileURL, options: .atomic)
-
-    } catch {
-        print("Error writing \(Jsonfile): \(error)")
-    }
-}
-
-func importKnownRecords(
-    fromJson Jsonfile: String,
-    to knownRecords: inout Set<PascalRecord>,
-    appSupportDirectory: URL)
-{
-    let fileURL = appSupportDirectory.appendingPathComponent(Jsonfile).appendingPathExtension("json")
-
-    if FileManager.default.fileExists(atPath: fileURL.path) {
-
-        let decoder = JSONDecoder()
-
-        if let newData = try? Data(contentsOf: fileURL) {
-            if let newRecords =
-                try? decoder.decode(
-                    [PascalRecord].self,
-                    from: newData
-                ) {
-                knownRecords.formUnion(newRecords)
-            }
-        }
+        return true
     }
 }
 // MARK: - Code File Parsing
@@ -847,6 +808,7 @@ private struct MetadataContext {
     let allRecordsFile: String
     let globalsFile: String
     let appSupportDirectory: URL
+    let store: MetadataStore
 
     init(fileURL: URL, segDict: SegDictionary) {
         let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
@@ -861,6 +823,7 @@ private struct MetadataContext {
         globalsFile = "globals_ver_\(version)"
         appSupportDirectory = URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
+        store = MetadataStore(appSupportDirectory: appSupportDirectory)
     }
 
     func load(
@@ -872,44 +835,16 @@ private struct MetadataContext {
         var sysLocations: Set<Location> = []
         var sysProcedures: [ProcedureIdentifier] = []
 
-        importKnownRecords(
-            fromJson: sysRecordsFile,
-            to: &knownRecords,
-            appSupportDirectory: appSupportDirectory
-        )
-        importKnownRecords(
-            fromJson: allRecordsFile,
-            to: &knownRecords,
-            appSupportDirectory: appSupportDirectory
-        )
-        importLabels(
-            fromCSV: allLabelsCSVFile,
-            to: &allLocations,
-            appSupportDirectory: appSupportDirectory
-        )
-        importLabels(
-            fromCSV: sysLabelsCSVFile,
-            to: &sysLocations,
-            appSupportDirectory: appSupportDirectory
-        )
+        store.importKnownRecords(fromJson: sysRecordsFile, to: &knownRecords)
+        store.importKnownRecords(fromJson: allRecordsFile, to: &knownRecords)
+        store.importLabels(fromCSV: allLabelsCSVFile, to: &allLocations)
+        store.importLabels(fromCSV: sysLabelsCSVFile, to: &sysLocations)
         allLocations.formUnion(sysLocations)
 
-        importGlobalLabels(
-            fromJson: globalsFile,
-            to: &globalNames,
-            appSupportDirectory: appSupportDirectory
-        )
+        store.importGlobalLabels(fromJson: globalsFile, to: &globalNames)
 
-        importProcedures(
-            fromCSV: allProceduresCSVFile,
-            to: &allProcedures,
-            appSupportDirectory: appSupportDirectory
-        )
-        importProcedures(
-            fromCSV: sysProceduresCSVFile,
-            to: &sysProcedures,
-            appSupportDirectory: appSupportDirectory
-        )
+        store.importProcedures(fromCSV: allProceduresCSVFile, to: &allProcedures)
+        store.importProcedures(fromCSV: sysProceduresCSVFile, to: &sysProcedures)
         allProcedures.append(contentsOf: sysProcedures)
     }
 
@@ -919,58 +854,48 @@ private struct MetadataContext {
         allProcedures: [ProcedureIdentifier],
         overwriteMetadata: Bool
     ) throws {
-        try FileManager.default.createDirectory(
-            at: appSupportDirectory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
+        try store.createDirectory()
 
-        exportKnownRecords(
+        store.exportKnownRecords(
             toJson: sysRecordsFile,
             from: knownRecords.filter { $0.isSystemRecord == true },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
 
-        exportKnownRecords(
+        store.exportKnownRecords(
             toJson: allRecordsFile,
             from: knownRecords.filter { $0.isSystemRecord == false },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
 
-        exportLabels(
+        store.exportLabels(
             toCSV: allLabelsCSVFile,
             from: allLocations.filter {
                 !systemSegments.contains($0.segment)
                     && $0.addr != nil
                     && $0.isParam == false
             }.sorted { $0 < $1 },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
-        exportLabels(
+        store.exportLabels(
             toCSV: sysLabelsCSVFile,
             from: allLocations.filter {
                 systemSegments.contains($0.segment)
                     && $0.addr != nil
                     && $0.isParam == false
             }.sorted { $0 < $1 },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
 
-        exportProcedures(
+        store.exportProcedures(
             toCSV: allProceduresCSVFile,
             from: allProcedures.filter { !systemSegments.contains($0.segment) },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
-        exportProcedures(
+        store.exportProcedures(
             toCSV: sysProceduresCSVFile,
             from: allProcedures.filter { systemSegments.contains($0.segment) },
-            overwrite: overwriteMetadata,
-            appSupportDirectory: appSupportDirectory
+            overwrite: overwriteMetadata
         )
     }
 }
