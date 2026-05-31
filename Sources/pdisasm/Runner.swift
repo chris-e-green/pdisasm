@@ -1428,19 +1428,19 @@ public func disassemble(
     return result
 }
 
-@available(*, deprecated, renamed: "disassemble(filename:verbose:writeMetadata:overwriteMetadata:)")
-public func disassemble(
-    filename: String,
-    verbose: Bool = false,
-    rewrite: Bool
-) throws -> DisassemblyResult {
-    try disassemble(
-        filename: filename,
-        verbose: verbose,
-        writeMetadata: rewrite,
-        overwriteMetadata: rewrite
-    )
-}
+//@available(*, deprecated, renamed: "disassemble(filename:verbose:writeMetadata:overwriteMetadata:)")
+//public func disassemble(
+//    filename: String,
+//    verbose: Bool = false,
+//    rewrite: Bool
+//) throws -> DisassemblyResult {
+//    try disassemble(
+//        filename: filename,
+//        verbose: verbose,
+//        writeMetadata: rewrite,
+//        overwriteMetadata: rewrite
+//    )
+//}
 
 /// Render a ``DisassemblyResult`` to a String using the shared output logic.
 public func renderDisassembly(

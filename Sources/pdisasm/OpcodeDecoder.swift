@@ -57,7 +57,7 @@ struct OpcodeDecoder {
     ]
 
     struct DecodedInstruction {
-        let opcode: UInt8
+//        let opcode: UInt8
         let mnemonic: String
         let params: [Int]
         let stringParameter: String?
@@ -69,7 +69,7 @@ struct OpcodeDecoder {
         let comparatorOffset: Int
 
         init(
-            opcode: UInt8,
+//            opcode: UInt8,
             mnemonic: String,
             params: [Int] = [],
             stringParameter: String? = nil,
@@ -80,7 +80,7 @@ struct OpcodeDecoder {
             requiresComparator: Bool = false,
             comparatorOffset: Int = 0
         ) {
-            self.opcode = opcode
+//            self.opcode = opcode
             self.mnemonic = mnemonic
             self.params = params
             self.stringParameter = stringParameter
@@ -107,7 +107,7 @@ struct OpcodeDecoder {
         // Fast path: trivial single-byte opcodes (no params, no locations)
         if let entry = Self.trivialOpcodes[opcode] {
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: entry.mnemonic,
                 bytesConsumed: 1,
                 comment: entry.comment
@@ -117,7 +117,7 @@ struct OpcodeDecoder {
         switch opcode {
         case sldc0...sldc127:
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SLDC",
                 params: [Int(opcode)],
                 bytesConsumed: 1,
@@ -133,7 +133,7 @@ struct OpcodeDecoder {
                 addr: val
                 )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDE",
                 params: [seg, val],
                 bytesConsumed: 2 + inc,
@@ -144,7 +144,7 @@ struct OpcodeDecoder {
         case csp:
             let procNum = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CSP",
                 params: [procNum],
                 bytesConsumed: 2,
@@ -154,7 +154,7 @@ struct OpcodeDecoder {
         case adj:
             let count = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "ADJ",
                 params: [count],
                 bytesConsumed: 2,
@@ -170,7 +170,7 @@ struct OpcodeDecoder {
                 dest = ic + offset + 2
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "FJP",
                 params: [dest],
                 bytesConsumed: 2,
@@ -179,7 +179,7 @@ struct OpcodeDecoder {
         case inc:
             let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "INC",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -188,7 +188,7 @@ struct OpcodeDecoder {
         case ind:
             let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "IND",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -197,7 +197,7 @@ struct OpcodeDecoder {
         case ixa:
             let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "IXA",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -207,7 +207,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LAO",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -224,7 +224,7 @@ struct OpcodeDecoder {
                 }
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LSA",
                 params: [strLen],
                 stringParameter: s,
@@ -241,7 +241,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LAE",
                 params: [seg, val],
                 bytesConsumed: 2 + inc,
@@ -252,7 +252,7 @@ struct OpcodeDecoder {
             // MOV
             let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "MOV",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -263,7 +263,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDO",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -274,7 +274,7 @@ struct OpcodeDecoder {
             // SAS
             let sasCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SAS",
                 params: [sasCount],
                 bytesConsumed: 2,
@@ -285,7 +285,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 1)
             let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SRO",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -327,7 +327,7 @@ struct OpcodeDecoder {
                 tempIC += 2
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "XJP",
                 params: tempParams,
                 bytesConsumed: tempIC - ic,
@@ -337,7 +337,7 @@ struct OpcodeDecoder {
             // RNP
             let retCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "RNP",
                 params: [retCount],
                 bytesConsumed: 2,
@@ -348,7 +348,7 @@ struct OpcodeDecoder {
             let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CIP",
                 params: [procNum],
                 bytesConsumed: 2,
@@ -358,7 +358,7 @@ struct OpcodeDecoder {
         case eql:
             // EQL
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "EQL",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -367,7 +367,7 @@ struct OpcodeDecoder {
         case geq:
             // GEQ
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "GEQ",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -376,7 +376,7 @@ struct OpcodeDecoder {
         case grt:
             // GRT
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "GRT",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -393,7 +393,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDA",
                 params: [Int(byte1), val],
                 bytesConsumed: 2 + inc,
@@ -411,7 +411,7 @@ struct OpcodeDecoder {
                 params.append(val)
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDC",
                 params: params,
                 bytesConsumed: 2 + (ic % 2 == 0 ? 0 : 1) + count * 2,
@@ -420,7 +420,7 @@ struct OpcodeDecoder {
         case leq:
             // LEQ
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LEQ",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -429,7 +429,7 @@ struct OpcodeDecoder {
         case les:
             // LES
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LES",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -446,7 +446,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LOD",
                 params: [Int(byte1), val],
                 bytesConsumed: 2 + inc,
@@ -456,7 +456,7 @@ struct OpcodeDecoder {
         case neq:
             // NEQ
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "NEQ",
                 bytesConsumed: 0,
                 requiresComparator: true,
@@ -473,7 +473,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "STR",
                 params: [Int(byte1), val],
                 bytesConsumed: 2 + inc,
@@ -490,7 +490,7 @@ struct OpcodeDecoder {
                 dest = ic + offset + 2
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "UJP",
                 params: [dest],
                 bytesConsumed: 2,
@@ -499,7 +499,7 @@ struct OpcodeDecoder {
         case ldm:
             let ldmCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDM",
                 params: [ldmCount],
                 bytesConsumed: 2,
@@ -508,7 +508,7 @@ struct OpcodeDecoder {
         case stm:
             let stmCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "STM",
                 params: [stmCount],
                 bytesConsumed: 2,
@@ -518,7 +518,7 @@ struct OpcodeDecoder {
             let elementsPerWord = Int(try codeData.readByte(at: ic + 1))
             let fieldWidth = Int(try codeData.readByte(at: ic + 2))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "IXP",
                 params: [elementsPerWord, fieldWidth],
                 bytesConsumed: 3,
@@ -528,7 +528,7 @@ struct OpcodeDecoder {
         case rbp:
             let retCount = Int(try codeData.readByte(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "RBP",
                 params: [retCount],
                 bytesConsumed: 2,
@@ -538,7 +538,7 @@ struct OpcodeDecoder {
             let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CBP",
                 params: [procNum],
                 bytesConsumed: 2,
@@ -554,7 +554,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LLA",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -564,7 +564,7 @@ struct OpcodeDecoder {
         case ldci:
             let val = Int(try codeData.readWord(at: ic + 1))
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDCI",
                 params: [val],
                 bytesConsumed: 3,
@@ -579,7 +579,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LDL",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -595,7 +595,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "STL",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -607,7 +607,7 @@ struct OpcodeDecoder {
             let procNum = Int(try codeData.readByte(at: ic + 2))
             let loc = Location(segment: seg, procedure: procNum)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CXP",
                 params: [seg, procNum],
                 bytesConsumed: 3,
@@ -618,7 +618,7 @@ struct OpcodeDecoder {
             let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CLP",
                 params: [procNum],
                 bytesConsumed: 2,
@@ -629,7 +629,7 @@ struct OpcodeDecoder {
             let procNum = Int(try codeData.readByte(at: ic + 1))
             let loc = Location(segment: currSeg.segNum, procedure: procNum)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "CGP",
                 params: [procNum],
                 bytesConsumed: 2,
@@ -649,7 +649,7 @@ struct OpcodeDecoder {
                 }
             }
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "LPA",
                 params: [count],
                 stringParameter: txtRep,
@@ -666,7 +666,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "STE",
                 params: [seg, val],
                 bytesConsumed: 2 + inc,
@@ -676,7 +676,7 @@ struct OpcodeDecoder {
         case bpt:
             let (val, inc) = try codeData.readBig(at: ic + 1)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "BPT",
                 params: [val],
                 bytesConsumed: 1 + inc,
@@ -692,7 +692,7 @@ struct OpcodeDecoder {
                 addr: val
             )
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SLDL",
                 params: [val],
                 bytesConsumed: 1,
@@ -704,7 +704,7 @@ struct OpcodeDecoder {
             let val = b2 - Int(sldo1) + 1
             let loc = Location(segment: segment, procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0, lexLevel: 0, addr: val)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SLDO",
                 params: [val],
                 bytesConsumed: 1,
@@ -715,7 +715,7 @@ struct OpcodeDecoder {
             let b3 = Int(opcode)
             let offs = b3 - Int(sind0)
             return DecodedInstruction(
-                opcode: opcode,
+//                opcode: opcode,
                 mnemonic: "SIND",
                 params: [offs],
                 bytesConsumed: 1,

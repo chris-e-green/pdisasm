@@ -59,9 +59,9 @@ struct StackValue {
         kind == .address || kind == .pointer
     }
 
-    var isValueLike: Bool {
-        kind == .value || kind == .constant || kind == .expression
-    }
+//    var isValueLike: Bool {
+//        kind == .value || kind == .constant || kind == .expression
+//    }
 
     var stackDescription: String {
         var fields = ["V: \(text)"]
@@ -90,9 +90,9 @@ struct StackSimulator {
         values.count == stack.count ? values.map(\.stackDescription) : stack
     }
 
-    func prettyStack() -> String {
-        "[" + stackDescription.joined(separator: ", ") + "]"
-    }
+//    func prettyStack() -> String {
+//        "[" + stackDescription.joined(separator: ", ") + "]"
+//    }
 
     mutating func push(
         _ value: (val: String, type: String?),

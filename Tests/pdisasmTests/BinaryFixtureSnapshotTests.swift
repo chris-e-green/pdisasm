@@ -1,5 +1,5 @@
 import XCTest
-@testable import pdisasm
+//@testable import pdisasm
 import Foundation
 
 final class BinaryFixtureSnapshotTests: XCTestCase {

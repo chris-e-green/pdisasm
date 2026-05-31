@@ -12,7 +12,7 @@ public class Procedure {
     
     public init() {}
     
-    public var shortDescription: String {
-        return "S\(identifier?.segment ?? -1)_P\(identifier?.procedure ?? -1)_L\(lexicalLevel)"
-    }
+//    public var shortDescription: String {
+//        return "S\(identifier?.segment ?? -1)_P\(identifier?.procedure ?? -1)_L\(lexicalLevel)"
+//    }
 }

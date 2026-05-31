@@ -192,8 +192,8 @@ private struct AssemblerFooterInfo {
 private func parseAssemblerFooter(
     codeData: CodeData,
     addr: Int,
-    segmentNumber: Int,
-    procedureNumber: Int
+//    segmentNumber: Int,
+//    procedureNumber: Int
 ) throws -> AssemblerFooterInfo {
     // Bytes trailing code body before relocation tables: enterIC self-ref (2) + proc/lex header (2).
     var footerBytes = 4
@@ -539,8 +539,8 @@ func decodeAssemblerProcedure(
     let footerInfo = try parseAssemblerFooter(
         codeData: cd,
         addr: addr,
-        segmentNumber: segmentNumber,
-        procedureNumber: procedureNumber
+//        segmentNumber: segmentNumber,
+//        procedureNumber: procedureNumber
     )
 
     func codeEndIndex(footerBytes: Int) -> Int {

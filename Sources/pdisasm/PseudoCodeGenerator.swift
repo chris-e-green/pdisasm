@@ -10,12 +10,12 @@ struct PseudoCodeGenerator {
     var labelLookup: [String: Location]
     var typeConflicts: [TypeConflict] = []
 
-    init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>, labelLookup: [String: Location]) {
-        self.allProcedures = allProcedures
-        self.knownRecords = knownRecords
-        self.allLocations = allLocations
-        self.labelLookup = labelLookup
-    }
+//    init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>, labelLookup: [String: Location]) {
+//        self.allProcedures = allProcedures
+//        self.knownRecords = knownRecords
+//        self.allLocations = allLocations
+//        self.labelLookup = labelLookup
+//    }
 
     init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>) {
         self.allProcedures = allProcedures
