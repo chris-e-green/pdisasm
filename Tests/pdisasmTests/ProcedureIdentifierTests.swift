@@ -352,4 +352,77 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(locations.first(where: { $0.addr == 3 })?.lexLevel, 1)
         XCTAssertNil(locations.first(where: { $0.addr == 4 }))
     }
+
+    func testApplyProcedureSignatureLocationsRemovesStaleGeneratedParameterLocations() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 20,
+            segmentName: "TURTLEGR",
+            procedure: 3,
+            procName: "MOVETO",
+            parameters: [
+                Identifier(name: "X", type: "INTEGER", typeSource: .metadata),
+                Identifier(name: "Y", type: "INTEGER", typeSource: .metadata),
+            ]
+        )
+        let proc = Procedure()
+        proc.lexicalLevel = 1
+        proc.identifier = identifier
+        let codeSegment = CodeSegment(
+            procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: []),
+            procedures: [proc]
+        )
+        var locations: Set<Location> = [
+            Location(segment: 20, procedure: 3, lexLevel: nil, addr: 1, isParam: true, name: "Y", type: "INTEGER", typeSource: .metadata),
+            Location(segment: 20, procedure: 3, lexLevel: nil, addr: 2, isParam: true, name: "X", type: "INTEGER", typeSource: .metadata),
+            Location(segment: 20, procedure: 3, lexLevel: 1, addr: 1, isParam: true, name: "PARAM2", type: "INTEGER", typeSource: .inferred),
+            Location(segment: 20, procedure: 3, lexLevel: 1, addr: 2, isParam: true, name: "PARAM1", type: "INTEGER", typeSource: .inferred),
+        ]
+
+        let conflicts = applyProcedureSignatureLocations(
+            procedures: [identifier],
+            codeSegments: [20: codeSegment],
+            locations: &locations
+        )
+
+        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertEqual(
+            locations.filter { $0.segment == 20 && $0.procedure == 3 && $0.addr == 1 }.map(\.description),
+            ["Y:INTEGER"]
+        )
+        XCTAssertEqual(
+            locations.filter { $0.segment == 20 && $0.procedure == 3 && $0.addr == 2 }.map(\.description),
+            ["X:INTEGER"]
+        )
+        XCTAssertEqual(locations.first(where: { $0.addr == 1 })?.lexLevel, 1)
+        XCTAssertEqual(locations.first(where: { $0.addr == 2 })?.lexLevel, 1)
+
+        let staleIdentifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 20,
+            segmentName: "TURTLEGR",
+            procedure: 3,
+            procName: "MOVETO",
+            parameters: [
+                Identifier(name: "PARAM1", type: "INTEGER", typeSource: .inferred),
+                Identifier(name: "PARAM2", type: "INTEGER", typeSource: .inferred),
+            ]
+        )
+
+        let staleConflicts = applyProcedureSignatureLocations(
+            procedures: [staleIdentifier],
+            codeSegments: [20: codeSegment],
+            locations: &locations
+        )
+
+        XCTAssertTrue(staleConflicts.isEmpty)
+        XCTAssertEqual(
+            locations.filter { $0.segment == 20 && $0.procedure == 3 && $0.addr == 1 }.map(\.description),
+            ["Y:INTEGER"]
+        )
+        XCTAssertEqual(
+            locations.filter { $0.segment == 20 && $0.procedure == 3 && $0.addr == 2 }.map(\.description),
+            ["X:INTEGER"]
+        )
+    }
 }

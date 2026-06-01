@@ -30,7 +30,7 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
             result,
             showMarkup: true,
             showPCode: true,
-            showPseudoCode: false,
+            showPseudoCode: true,
             showDot: false,
             verbose: false
         )
@@ -47,5 +47,9 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         // XCTAssertFalse(output.contains("unexpected bad line"))
         XCTAssertTrue(output.contains("-> 0c3d: 10 23   BPL $0c62"))
         XCTAssertFalse(output.contains("-> 0c3d:  10 23"))
+        XCTAssertTrue(output.contains("PROCEDURE TURTLEGR.MOVETO(X:INTEGER; Y:INTEGER)"))
+        XCTAssertTrue(output.contains("L1=Y:INTEGER"))
+        XCTAssertTrue(output.contains("L2=X:INTEGER"))
+        XCTAssertTrue(output.contains("TURTLEGR.MOVETOI(X, Y)"))
     }
 }
