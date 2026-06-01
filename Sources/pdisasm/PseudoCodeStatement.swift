@@ -1,6 +1,6 @@
 enum PseudoCodeStatement {
     case rendered(String)
-    case assignment(target: Location, source: String, fallbackTarget: String)
+    case assignment(targetLocation: Location?, targetText: String, source: String)
 
     init(renderedText: String, locations: Set<Location>) {
         guard let separator = renderedText.range(of: " := ") else {
@@ -11,26 +11,37 @@ enum PseudoCodeStatement {
         let targetText = String(renderedText[..<separator.lowerBound])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let sourceText = String(renderedText[separator.upperBound...])
-        if let target = locations.first(where: { $0.displayName == targetText }) {
-            self = .assignment(
-                target: target,
-                source: sourceText,
-                fallbackTarget: targetText
-            )
-        } else {
-            self = .rendered(renderedText)
-        }
+        self = .assignment(
+            targetLocation: locations.first(where: { $0.displayName == targetText }),
+            targetText: targetText,
+            source: sourceText
+        )
+    }
+
+    static func assignment(
+        targetValue: StackValue,
+        targetText: String,
+        source: String
+    ) -> PseudoCodeStatement {
+        let targetLocation: Location? = targetValue.location?.displayName == targetText
+            ? targetValue.location
+            : nil
+        return .assignment(
+            targetLocation: targetLocation,
+            targetText: targetText,
+            source: source
+        )
     }
 
     var renderedText: String {
         switch self {
         case let .rendered(text):
             return text
-        case let .assignment(target, source, fallbackTarget):
-            let targetText = target.displayName.isEmpty
-                ? fallbackTarget
-                : target.displayName
-            return "\(targetText) := \(source)"
+        case let .assignment(targetLocation, targetText, source):
+            let renderedTarget = targetLocation?.displayName.isEmpty == false
+                ? targetLocation?.displayName ?? targetText
+                : targetText
+            return "\(renderedTarget) := \(source)"
         }
     }
 }

@@ -47,14 +47,12 @@ func simulateStackAndGeneratePseudocode(
                 PseudoCodeStatement(renderedText: $0, locations: pseudoGen.allLocations)
             }
         default:
-            pseudoCode = pseudoGen.generateForInstruction(
+            pseudoCodeStatement = pseudoGen.generateStatementForInstruction(
                 inst,
                 stack: &simulator,
                 loc: nil
             )
-            pseudoCodeStatement = pseudoCode.map {
-                PseudoCodeStatement(renderedText: $0, locations: pseudoGen.allLocations)
-            }
+            pseudoCode = pseudoCodeStatement?.renderedText
         }
 
         inst.pseudoCodeStatement = pseudoCodeStatement

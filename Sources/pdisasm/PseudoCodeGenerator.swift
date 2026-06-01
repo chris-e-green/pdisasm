@@ -37,50 +37,42 @@ struct PseudoCodeGenerator {
             return (loc.displayName, loc.displayType)
         }
     }
-    
-    mutating func generateForInstruction(
-        _ inst: Instruction,
-        stack: inout StackSimulator,
-        loc: Location?
-    ) -> String? {
+
+    private mutating func generateAssignmentStatement(
+        for inst: Instruction,
+        stack: inout StackSimulator
+    ) -> PseudoCodeStatement? {
         switch inst.opcode {
         case sto:
             let srcValue = stack.popStackValue()
             let destValue = stack.popStackValue()
-            let src = stack.assignmentSourceText(srcValue)
+            var src = stack.assignmentSourceText(srcValue)
             var destName = stack.assignmentTargetText(destValue)
             let srcType = srcValue.type
             let destType = destValue.type
             switch destType {
             case "CHAR":
                 if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
-                    return
-                      "\(destName) := '\(String(format: "%c", ch))'"
-                } else {
-                    return "\(destName) := \(src)"
+                    src = "'\(String(format: "%c", ch))'"
                 }
             case "BOOLEAN":
                 if src == "0" {
-                    return "\(destName) := FALSE"
+                    src = "FALSE"
                 } else if src == "1" {
-                    return "\(destName) := TRUE"
-                } else {
-                    return "\(destName) := \(src)"
+                    src = "TRUE"
                 }
-                
             default:
-                if let type = destType, !type.isEmpty && type != "UNKNOWN"  {
+                if let type = destType, !type.isEmpty && type != "UNKNOWN" {
                     setLocType(src, type)
                 }
                 if let type = srcType, !type.isEmpty && type != "UNKNOWN" {
                     setLocType(destName, type)
                 }
-                break
             }
-            if let type = destType, type.starts(with:"ARRAY") {
+            if let type = destType, type.starts(with: "ARRAY") {
                 destName = "\(destName)[0]"  // for now just show the first element being assigned
             }
-            return "\(destName) := \(src)"
+            return .assignment(targetValue: destValue, targetText: destName, source: src)
         case sas:
             let srcValue = stack.popStackValue()
             let destValue = stack.popStackValue()
@@ -88,13 +80,13 @@ struct PseudoCodeGenerator {
             let dest = stack.assignmentTargetText(destValue)
             setLocType(src, "STRING")
             setLocType(dest, "STRING")
-            return "\(dest) := \(src)"
+            return .assignment(targetValue: destValue, targetText: dest, source: src)
         case mov:
             let srcValue = stack.popStackValue()
             let dstValue = stack.popStackValue()
             let src = stack.assignmentSourceText(srcValue)
             let dst = stack.assignmentTargetText(dstValue)
-            return "\(dst) := \(src)"
+            return .assignment(targetValue: dstValue, targetText: dst, source: src)
         case stp:
             let aValue = stack.popStackValue()
             let (bbit, _) = stack.pop()
@@ -104,32 +96,61 @@ struct PseudoCodeGenerator {
             let b = bValue.type == "REAL"
                 ? representationBitsText(bValue, width: bwid, bit: bbit, stack: stack)
                 : stack.assignmentTargetText(bValue)
-            if bValue.type == "REAL" {
-                return "\(b) := \(a)"
-            }
-            return "\(b):\(bwid):\(bbit) := \(a)"
+            let target = bValue.type == "REAL" ? b : "\(b):\(bwid):\(bbit)"
+            return .assignment(targetValue: bValue, targetText: target, source: a)
         case stb:
             let srcValue = stack.popStackValue()
             let dstoffsValue = stack.popStackValue()
             let dstaddrValue = stack.popStackValue()
-            let src = stack.assignmentSourceText(srcValue, withoutParentheses: true)
+            var src = stack.assignmentSourceText(srcValue, withoutParentheses: true)
             let dstoffs = stack.assignmentSourceText(dstoffsValue)
             let dstaddr = dstaddrValue.type == "REAL"
                 ? representationByteText(dstaddrValue, offset: dstoffs, stack: stack)
                 : stack.assignmentTargetText(dstaddrValue)
             let dstoffstype = dstoffsValue.type
             let dstaddrtype = dstaddrValue.type
-            if dstaddrtype == "STRING" && dstoffstype == "INTEGER" {
-                if let offset = Int(dstoffs), offset > 0 {
-                    if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
-                        return "\(dstaddr)[\(dstoffs)] := '\(String(format: "%c", ch))'"
-                    }
-                }
+            if dstaddrtype == "STRING",
+               dstoffstype == "INTEGER",
+               let offset = Int(dstoffs),
+               offset > 0,
+               let ch = Int(src),
+               ch >= 0x20 && ch <= 0x7E {
+                src = "'\(String(format: "%c", ch))'"
             }
-            if dstaddrValue.type == "REAL" {
-                return "\(dstaddr) := \(src)"
-            }
-            return "\(dstaddr)[\(dstoffs)] := \(src)"
+            let target = dstaddrValue.type == "REAL" ? dstaddr : "\(dstaddr)[\(dstoffs)]"
+            return .assignment(targetValue: dstaddrValue, targetText: target, source: src)
+        default:
+            return nil
+        }
+    }
+
+    mutating func generateForInstruction(
+        _ inst: Instruction,
+        stack: inout StackSimulator,
+        loc: Location?
+    ) -> String? {
+        generateStatementForInstruction(inst, stack: &stack, loc: loc)?.renderedText
+    }
+
+    mutating func generateStatementForInstruction(
+        _ inst: Instruction,
+        stack: inout StackSimulator,
+        loc: Location?
+    ) -> PseudoCodeStatement? {
+        if let assignment = generateAssignmentStatement(for: inst, stack: &stack) {
+            return assignment
+        }
+
+        return generateRenderedInstruction(inst, stack: &stack, loc: loc)
+            .map(PseudoCodeStatement.rendered)
+    }
+
+    private mutating func generateRenderedInstruction(
+        _ inst: Instruction,
+        stack: inout StackSimulator,
+        loc: Location?
+    ) -> String? {
+        switch inst.opcode {
         case stm:
             let stmCount = inst.params[0]
             var src: String = ""
