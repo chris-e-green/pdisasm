@@ -30,6 +30,7 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
             result,
             showMarkup: true,
             showPCode: true,
+            showStackState: true,
             showPseudoCode: true,
             showDot: false,
             verbose: false
@@ -51,5 +52,47 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         XCTAssertTrue(output.contains("L1=Y:INTEGER"))
         XCTAssertTrue(output.contains("L2=X:INTEGER"))
         XCTAssertTrue(output.contains("TURTLEGR.MOVETOI(X, Y)"))
+
+        let movetoSignature = try XCTUnwrap(result.allProcedures.first {
+            $0.segment == 20 && $0.procedure == 6
+        })
+        let movetoProcedure = try XCTUnwrap(result.codeSegments[20]?.procedures.first {
+            $0.identifier?.procedure == 6
+        })
+        let xLocation = try XCTUnwrap(result.allLocations.first {
+            $0.segment == 20 && $0.procedure == 6 && $0.addr == 2
+        })
+        let yLocation = try XCTUnwrap(result.allLocations.first {
+            $0.segment == 20 && $0.procedure == 6 && $0.addr == 1
+        })
+
+        XCTAssertEqual(movetoSignature.parameterLocations.map(\.displayName), ["X", "Y"])
+        XCTAssertTrue(movetoSignature.parameterLocations[0] === xLocation)
+        XCTAssertTrue(movetoSignature.parameterLocations[1] === yLocation)
+        XCTAssertTrue(movetoProcedure.instructions.values.contains {
+            $0.memLocation === xLocation
+        })
+        XCTAssertTrue(movetoProcedure.instructions.values.contains {
+            $0.memLocation === yLocation
+        })
+
+        let turtlexSignature = try XCTUnwrap(result.allProcedures.first {
+            $0.segment == 20 && $0.procedure == 12
+        })
+        let turtlexProcedure = try XCTUnwrap(result.codeSegments[20]?.procedures.first {
+            $0.identifier?.procedure == 12
+        })
+        let turtlexReturnLocation = try XCTUnwrap(result.allLocations.first {
+            $0.segment == 20 && $0.procedure == 12 && $0.addr == 1
+        })
+
+        XCTAssertEqual(turtlexReturnLocation.description, "TURTLEX:INTEGER")
+        XCTAssertTrue(turtlexSignature.returnLocation === turtlexReturnLocation)
+        XCTAssertTrue(turtlexProcedure.instructions.values.contains {
+            $0.memLocation === turtlexReturnLocation
+        })
+        XCTAssertTrue(output.contains("L1=TURTLEX:INTEGER"))
+        XCTAssertTrue(output.contains("TURTLEX := DISPSTATE.TURTLEX"))
+        XCTAssertTrue(output.contains("L: TURTLEX"))
     }
 }

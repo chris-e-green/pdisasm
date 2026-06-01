@@ -884,7 +884,7 @@ struct PseudoCodeGenerator {
                 text: callSignature,
                 type: called.returnType,
                 kind: .expression,
-                location: Location(
+                location: called.returnLocation ?? Location(
                     segment: called.segment,
                     procedure: called.procedure,
                     addr: 1

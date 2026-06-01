@@ -313,7 +313,7 @@ public func renderStructuredLines(
                                 pcLine += "; \(c)"
                             }
                             if let n = inst.memLocation {
-                                pcLine += " \(n.name)"
+                                pcLine += " \(n.displayName)"
                             }
                             if let d = inst.destination {
                                 if let dest = result.allProcedures.first(where: {

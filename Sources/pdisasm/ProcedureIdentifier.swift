@@ -39,15 +39,23 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
                 ? "FUNCTION "
                 : "PROCEDURE ") + (segmentName ?? "SEG" + String(segment)) + "."
             + defaultedProcedureName
-        if !parameters.isEmpty {
+        let parameterDescriptions = signatureParameterDescriptions
+        if !parameterDescriptions.isEmpty {
             s +=
-                "(" + parameters.map({ $0.description }).joined(separator: "; ")
+                "(" + parameterDescriptions.joined(separator: "; ")
                 + ")"
         }
         if isFunction {
             s += ": " + (returnType ?? "UNKNOWN")
         }
         return s
+    }
+
+    private var signatureParameterDescriptions: [String] {
+        if parameterLocations.count == parameters.count {
+            return parameterLocations.map(\.description)
+        }
+        return parameters.map(\.description)
     }
     public var shortDescription: String {
         var result = ""
@@ -136,7 +144,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         try container.encode(self.segmentName, forKey: CodingKeys.segmentName)
         try container.encode(self.procName, forKey: CodingKeys.procName)
         try container.encode(
-            self.parameters.map { $0.description }.joined(separator: ";"),
+            self.signatureParameterDescriptions.joined(separator: ";"),
             forKey: CodingKeys.parameters
         )
         try container.encode(self.returnType, forKey: CodingKeys.returnType)
@@ -163,6 +171,8 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     public var procedure: Int
     public var procName: String?
     public var parameters: [Identifier] = []
+    public var returnLocation: Location?
+    public var parameterLocations: [Location] = []
     public var returnType: String?
     public var returnTypeSource: TypeSource = .unknown
 
