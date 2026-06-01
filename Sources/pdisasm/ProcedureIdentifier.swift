@@ -171,10 +171,55 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     public var procedure: Int
     public var procName: String?
     public var parameters: [Identifier] = []
-    public var returnLocation: Location?
-    public var parameterLocations: [Location] = []
+    var signatureSlots: [ProcedureSignatureSlot] = []
+    public var returnLocation: Location? {
+        get {
+            signatureSlots.first {
+                if case .returnValue = $0.kind {
+                    return true
+                }
+                return false
+            }?.location
+        }
+        set {
+            signatureSlots.removeAll {
+                if case .returnValue = $0.kind {
+                    return true
+                }
+                return false
+            }
+            if let newValue {
+                signatureSlots.append(ProcedureSignatureSlot(
+                    kind: .returnValue,
+                    location: newValue
+                ))
+                sortSignatureSlots()
+            }
+        }
+    }
+    public var parameterLocations: [Location] {
+        get {
+            signatureSlots.compactMap { slot -> (Int, Location)? in
+                guard let index = slot.kind.parameterIndex else { return nil }
+                return (index, slot.location)
+            }
+            .sorted { $0.0 < $1.0 }
+            .map(\.1)
+        }
+        set {
+            signatureSlots.removeAll { $0.kind.isParameter }
+            signatureSlots.append(contentsOf: newValue.enumerated().map {
+                ProcedureSignatureSlot(kind: .parameter($0.offset), location: $0.element)
+            })
+            sortSignatureSlots()
+        }
+    }
     public var returnType: String?
     public var returnTypeSource: TypeSource = .unknown
+
+    private func sortSignatureSlots() {
+        signatureSlots.sort { $0.kind.sortOrder < $1.kind.sortOrder }
+    }
 
     @discardableResult
     public func assignReturnType(

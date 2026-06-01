@@ -67,6 +67,7 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         })
 
         XCTAssertEqual(movetoSignature.parameterLocations.map(\.displayName), ["X", "Y"])
+        XCTAssertEqual(movetoSignature.signatureSlots.map(\.location.displayName), ["X", "Y"])
         XCTAssertTrue(movetoSignature.parameterLocations[0] === xLocation)
         XCTAssertTrue(movetoSignature.parameterLocations[1] === yLocation)
         XCTAssertTrue(movetoProcedure.instructions.values.contains {
@@ -87,6 +88,7 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         })
 
         XCTAssertEqual(turtlexReturnLocation.description, "TURTLEX:INTEGER")
+        XCTAssertEqual(turtlexSignature.signatureSlots.map(\.location.displayName), ["TURTLEX"])
         XCTAssertTrue(turtlexSignature.returnLocation === turtlexReturnLocation)
         XCTAssertTrue(turtlexProcedure.instructions.values.contains {
             $0.memLocation === turtlexReturnLocation
