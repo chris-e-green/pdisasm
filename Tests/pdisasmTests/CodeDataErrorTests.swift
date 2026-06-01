@@ -3,31 +3,31 @@ import XCTest
 
 final class CodeDataErrorTests: XCTestCase {
     func testReadByteThrowsOnEOF() {
-        var cd = CodeData(data: Data([]), instructionPointer: 0, header: 0)
-        XCTAssertThrowsError(try cd.readByte()) { error in
+        let cd = CodeData(data: Data([]), instructionPointer: 0, header: 0)
+        XCTAssertThrowsError(try cd.readByte(at: 0)) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
     }
 
     func testReadWordThrowsOnEOF() {
-        var cd = CodeData(data: Data([0x01]), instructionPointer: 0, header: 0)
-        XCTAssertThrowsError(try cd.readWord()) { error in
+        let cd = CodeData(data: Data([0x01]), instructionPointer: 0, header: 0)
+        XCTAssertThrowsError(try cd.readWord(at: 0)) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
     }
 
     func testReadBigThrowsOnEOFForTwoByte() {
-        var cd = CodeData(data: Data([0xFF]), instructionPointer: 0, header: 0)
+        let cd = CodeData(data: Data([0xFF]), instructionPointer: 0, header: 0)
         // 0xFF indicates a two-byte BIG; the next byte is missing
-        XCTAssertThrowsError(try cd.readBig()) { error in
+        XCTAssertThrowsError(try cd.readBig(at: 0)) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
     }
 
     func testReadAddressJumpTableOutOfBoundsThrows() {
-        var cd = CodeData(data: Data([0x80]), instructionPointer: 0, header: 10) // offset 0x80 -> jte = header + 128 - 256 = header - 128 => negative
+        let cd = CodeData(data: Data([0x80]), instructionPointer: 0, header: 10) // offset 0x80 -> jte = header + 128 - 256 = header - 128 => negative
         // readAddress should attempt to read a word at a computed jte, which will be out-of-bounds and throw
-        XCTAssertThrowsError(try cd.readAddress()) { error in
+        XCTAssertThrowsError(try cd.readAddress(at: 0)) { error in
             XCTAssertEqual(error as? CodeDataError, CodeDataError.unexpectedEndOfData)
         }
     }

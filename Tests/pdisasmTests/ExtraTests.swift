@@ -6,30 +6,30 @@ final class ExtraTests: XCTestCase {
         // data: [0x81, 0x02] -> BIG = (0x81 - 0x80) << 8 | 0x02 = 0x0102 = 258
         let arr: [UInt8] = [0x81, 0x02, 0x34, 0x12]
         let data = Data(arr)
-    let cd1 = CodeData(data: data, instructionPointer: 0, header: 0)
-    let (val, len) = try cd1.readBig(at: 0)
-    XCTAssertEqual(val, 0x0102)
-    XCTAssertEqual(len, 2)
+        let cd1 = CodeData(data: data, instructionPointer: 0, header: 0)
+        let (val, len) = try cd1.readBig(at: 0)
+        XCTAssertEqual(val, 0x0102)
+        XCTAssertEqual(len, 2)
 
-    // self ref pointer at index 2 contains word 0x1234 -> getSelfRefPointer(2) == 2 - 0x1234
-    let cd2 = CodeData(data: data, instructionPointer: 0, header: 0)
-    XCTAssertEqual(try cd2.getSelfRefPointer(at: 2), 2 - 0x1234)
+        // self ref pointer at index 2 contains word 0x1234 -> getSelfRefPointer(2) == 2 - 0x1234
+        let cd2 = CodeData(data: data, instructionPointer: 0, header: 0)
+        XCTAssertEqual(try cd2.getSelfRefPointer(at: 2), 2 - 0x1234)
     }
 
     func testCodeDataStringAndArrays() throws {
         // [len=3,'a','b','c', 0x02, 0x00] -> readString should return "abc", readWordArray(1) should return [0x0002]
-        var cd = CodeData(data: Data([0x03, 0x61, 0x62, 0x63, 0x02, 0x00]), instructionPointer: 0, header: 0)
-        let s = try cd.readString()
+        let cd = CodeData(data: Data([0x03, 0x61, 0x62, 0x63, 0x02, 0x00]), instructionPointer: 0, header: 0)
+        let s = try cd.readString(at: 0)
         XCTAssertEqual(s, "abc")
-        let words = try cd.readWordArray(count: 1)
+        let words = try cd.readWordArray(at: 4, count: 1)
         XCTAssertEqual(words, [0x0002])
     }
 
     func testCodeDataReadAddressForward() throws {
         // construct a small data where readAddress reads a forward offset
         // layout: [offset=0x02] means forward offset 2 -> destination instructionPointer + offset + 1
-        var cd = CodeData(data: Data([0x02, 0x00, 0x00, 0x00]), instructionPointer: 0, header: 0)
-        let dest = try cd.readAddress()
+        let cd = CodeData(data: Data([0x02, 0x00, 0x00, 0x00]), instructionPointer: 0, header: 0)
+        let dest = try cd.readAddress(at: 0)
         // after reading 1 byte, instructionPointer==1; return should be instructionPointer + offset + 1 = 1 + 2 + 1 = 4
         XCTAssertEqual(dest, 4)
     }
@@ -42,8 +42,8 @@ final class ExtraTests: XCTestCase {
         // put a high-offset byte at instructionPointer 0 of 0x80 (128) so jte = header + 128 - 256 = header - 128
         // set header = 130 so jte = 2
         arr[0] = 0x80
-        var cd = CodeData(data: Data(arr), instructionPointer: 0, header: 130)
-        let dest = try cd.readAddress()
+        let cd = CodeData(data: Data(arr), instructionPointer: 0, header: 130)
+        let dest = try cd.readAddress(at: 0)
         XCTAssertEqual(dest, 0)
     }
 }

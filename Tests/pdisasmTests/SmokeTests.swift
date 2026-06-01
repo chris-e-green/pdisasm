@@ -6,16 +6,15 @@ final class SmokeTests: XCTestCase {
         // create a 4 byte data
         let arr: [UInt8] = [0x34, 0x12, 0x78, 0x56]
         let data = Data(arr)
-    let cd = CodeData(data: data, instructionPointer: 0, header: 0)
-    XCTAssertEqual(try cd.readWord(at: 0), 0x1234)
-    XCTAssertEqual(try cd.readWord(at: 2), 0x5678)
+        let cd = CodeData(data: data, instructionPointer: 0, header: 0)
+        XCTAssertEqual(try cd.readWord(at: 0), 0x1234)
+        XCTAssertEqual(try cd.readWord(at: 2), 0x5678)
     }
 
     func testCodeDataReadByteAndWord() throws {
-        var data = CodeData(data: Data([0x01, 0x02, 0x03, 0x04]), instructionPointer: 0, header: 0)
-        XCTAssertEqual(try data.readByte(), 0x01)
-        // after reading one byte, instructionPointer==1 and the next word is bytes [0x02, 0x03] -> 0x0302
-        XCTAssertEqual(try data.readWord(), 0x0302)
+        let data = CodeData(data: Data([0x01, 0x02, 0x03, 0x04]), instructionPointer: 0, header: 0)
+        XCTAssertEqual(try data.readByte(at: 0), 0x01)
+        XCTAssertEqual(try data.readWord(at: 1), 0x0302)
     }
 
     func testDecodeEmptyProcedures() throws {

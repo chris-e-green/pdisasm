@@ -145,6 +145,18 @@ struct CodeData {
         }
     }
 
+    func readAddress(at position: Int) throws -> Int {
+        let offset = try readByte(at: position)
+
+        if offset > 0x7F {
+            let jte = header + Int(offset) - 256
+            let jumpTableEntry = try readWord(at: jte)
+            return jte - Int(jumpTableEntry)
+        } else {
+            return position + Int(offset) + 2
+        }
+    }
+
     /// Reads a length-prefixed string.
     /// - Returns: The decoded string.
     /// - Throws: `CodeDataError` on failure.
@@ -164,6 +176,20 @@ struct CodeData {
         return result
     }
 
+    func readString(at position: Int) throws -> String {
+        let count = Int(try readByte(at: position))
+        let start = position + 1
+        guard start + count <= data.count else {
+            throw CodeDataError.unexpectedEndOfData
+        }
+
+        let stringData = data[start..<(start + count)]
+        guard let result = String(data: stringData, encoding: .ascii) else {
+            throw CodeDataError.stringDecodingFailed
+        }
+        return result
+    }
+
     /// Reads a length-prefixed byte array.
     @available(*, deprecated, message:"Use readByteArray(at:) for non-advancing reads or ensure instructionPointer is managed safely.")
     mutating func readByteArray() throws -> [UInt8] {
@@ -174,6 +200,15 @@ struct CodeData {
         let byteArray = Array(data[instructionPointer..<instructionPointer + count])
         instructionPointer += count
         return byteArray
+    }
+
+    func readByteArray(at position: Int) throws -> [UInt8] {
+        let count = Int(try readByte(at: position))
+        let start = position + 1
+        guard start + count <= data.count else {
+            throw CodeDataError.unexpectedEndOfData
+        }
+        return Array(data[start..<start + count])
     }
 
     /// Reads a word-aligned array of `count` words.
@@ -188,6 +223,15 @@ struct CodeData {
             words.append(try readWord())
         }
         return words
+    }
+
+    func readWordArray(at position: Int, count: Int) throws -> [UInt16] {
+        guard position >= 0 && position + (count * 2) <= data.count else {
+            throw CodeDataError.unexpectedEndOfData
+        }
+        return try (0..<count).map { index in
+            try readWord(at: position + index * 2)
+        }
     }
 
     /// Returns 512-byte blocks from `Data`.
