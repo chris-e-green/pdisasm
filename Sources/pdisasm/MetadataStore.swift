@@ -3,6 +3,7 @@ import Foundation
 
 struct MetadataStore {
     let appSupportDirectory: URL
+    var diagnostics: DiagnosticCollector? = nil
 
     func createDirectory() throws {
         try FileManager.default.createDirectory(
@@ -18,7 +19,7 @@ struct MetadataStore {
                 labels = loadedLabels
             }
         } catch {
-            print("Error reading \(file): \(error)")
+            diagnostics?.error("Error reading \(file): \(error)")
         }
     }
 
@@ -37,7 +38,7 @@ struct MetadataStore {
             }
             try writeCSV(labels, to: file, overwrite: overwrite, encoder: encoder)
         } catch {
-            print("Error writing \(file): \(error)")
+            diagnostics?.error("Error writing \(file): \(error)")
         }
     }
 
@@ -50,7 +51,7 @@ struct MetadataStore {
                 allProcedures = loadedProcedures
             }
         } catch {
-            print("Error reading \(file): \(error)")
+            diagnostics?.error("Error reading \(file): \(error)")
         }
     }
 
@@ -69,7 +70,7 @@ struct MetadataStore {
             }
             try writeCSV(procedures, to: file, overwrite: overwrite, encoder: encoder)
         } catch {
-            print("Error writing \(file): \(error)")
+            diagnostics?.error("Error writing \(file): \(error)")
         }
     }
 
@@ -90,7 +91,7 @@ struct MetadataStore {
         do {
             try writeJSON(knownRecords, to: file, overwrite: overwrite)
         } catch {
-            print("Error writing \(file): \(error)")
+            diagnostics?.error("Error writing \(file): \(error)")
         }
     }
 

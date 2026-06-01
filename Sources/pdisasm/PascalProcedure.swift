@@ -9,7 +9,8 @@ func decodePascalProcedure(
     callers: inout Set<Call>,
     allLocations: inout Set<Location>,
     allProcedures: inout [ProcedureIdentifier],
-    verbose: Bool = false
+    verbose: Bool = false,
+    diagnostics: DiagnosticCollector? = nil
 ) {
     // Early validation: ensure addr and the procedure header bytes are present
     // Many subsequent reads assume bytes at addr+1 and at addr-2..addr-8. If
@@ -61,7 +62,7 @@ func decodePascalProcedure(
     )
 
     // Initialize components for clean separation of concerns
-    let decoder = OpcodeDecoder(codeData: cd)
+    let decoder = OpcodeDecoder(codeData: cd, diagnostics: diagnostics)
 
     // Decode loop: uses new architecture for clean separation of decoding, simulation, and generation
     while ic < addr && !done {
@@ -78,11 +79,9 @@ func decodePascalProcedure(
                 proc: proc,
                 addr: addr
             ) else {
-                if verbose {
-                    print(
-                        "Decode error at IC \(String(format: "%04x", ic)) in segment \(segment) proc \(procedure)"
-                    )
-                }
+                diagnostics?.warning(
+                    "Decode error at IC \(String(format: "%04x", ic)) in segment \(segment) proc \(procedure)"
+                )
                 return
             }
 

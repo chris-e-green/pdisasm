@@ -83,6 +83,7 @@ struct StackValue {
 struct StackSimulator {
     let sep = "~"
     let ptr = "@"
+    var diagnostics: DiagnosticCollector? = nil
     var values: [StackValue] = []
 
     var stack: [String] {
@@ -360,8 +361,8 @@ struct StackSimulator {
             let name = realRepresentationStorageBaseName(a) ?? String(a.text.split(separator: "{", maxSplits: 1)[0])
             let bName = realRepresentationStorageBaseName(b) ?? String(b.text.split(separator: "{", maxSplits: 1)[0])
             if name != bName {
-                print(
-                    "Warning: expected matching names for REAL parts, got '\(name)' and '\(bName)'"
+                diagnostics?.warning(
+                    "Expected matching names for REAL parts, got '\(name)' and '\(bName)'"
                 )
                 return ("\(a.text).\(b.text)", "REAL")
             } else {

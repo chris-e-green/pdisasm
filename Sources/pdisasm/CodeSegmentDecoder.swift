@@ -4,6 +4,7 @@ struct CodeSegmentDecoder {
     let segDict: SegDictionary
     let binaryData: CodeData
     let verbose: Bool
+    let diagnostics: DiagnosticCollector?
 
     func decode(
         allLocations: inout Set<Location>,
@@ -22,19 +23,17 @@ struct CodeSegmentDecoder {
             )
 
             if code.count < 2 {
-                if verbose {
-                    print(
-                        "Skipping segment \(seg.name) (segNum=\(seg.segNum)): code block too small (len=\(code.count))"
-                    )
-                }
+                diagnostics?.warning(
+                    "Skipping segment \(seg.name) (segNum=\(seg.segNum)): code block too small (len=\(code.count))"
+                )
                 continue
             }
 
             if seg.segmentKind == .dataseg  {
                 dataSegments.append(Int(seg.segNum))
-                if verbose {
-                    print("Segment \(seg.name) (segNum=\(seg.segNum)): segment kind is .dataseg")
-                }
+                diagnostics?.warning(
+                    "Segment \(seg.name) (segNum=\(seg.segNum)): segment kind is .dataseg"
+                )
                 continue
             }
 
@@ -111,11 +110,9 @@ struct CodeSegmentDecoder {
                 let minNeededIndex = procStartOffset - 8
                 let maxNeededIndex = procStartOffset + 1
                 if minNeededIndex < 0 || maxNeededIndex >= segCodeBlock.count {
-                    if verbose {
-                        print(
-                            "Skipping procedure at index \(procIdx + 1): pointer out of range (addr=\(procStartOffset), code.len=\(segCodeBlock.count))"
-                        )
-                    }
+                    diagnostics?.warning(
+                        "Skipping procedure at index \(procIdx + 1): pointer out of range (addr=\(procStartOffset), code.len=\(segCodeBlock.count))"
+                    )
                     continue
                 }
 
@@ -165,7 +162,8 @@ struct CodeSegmentDecoder {
                         callers: &tempCallers,
                         allLocations: &allLocations,
                         allProcedures: &allProcedures,
-                        verbose: verbose
+                        verbose: verbose,
+                        diagnostics: diagnostics
                     )
                 }
 

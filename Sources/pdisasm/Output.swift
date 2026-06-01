@@ -151,6 +151,14 @@ public func renderStructuredLines(
         addLine(.diagnostic, "")
     }
 
+    if !result.diagnostics.isEmpty {
+        addLine(.markup, "## Diagnostics")
+        for diagnostic in result.diagnostics {
+            addLine(.diagnostic, "\(diagnostic.severity.rawValue.uppercased()): \(diagnostic.message)")
+        }
+        addLine(.diagnostic, "")
+    }
+
     addLine(.markup, "## Globals")
     addLine(.markup, "")
 
@@ -394,7 +402,8 @@ private func makeDisassemblyResult(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
-    typeConflicts: [TypeConflict]
+    typeConflicts: [TypeConflict],
+    diagnostics: [Diagnostic] = []
 ) -> DisassemblyResult {
     DisassemblyResult(
         sourceFilename: sourceFilename,
@@ -404,7 +413,8 @@ private func makeDisassemblyResult(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
-        typeConflicts: typeConflicts
+        typeConflicts: typeConflicts,
+        diagnostics: diagnostics
     )
 }
 
@@ -458,6 +468,7 @@ func outputResults(
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
     typeConflicts: [TypeConflict] = [],
+    diagnostics: [Diagnostic] = [],
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
@@ -476,6 +487,7 @@ func outputResults(
         allProcedures: allProcedures,
         allCallers: allCallers,
         typeConflicts: typeConflicts,
+        diagnostics: diagnostics,
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
@@ -496,6 +508,7 @@ func outputResults<Target: TextOutputStream>(
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
     typeConflicts: [TypeConflict] = [],
+    diagnostics: [Diagnostic] = [],
     verbose: Bool = false,
     showMarkup: Bool = true,
     showPCode: Bool = true,
@@ -515,7 +528,8 @@ func outputResults<Target: TextOutputStream>(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
-        typeConflicts: typeConflicts
+        typeConflicts: typeConflicts,
+        diagnostics: diagnostics
     )
 
     let lines = renderStructuredLines(

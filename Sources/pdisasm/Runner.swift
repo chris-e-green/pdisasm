@@ -85,6 +85,7 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let allProcedures: [ProcedureIdentifier]
     public let allCallers: Set<Call>
     public let typeConflicts: [TypeConflict]
+    public let diagnostics: [Diagnostic]
 }
 
 private func defaultKnownRecords() -> Set<PascalRecord> {
@@ -194,7 +195,7 @@ private struct MetadataContext {
     let appSupportDirectory: URL
     let store: MetadataStore
 
-    init(fileURL: URL, segDict: SegDictionary) {
+    init(fileURL: URL, segDict: SegDictionary, diagnostics: DiagnosticCollector? = nil) {
         let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
         let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
         self.fileIdentifier = fileIdentifier
@@ -207,7 +208,10 @@ private struct MetadataContext {
         globalsFile = "globals_ver_\(version)"
         appSupportDirectory = URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
-        store = MetadataStore(appSupportDirectory: appSupportDirectory)
+        store = MetadataStore(
+            appSupportDirectory: appSupportDirectory,
+            diagnostics: diagnostics
+        )
     }
 
     func load(
@@ -337,7 +341,8 @@ private func simulatePascalProcedures(
     codeSegments: [Int: CodeSegment],
     knownRecords: Set<PascalRecord>,
     allProcedures: inout [ProcedureIdentifier],
-    allLocations: inout Set<Location>
+    allLocations: inout Set<Location>,
+    diagnostics: DiagnosticCollector
 ) -> [TypeConflict] {
     var typeConflicts: [TypeConflict] = []
 
@@ -350,7 +355,8 @@ private func simulatePascalProcedures(
                 proc: proc,
                 knownRecords: knownRecords,
                 allProcedures: &allProcedures,
-                allLocations: &allLocations
+                allLocations: &allLocations,
+                diagnostics: diagnostics
             ))
         }
     }
@@ -365,12 +371,14 @@ private func decodeCodeSegments(
     allLocations: inout Set<Location>,
     allProcedures: inout [ProcedureIdentifier],
     allCallers: inout Set<Call>,
-    dataSegments: inout [Int]
+    dataSegments: inout [Int],
+    diagnostics: DiagnosticCollector
 ) throws -> [Int: CodeSegment] {
     try CodeSegmentDecoder(
         segDict: segDict,
         binaryData: binaryData,
-        verbose: verbose
+        verbose: verbose,
+        diagnostics: diagnostics
     ).decode(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
@@ -400,13 +408,15 @@ private func runPascalAnalysisPass(
     codeSegments: [Int: CodeSegment],
     knownRecords: Set<PascalRecord>,
     allProcedures: inout [ProcedureIdentifier],
-    allLocations: inout Set<Location>
+    allLocations: inout Set<Location>,
+    diagnostics: DiagnosticCollector
 ) -> [TypeConflict] {
     var typeConflicts = simulatePascalProcedures(
         codeSegments: codeSegments,
         knownRecords: knownRecords,
         allProcedures: &allProcedures,
-        allLocations: &allLocations
+        allLocations: &allLocations,
+        diagnostics: diagnostics
     )
     typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
         allProcedures: allProcedures,
@@ -433,7 +443,8 @@ public func disassemble(
     }
 
     let segDict = try readCodeFileStructure(codeData: binaryData)
-    let metadata = MetadataContext(fileURL: fileURL, segDict: segDict)
+    let diagnostics = DiagnosticCollector()
+    let metadata = MetadataContext(fileURL: fileURL, segDict: segDict, diagnostics: diagnostics)
 
     var allLocations: Set<Location> = []
     var allProcedures: [ProcedureIdentifier] = []
@@ -459,7 +470,8 @@ public func disassemble(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
         allCallers: &allCallers,
-        dataSegments: &dataSegments
+        dataSegments: &dataSegments,
+        diagnostics: diagnostics
     )
 
     typeConflicts.append(contentsOf: prepareDecodedProgram(
@@ -475,7 +487,8 @@ public func disassemble(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
         allProcedures: &allProcedures,
-        allLocations: &allLocations
+        allLocations: &allLocations,
+        diagnostics: diagnostics
     ))
 
     // Regenerate pseudocode with the inferred signatures and corrected parameter labels.
@@ -483,7 +496,8 @@ public func disassemble(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
         allProcedures: &allProcedures,
-        allLocations: &allLocations
+        allLocations: &allLocations,
+        diagnostics: diagnostics
     ))
 
     let result = DisassemblyResult(
@@ -494,7 +508,8 @@ public func disassemble(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
-        typeConflicts: typeConflicts
+        typeConflicts: typeConflicts,
+        diagnostics: diagnostics.diagnostics
     )
 
     if writeMetadata {
@@ -545,6 +560,7 @@ public func renderDisassembly(
         allProcedures: result.allProcedures,
         allCallers: result.allCallers,
         typeConflicts: result.typeConflicts,
+        diagnostics: result.diagnostics,
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,
@@ -584,6 +600,7 @@ public func runPdisasm(
         allProcedures: result.allProcedures,
         allCallers: result.allCallers,
         typeConflicts: result.typeConflicts,
+        diagnostics: result.diagnostics,
         verbose: verbose,
         showMarkup: showMarkup,
         showPCode: showPCode,

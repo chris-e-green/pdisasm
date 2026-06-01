@@ -6,12 +6,13 @@ func simulateStackAndGeneratePseudocode(
     proc: Procedure,
     knownRecords: Set<PascalRecord>,
     allProcedures: inout [ProcedureIdentifier],
-    allLocations: inout Set<Location>
+    allLocations: inout Set<Location>,
+    diagnostics: DiagnosticCollector? = nil
 ) -> [TypeConflict] {
     proc.entryPoints.insert(proc.enterIC)
     proc.entryPoints.insert(proc.exitIC)
 
-    var simulator = StackSimulator()
+    var simulator = StackSimulator(diagnostics: diagnostics)
     var pseudoGen = PseudoCodeGenerator(
         allProcedures: allProcedures,
         knownRecords: knownRecords,

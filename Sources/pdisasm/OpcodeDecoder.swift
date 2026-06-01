@@ -5,6 +5,7 @@ import Foundation
 /// Handles decoding of P-code opcodes and extracting instruction parameters
 struct OpcodeDecoder {
     let codeData: CodeData
+    var diagnostics: DiagnosticCollector? = nil
 
     // MARK: - Trivial single-byte opcode table
     // Opcodes that decode to just a mnemonic and comment with bytesConsumed=1, no params/locations.
@@ -361,8 +362,8 @@ struct OpcodeDecoder {
             tempParams.append(dest)
             tempIC += 2
             if first > last {
-                print(
-                    "Warning: XJP first (\(first)) is greater than last (\(last))"
+                diagnostics?.warning(
+                    "XJP first (\(first)) is greater than last (\(last))"
                 )
                 throw CodeDataError.invalidXJPParameters
             }
