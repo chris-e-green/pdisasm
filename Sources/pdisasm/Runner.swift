@@ -358,6 +358,64 @@ private func simulatePascalProcedures(
     return typeConflicts
 }
 
+private func decodeCodeSegments(
+    segDict: SegDictionary,
+    binaryData: CodeData,
+    verbose: Bool,
+    allLocations: inout Set<Location>,
+    allProcedures: inout [ProcedureIdentifier],
+    allCallers: inout Set<Call>,
+    dataSegments: inout [Int]
+) throws -> [Int: CodeSegment] {
+    try CodeSegmentDecoder(
+        segDict: segDict,
+        binaryData: binaryData,
+        verbose: verbose
+    ).decode(
+        allLocations: &allLocations,
+        allProcedures: &allProcedures,
+        allCallers: &allCallers,
+        dataSegments: &dataSegments
+    )
+}
+
+private func prepareDecodedProgram(
+    codeSegments: [Int: CodeSegment],
+    allCallers: inout Set<Call>,
+    allLocations: inout Set<Location>
+) -> [TypeConflict] {
+    applyCallerLexLevels(codeSegments: codeSegments, allCallers: &allCallers)
+    normaliseDecodedLocations(
+        codeSegments: codeSegments,
+        allCallers: allCallers,
+        allLocations: &allLocations
+    )
+    return applyInitialProcedureSignatureLocations(
+        codeSegments: codeSegments,
+        allLocations: &allLocations
+    )
+}
+
+private func runPascalAnalysisPass(
+    codeSegments: [Int: CodeSegment],
+    knownRecords: Set<PascalRecord>,
+    allProcedures: inout [ProcedureIdentifier],
+    allLocations: inout Set<Location>
+) -> [TypeConflict] {
+    var typeConflicts = simulatePascalProcedures(
+        codeSegments: codeSegments,
+        knownRecords: knownRecords,
+        allProcedures: &allProcedures,
+        allLocations: &allLocations
+    )
+    typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
+        allProcedures: allProcedures,
+        codeSegments: codeSegments,
+        allLocations: &allLocations
+    ))
+    return typeConflicts
+}
+
 /// Disassemble a binary file and return structured results without printing.
 public func disassemble(
     filename: String,
@@ -394,53 +452,37 @@ public func disassemble(
         globalNames: &globalNames
     )
 
-    let allCodeSegs = try CodeSegmentDecoder(
+    let allCodeSegs = try decodeCodeSegments(
         segDict: segDict,
         binaryData: binaryData,
-        verbose: verbose
-    ).decode(
+        verbose: verbose,
         allLocations: &allLocations,
         allProcedures: &allProcedures,
         allCallers: &allCallers,
         dataSegments: &dataSegments
     )
 
-    applyCallerLexLevels(codeSegments: allCodeSegs, allCallers: &allCallers)
-    normaliseDecodedLocations(
+    typeConflicts.append(contentsOf: prepareDecodedProgram(
         codeSegments: allCodeSegs,
-        allCallers: allCallers,
-        allLocations: &allLocations
-    )
-    typeConflicts.append(contentsOf: applyInitialProcedureSignatureLocations(
-        codeSegments: allCodeSegs,
+        allCallers: &allCallers,
         allLocations: &allLocations
     ))
 
     // Do stack simulation and pseudocode generation
     // once we have all procedures decoded.
     // As the stack plays a role in control flow, we need to handle them at the same time.
-    typeConflicts.append(contentsOf: simulatePascalProcedures(
+    typeConflicts.append(contentsOf: runPascalAnalysisPass(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
         allProcedures: &allProcedures,
-        allLocations: &allLocations
-    ))
-    typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
-        allProcedures: allProcedures,
-        codeSegments: allCodeSegs,
         allLocations: &allLocations
     ))
 
     // Regenerate pseudocode with the inferred signatures and corrected parameter labels.
-    typeConflicts.append(contentsOf: simulatePascalProcedures(
+    typeConflicts.append(contentsOf: runPascalAnalysisPass(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
         allProcedures: &allProcedures,
-        allLocations: &allLocations
-    ))
-    typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
-        allProcedures: allProcedures,
-        codeSegments: allCodeSegs,
         allLocations: &allLocations
     ))
 
