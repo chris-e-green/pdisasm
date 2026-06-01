@@ -91,6 +91,13 @@ final class AssemblerFixtureRegressionTests: XCTestCase {
         XCTAssertTrue(turtlexProcedure.instructions.values.contains {
             $0.memLocation === turtlexReturnLocation
         })
+        let turtlexAssignment = try XCTUnwrap(turtlexProcedure.instructions.values.first {
+            $0.pseudoCode == "TURTLEX := DISPSTATE.TURTLEX"
+        })
+        XCTAssertEqual(
+            turtlexAssignment.pseudoCodeStatement?.renderedText,
+            "TURTLEX := DISPSTATE.TURTLEX"
+        )
         XCTAssertTrue(output.contains("L1=TURTLEX:INTEGER"))
         XCTAssertTrue(output.contains("TURTLEX := DISPSTATE.TURTLEX"))
         XCTAssertTrue(output.contains("L: TURTLEX"))

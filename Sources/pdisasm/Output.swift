@@ -354,7 +354,7 @@ public func renderStructuredLines(
                     }
 
                     // Post-pseudocode line
-                    if let pseudo = inst.pseudoCode {
+                    if let pseudo = inst.pseudoCodeStatement?.renderedText ?? inst.pseudoCode {
                         if pseudo.starts(with: "END")
                             || pseudo.starts(with: "UNTIL")
                         {

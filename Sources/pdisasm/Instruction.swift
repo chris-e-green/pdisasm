@@ -10,6 +10,7 @@ public class Instruction {
     public var isPascal: Bool = true
     public var stackState: [String]?
     public var prePseudoCode: [String]  // pseudo-code to print before instruction
+    var pseudoCodeStatement: PseudoCodeStatement?
     public var pseudoCode: String?  // pseudo-code to print after instruction
 
     public init(
@@ -36,6 +37,9 @@ public class Instruction {
         self.comment = comment
         self.isPascal = isPascal
         self.stackState = stackState
+        self.pseudoCodeStatement = pseudoCode.map {
+            PseudoCodeStatement(renderedText: $0, locations: [])
+        }
         self.pseudoCode = pseudoCode
         self.prePseudoCode = prePseudoCode
     }

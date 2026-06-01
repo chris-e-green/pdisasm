@@ -21,6 +21,7 @@ func simulateStackAndGeneratePseudocode(
 
     for instruction in proc.instructions.values {
         instruction.pseudoCode = nil
+        instruction.pseudoCodeStatement = nil
         instruction.stackState = nil
         instruction.prePseudoCode.removeAll()
     }
@@ -30,6 +31,7 @@ func simulateStackAndGeneratePseudocode(
     for idx in sortedInstructions.indices {
         let (address, inst) = sortedInstructions[idx]
         var pseudoCode: String? = nil
+        var pseudoCodeStatement: PseudoCodeStatement? = nil
 
         switch inst.opcode {
         case fjp, ujp, xjp:
@@ -41,14 +43,21 @@ func simulateStackAndGeneratePseudocode(
                 simulator: &simulator,
                 proc: proc
             )
+            pseudoCodeStatement = pseudoCode.map {
+                PseudoCodeStatement(renderedText: $0, locations: pseudoGen.allLocations)
+            }
         default:
             pseudoCode = pseudoGen.generateForInstruction(
                 inst,
                 stack: &simulator,
                 loc: nil
             )
+            pseudoCodeStatement = pseudoCode.map {
+                PseudoCodeStatement(renderedText: $0, locations: pseudoGen.allLocations)
+            }
         }
 
+        inst.pseudoCodeStatement = pseudoCodeStatement
         inst.pseudoCode = pseudoCode
         inst.stackState = simulator.stackDescription
     }
