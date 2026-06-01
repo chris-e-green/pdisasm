@@ -326,109 +326,18 @@ func applyInitialProcedureSignatureLocations(
     codeSegments: [Int: CodeSegment],
     allLocations: inout Set<Location>
 ) -> [TypeConflict] {
-    var typeConflicts: [TypeConflict] = []
-
-    for (_, codeSeg) in codeSegments {
-        for proc in codeSeg.procedures {
-            guard let pt = proc.identifier else { continue }
-            var paramAddr = 1
-
-            if pt.isFunction == true {
-                if let ret = allLocations.first(where: {
-                    $0.segment == pt.segment && $0.procedure == pt.procedure
-                        && $0.addr == 1
-                }) {
-                    ret.name = pt.procName ?? pt.shortDescription
-                    if let conflict = ret.assignType(
-                        pt.returnType ?? "UNKNOWN",
-                        source: pt.returnTypeSource,
-                        evidence: "\(pt.shortDescription) return"
-                    ) {
-                        typeConflicts.append(conflict)
-                    }
-                    ret.isParam = true
-                    allLocations.update(with: ret)
-                } else {
-                    allLocations.insert(
-                        Location(
-                            segment: pt.segment,
-                            procedure: pt.procedure,
-                            lexLevel: proc.lexicalLevel,
-                            addr: 1,
-                            isParam: true,
-                            name: pt.procName ?? pt.shortDescription,
-                            type: pt.returnType ?? "UNKNOWN",
-                            typeSource: pt.returnTypeSource
-                        )
-                    )
-                }
-                if proc.identifier?.returnType == "REAL" {
-                    if let ret = allLocations.first(where: {
-                        $0.segment == pt.segment
-                            && $0.procedure == pt.procedure
-                            && $0.addr == 2
-                    }) {
-                        ret.name = pt.procName ?? pt.shortDescription
-                        if let conflict = ret.assignType(
-                            pt.returnType ?? "REAL",
-                            source: pt.returnTypeSource,
-                            evidence: "\(pt.shortDescription) real return"
-                        ) {
-                            typeConflicts.append(conflict)
-                        }
-                        ret.isParam = true
-                        allLocations.update(with: ret)
-                    } else {
-                        allLocations.insert(
-                            Location(
-                                segment: pt.segment,
-                                procedure: pt.procedure,
-                                lexLevel: proc.lexicalLevel,
-                                addr: 2,
-                                isParam: true,
-                                name: pt.procName ?? pt.shortDescription,
-                                type: pt.returnType ?? "REAL",
-                                typeSource: pt.returnTypeSource
-                            )
-                        )
-                    }
-                }
-                paramAddr = 3
-            }
-            for param in pt.parameters.reversed() {
-                if let par = allLocations.first(where: {
-                    $0.segment == pt.segment && $0.procedure == pt.procedure
-                        && $0.addr == paramAddr
-                }) {
-                    par.name = param.name
-                    if let conflict = par.assignType(
-                        param.type,
-                        source: param.typeSource,
-                        evidence: "\(pt.shortDescription) parameter \(param.name)"
-                    ) {
-                        typeConflicts.append(conflict)
-                    }
-                    par.isParam = true
-                    allLocations.update(with: par)
-                } else {
-                    allLocations.insert(
-                        Location(
-                            segment: pt.segment,
-                            procedure: pt.procedure,
-                            lexLevel: proc.lexicalLevel,
-                            addr: paramAddr,
-                            isParam: true,
-                            name: param.name,
-                            type: param.type,
-                            typeSource: param.typeSource
-                        )
-                    )
-                }
-                paramAddr += parameterWordSize(param)
-            }
-        }
+    let procedures = codeSegments.values.flatMap { codeSegment in
+        codeSegment.procedures.compactMap(\.identifier)
     }
-
+    let typeConflicts = applyProcedureSignatureLocations(
+        procedures: procedures,
+        codeSegments: codeSegments,
+        locations: &allLocations
+    )
+    canonicalizeInstructionLocations(
+        codeSegments: codeSegments,
+        locations: allLocations
+    )
     return typeConflicts
 }
 
