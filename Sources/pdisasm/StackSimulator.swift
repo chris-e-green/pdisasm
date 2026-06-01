@@ -83,16 +83,47 @@ struct StackValue {
 struct StackSimulator {
     let sep = "~"
     let ptr = "@"
-    var stack: [String] = []
     var values: [StackValue] = []
 
+    var stack: [String] {
+        get {
+            values.map(encodeStackValue)
+        }
+        set {
+            values = newValue.map(decodeStackValue)
+        }
+    }
+
     var stackDescription: [String] {
-        values.count == stack.count ? values.map(\.stackDescription) : stack
+        values.map(\.stackDescription)
     }
 
 //    func prettyStack() -> String {
 //        "[" + stackDescription.joined(separator: ", ") + "]"
 //    }
+
+    private func encodeStackValue(_ value: StackValue) -> String {
+        "\(value.text)\(sep)\(value.encodedType)"
+    }
+
+    private func decodeStackValue(_ encoded: String) -> StackValue {
+        if encoded.contains(sep) {
+            var parts = encoded.split(separator: sep, maxSplits: 1)
+            if parts.count < 2 {
+                parts.append("UNKNOWN")
+            }
+            let encodedType = String(parts[1])
+            return StackValue(
+                text: String(parts[0]),
+                type: encodedType.hasPrefix(ptr)
+                    ? String(encodedType.dropFirst())
+                    : encodedType,
+                kind: encodedType.hasPrefix(ptr) ? .pointer : .value
+            )
+        }
+
+        return StackValue(text: encoded, type: nil, kind: .value)
+    }
 
     mutating func push(
         _ value: (val: String, type: String?),
@@ -100,9 +131,6 @@ struct StackSimulator {
         kind: StackValueKind? = nil,
         location: Location? = nil
     ) {
-        var stackRep = "\(value.val)\(sep)"
-        if isPointer { stackRep += ptr }
-        stackRep += "\(value.type ?? "UNKNOWN")"
         let valueKind = kind ?? (isPointer ? .address : .value)
         values.append(StackValue(
             text: value.val,
@@ -110,54 +138,22 @@ struct StackSimulator {
             kind: valueKind,
             location: location
         ))
-        if let type = value.type {
-            stack.append("\(value.val)\(sep)\(type)")
-        } else {
-            stack.append("\(value.val)\(sep)UNKNOWN")
-        }
     }
 
     mutating func push(_ value: StackValue) {
         values.append(value)
-        stack.append("\(value.text)\(sep)\(value.encodedType)")
     }
 
     mutating func popStackValue() -> StackValue {
-        if values.count == stack.count, let value = values.popLast() {
-            _ = stack.popLast()
-            return value
-        }
-
-        let encoded = stack.popLast() ?? "underflow!"
-        if encoded.contains(sep) {
-            var parts = encoded.split(separator: sep, maxSplits: 1)
-            if parts.count < 2 {
-                parts.append("UNKNOWN")
-            }
-            return StackValue(
-                text: String(parts[0]),
-                type: String(parts[1]),
-                kind: .value
-            )
-        }
-
-        return StackValue(text: encoded, type: nil, kind: .value)
+        values.popLast() ?? StackValue(text: "underflow!", type: nil, kind: .value)
     }
 
     func peekStackValue(_ at: Int = 0) -> StackValue {
-        let pos = stack.endIndex - at - 1
-        if values.count == stack.count, pos >= values.startIndex, pos < values.endIndex {
-            return values[pos]
-        }
-        if pos < stack.startIndex || pos >= stack.endIndex {
+        let pos = values.endIndex - at - 1
+        if pos < values.startIndex || pos >= values.endIndex {
             return StackValue(text: "underflow!", type: nil, kind: .value)
         }
-        let encoded = stack[pos]
-        if encoded.contains(sep) {
-            let parts = encoded.split(separator: sep, maxSplits: 1)
-            return StackValue(text: String(parts[0]), type: String(parts[1]), kind: .value)
-        }
-        return StackValue(text: encoded, type: nil, kind: .value)
+        return values[pos]
     }
 
     func parenthesizedText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
