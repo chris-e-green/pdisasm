@@ -13,22 +13,6 @@ func parameterLocationAddresses(for procedure: ProcedureIdentifier) -> [(index: 
     }
 }
 
-private func locationKey(_ location: Location) -> String {
-    "\(location.segment):\(location.procedure ?? -1):\(location.lexLevel ?? -1):\(location.addr ?? -1)"
-}
-
-private func canonicalLocationLookup(_ locations: Set<Location>) -> [String: Location] {
-    Dictionary(uniqueKeysWithValues: locations.map { (locationKey($0), $0) })
-}
-
-private func canonicalLocation(
-    matching location: Location?,
-    in lookup: [String: Location]
-) -> Location? {
-    guard let location else { return nil }
-    return lookup[locationKey(location)] ?? location
-}
-
 func bestSignatureLocation(
     in locations: Set<Location>,
     segment: Int,
@@ -322,13 +306,12 @@ func canonicalizeInstructionLocations(
     codeSegments: [Int: CodeSegment],
     locations: Set<Location>
 ) {
-    let lookup = canonicalLocationLookup(locations)
+    let locationMap = CanonicalLocationMap(locations)
     for (_, codeSeg) in codeSegments {
         for proc in codeSeg.procedures {
             for inst in proc.instructions.values {
-                inst.memLocation = canonicalLocation(
-                    matching: inst.memLocation,
-                    in: lookup
+                inst.memLocation = locationMap.canonicalLocation(
+                    matching: inst.memLocation
                 )
             }
         }
