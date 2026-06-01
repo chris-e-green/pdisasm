@@ -74,7 +74,7 @@ final class StackSimulatorTests: XCTestCase {
         let (val, typ) = sim.peek()
         XCTAssertEqual(val, "42")
         XCTAssertEqual(typ, "INTEGER")
-        XCTAssertEqual(sim.stack.count, 1)
+        XCTAssertEqual(sim.values.count, 1)
     }
 
     func testPushTracksValueKind() {
@@ -84,7 +84,7 @@ final class StackSimulatorTests: XCTestCase {
         let value = sim.popStackValue()
         XCTAssertEqual(value.text, "ADDR")
         XCTAssertEqual(value.kind, .address)
-        XCTAssertTrue(sim.stack.isEmpty)
+        XCTAssertTrue(sim.values.isEmpty)
     }
 
     func testStackDescriptionIncludesStackValueFields() {
@@ -116,9 +116,8 @@ final class StackSimulatorTests: XCTestCase {
 
     func testPopRealMergesTwoUntypedWords() {
         var sim = StackSimulator()
-        // Push two raw untyped values (no separator)
-        sim.stack.append("hello")
-        sim.stack.append("world")
+        sim.push(StackValue(text: "hello", type: nil, kind: .value))
+        sim.push(StackValue(text: "world", type: nil, kind: .value))
         let (val, typ) = sim.popReal()
         XCTAssertEqual(val, "world.hello")
         XCTAssertEqual(typ, "REAL")

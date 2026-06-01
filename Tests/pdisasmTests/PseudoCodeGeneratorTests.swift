@@ -34,7 +34,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(result, "DEST := 42")
-        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertTrue(stack.values.isEmpty)
     }
 
     // MARK: - MOV generates assignment
@@ -221,7 +221,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
 
         XCTAssertEqual(result, "S29_P6_L1_A5 := X")
-        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertTrue(stack.values.isEmpty)
     }
 
     // MARK: - STL with memLocation
@@ -388,7 +388,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
 
         XCTAssertEqual(result, "MYSEG.DOWORK(COUNT, VALUE)")
-        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertTrue(stack.values.isEmpty)
     }
 
     func testUnknownFunctionCallInfersRealArgumentAndRealReturnStore() {
@@ -457,7 +457,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         )
 
         XCTAssertEqual(store, "TRANSCEN.FUNC2 := TRANSCEN.FUNC9(-PARAM1, -1)")
-        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertTrue(stack.values.isEmpty)
         XCTAssertEqual(func9.parameters.map(\.description), ["PARAM1:REAL", "PARAM3:INTEGER"])
         XCTAssertEqual(gen.allLocations.first(where: { $0 == func9Return })?.type, "REAL")
     }
@@ -529,7 +529,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         )
 
         XCTAssertEqual(store, "TRANSCEN.FUNC7 := TRANSCEN.FUNC6(PARAM1) * 0.0")
-        XCTAssertTrue(stack.stack.isEmpty)
+        XCTAssertTrue(stack.values.isEmpty)
         XCTAssertEqual(func6.parameters.map(\.description), ["PARAM1:REAL"])
         XCTAssertEqual(gen.allLocations.first(where: { $0 == returnLocation })?.type, "REAL")
         XCTAssertEqual(gen.allLocations.first(where: { $0 == param })?.type, "REAL")
@@ -571,7 +571,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         // Function calls return nil (push result to stack instead)
         XCTAssertNil(result)
         // Stack should have the function call expression
-        XCTAssertEqual(stack.stack.count, 1)
+        XCTAssertEqual(stack.values.count, 1)
         let (val, _) = stack.pop()
         XCTAssertTrue(val.contains("MYSEG.CALC"))
     }
@@ -1259,7 +1259,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let inst = Instruction(opcode: ldm, mnemonic: "LDM", params: [3])
         var gen = makeGenerator()
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
-        XCTAssertEqual(stack.stack.count, 3)
+        XCTAssertEqual(stack.values.count, 3)
     }
 
     func testLDMUsesRealRepresentationAccess() {

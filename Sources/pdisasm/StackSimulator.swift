@@ -86,15 +86,6 @@ struct StackSimulator {
     var diagnostics: DiagnosticCollector? = nil
     var values: [StackValue] = []
 
-    var stack: [String] {
-        get {
-            values.map(encodeStackValue)
-        }
-        set {
-            values = newValue.map(decodeStackValue)
-        }
-    }
-
     var stackDescription: [String] {
         values.map(\.stackDescription)
     }
@@ -102,29 +93,6 @@ struct StackSimulator {
 //    func prettyStack() -> String {
 //        "[" + stackDescription.joined(separator: ", ") + "]"
 //    }
-
-    private func encodeStackValue(_ value: StackValue) -> String {
-        "\(value.text)\(sep)\(value.encodedType)"
-    }
-
-    private func decodeStackValue(_ encoded: String) -> StackValue {
-        if encoded.contains(sep) {
-            var parts = encoded.split(separator: sep, maxSplits: 1)
-            if parts.count < 2 {
-                parts.append("UNKNOWN")
-            }
-            let encodedType = String(parts[1])
-            return StackValue(
-                text: String(parts[0]),
-                type: encodedType.hasPrefix(ptr)
-                    ? String(encodedType.dropFirst())
-                    : encodedType,
-                kind: encodedType.hasPrefix(ptr) ? .pointer : .value
-            )
-        }
-
-        return StackValue(text: encoded, type: nil, kind: .value)
-    }
 
     mutating func push(
         _ value: (val: String, type: String?),
@@ -287,10 +255,6 @@ struct StackSimulator {
         let bBase = realRepresentationStorageBaseName(b)
         return aBase == bBase ? aBase : nil
     }
-
-//    mutating func pushReal(_ value: String, isPointer: Bool = false) {
-//        stack.append("\(value)\(sep)REAL")
-//    }
 
     @discardableResult
     /// Pops the top of the stack and any datatype. If the type
