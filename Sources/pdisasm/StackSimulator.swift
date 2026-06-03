@@ -132,18 +132,37 @@ struct StackSimulator {
         if value.text.hasPrefix("*(") {
             return value.text
         }
+        if value.text.hasPrefix("(") && value.text.hasSuffix(")^") {
+            return value.text
+        }
         return value.text.contains(" ") && value.type != "STRING" ? "(\(value.text))" : value.text
+    }
+
+    func addressSourceText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
+        guard value.kind == .address else {
+            return parenthesizedText(value, withoutParentheses: withoutParentheses)
+        }
+        let text = parenthesizedText(value, withoutParentheses: withoutParentheses)
+        return "^\(text)"
+    }
+
+    func dereferencedText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
+        let text = parenthesizedText(value, withoutParentheses: withoutParentheses)
+        if text.hasSuffix("^") {
+            return text
+        }
+        return "\(text)^"
     }
 
     func assignmentTargetText(_ value: StackValue) -> String {
         if value.kind == .pointer {
-            return "*(\(parenthesizedText(value)))"
+            return dereferencedText(value)
         }
         return parenthesizedText(value)
     }
 
     func assignmentSourceText(_ value: StackValue, withoutParentheses: Bool = false) -> String {
-        parenthesizedText(value, withoutParentheses: withoutParentheses)
+        addressSourceText(value, withoutParentheses: withoutParentheses)
     }
 
     func derivedAddressKind(from value: StackValue) -> StackValueKind {
@@ -273,7 +292,7 @@ struct StackSimulator {
         if locType == "UNKNOWN" {
             locType = type
         }
-        return (parenthesizedText(
+        return (assignmentSourceText(
             StackValue(text: value.text, type: locType, kind: value.kind, location: value.location),
             withoutParentheses: withoutParentheses
         ), locType)
@@ -286,7 +305,7 @@ struct StackSimulator {
     /// - Returns: a tuple of the popped value and its type (if any)
     mutating func pop(_ withoutParentheses: Bool = false) -> (val: String, type: String?) {
         let value = popStackValue()
-        return (parenthesizedText(value, withoutParentheses: withoutParentheses), value.type)
+        return (assignmentSourceText(value, withoutParentheses: withoutParentheses), value.type)
     }
 
     @discardableResult
@@ -300,7 +319,7 @@ struct StackSimulator {
         if value.text == "underflow!" {
             return ("underflow!", nil)
         }
-        return (parenthesizedText(value, withoutParentheses: withoutParentheses), value.type)
+        return (assignmentSourceText(value, withoutParentheses: withoutParentheses), value.type)
     }
 
     @discardableResult

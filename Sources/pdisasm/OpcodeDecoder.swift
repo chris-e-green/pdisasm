@@ -110,7 +110,7 @@ struct OpcodeDecoder {
     ) -> Location {
         Location(
             segment: segment,
-            procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : 0,
+            procedure: proc.lexicalLevel == 0 ? proc.identifier?.procedure : nil,
             lexLevel: 0,
             addr: addr
         )
@@ -188,7 +188,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
-                procedure: 0,
+                procedure: nil,
                 lexLevel: 0,
                 addr: val
                 )
@@ -289,7 +289,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
-                procedure: 0,
+                procedure: nil,
                 lexLevel: 0,
                 addr: val
             )
@@ -664,7 +664,7 @@ struct OpcodeDecoder {
             let (val, inc) = try codeData.readBig(at: ic + 2)
             let loc = Location(
                 segment: seg,
-                procedure: 0,
+                procedure: nil,
                 lexLevel: 0,
                 addr: val
             )

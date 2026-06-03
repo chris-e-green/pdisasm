@@ -104,7 +104,24 @@ func decodePascalProcedure(
                 bytesConsumed = inc + 1
             }
 
-            let memLoc = decoded.memLocation
+            let memLoc =
+                allLocations.first(where: { existing in
+                    guard let decodedLocation = decoded.memLocation else { return false }
+                    if existing == decodedLocation { return true }
+                    if decodedLocation.segment != segment,
+                       existing.segment == decodedLocation.segment,
+                       existing.addr == decodedLocation.addr,
+                       existing.isParam == false,
+                       !existing.name.isEmpty {
+                        return true
+                    }
+                    return existing.segment == decodedLocation.segment
+                        && existing.procedure == nil
+                        && decodedLocation.procedure == nil
+                        && existing.addr == decodedLocation.addr
+                        && (existing.lexLevel == nil && decodedLocation.lexLevel == 0
+                            || existing.lexLevel == 0 && decodedLocation.lexLevel == nil)
+                }) ?? decoded.memLocation
             let dest = decoded.destination
 
             // Helper: track a procedure call (find-or-create Location, record caller relationship)

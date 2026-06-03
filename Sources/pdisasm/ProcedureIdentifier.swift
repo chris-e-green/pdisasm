@@ -1,4 +1,10 @@
 public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
+    private static func normalizedParameter(_ parameter: Identifier) -> Identifier {
+        let type = parameter.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard type == "POINTER" else { return parameter }
+        return Identifier(name: parameter.name, type: "UNKNOWN", typeSource: .unknown)
+    }
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(segment)
         hasher.combine(procedure)
@@ -25,7 +31,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         self.segmentName = segmentName
         self.procedure = procedure
         self.procName = procName
-        self.parameters = parameters
+        self.parameters = parameters.map(Self.normalizedParameter)
         self.returnTypeSource = .unknown
         if isFunction {
             self.returnType = returnType ?? "UNKNOWN"
@@ -110,7 +116,7 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
             } else {
                 return Identifier(name: parts[0], type: "")
             }
-        }
+        }.map(Self.normalizedParameter)
         self.returnType = try container.decodeIfPresent(
             String.self,
             forKey: CodingKeys.returnType
@@ -272,6 +278,9 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         evidence: String
     ) -> TypeConflict? {
         guard parameters.indices.contains(index) else { return nil }
+        guard proposedType.trimmingCharacters(in: .whitespacesAndNewlines) != "POINTER" else {
+            return nil
+        }
         if let conflict = parameters[index].assignType(proposedType, source: proposedSource) {
             return TypeConflict(
                 location: location,

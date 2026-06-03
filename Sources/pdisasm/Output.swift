@@ -82,6 +82,31 @@ private func typeConflictText(_ conflict: TypeConflict) -> String {
     return text
 }
 
+private func typeConflictDiagnostics(_ conflicts: [TypeConflict]) -> [Diagnostic] {
+    sortedTypeConflicts(conflicts).map {
+        Diagnostic(severity: .warning, message: typeConflictText($0))
+    }
+}
+
+private func accessedSystemGlobalAddresses(in codeSegments: [Int: CodeSegment]) -> Set<Int> {
+    var addresses: Set<Int> = []
+    for codeSegment in codeSegments.values {
+        for proc in codeSegment.procedures {
+            for instruction in proc.instructions.values {
+                guard let location = instruction.memLocation,
+                    location.segment == 0,
+                    location.lexLevel == -1,
+                    let addr = location.addr
+                else {
+                    continue
+                }
+                addresses.insert(addr)
+            }
+        }
+    }
+    return addresses
+}
+
 // MARK: - Structured Output Model
 
 /// Classifies the kind of each output line so the GUI can filter and colour them.
@@ -96,19 +121,284 @@ public enum LineKind: Sendable, CaseIterable {
 }
 
 /// A single line of disassembly output tagged with its kind.
+public struct LocationReference: Hashable, Sendable, Codable {
+    public let segment: Int
+    public let procedure: Int?
+    public let lexLevel: Int?
+    public let addr: Int?
+
+    public init(segment: Int, procedure: Int?, lexLevel: Int?, addr: Int?) {
+        self.segment = segment
+        self.procedure = procedure
+        self.lexLevel = lexLevel
+        self.addr = addr
+    }
+
+    public init(_ location: Location) {
+        self.segment = location.segment
+        self.procedure = location.procedure
+        self.lexLevel = location.lexLevel
+        self.addr = location.addr
+    }
+}
+
+public enum HeaderEditTargetKind: Hashable, Sendable {
+    case procedureName
+    case parameter(Int)
+    case returnType
+}
+
+public struct HeaderEditTarget: Hashable, Sendable {
+    public let kind: HeaderEditTargetKind
+    public let segment: Int
+    public let procedure: Int
+    public let range: Range<Int>
+
+    public init(
+        kind: HeaderEditTargetKind,
+        segment: Int,
+        procedure: Int,
+        range: Range<Int>
+    ) {
+        self.kind = kind
+        self.segment = segment
+        self.procedure = procedure
+        self.range = range
+    }
+
+    public func contains(characterOffset: Int) -> Bool {
+        range.contains(characterOffset)
+    }
+}
+
 public struct OutputLine: Identifiable, Sendable {
     public let id: Int           // sequential line number
     public let kind: LineKind
     public let text: String
     /// Optional anchor identifier (e.g. "2.3") used as a scroll target for procedure headers.
     public let anchor: String?
+    public let locationReference: LocationReference?
+    public let headerEditTargets: [HeaderEditTarget]
 
-    public init(id: Int, kind: LineKind, text: String, anchor: String? = nil) {
+    public init(
+        id: Int,
+        kind: LineKind,
+        text: String,
+        anchor: String? = nil,
+        locationReference: LocationReference? = nil,
+        headerEditTargets: [HeaderEditTarget] = []
+    ) {
         self.id = id
         self.kind = kind
         self.text = text
         self.anchor = anchor
+        self.locationReference = locationReference
+        self.headerEditTargets = headerEditTargets
     }
+}
+
+private func defaultProcedureName(for procedure: ProcedureIdentifier) -> String {
+    if let procName = procedure.procName, !procName.isEmpty {
+        return procName
+    }
+    if procedure.procedure == 1, let segmentName = procedure.segmentName, !segmentName.isEmpty {
+        return segmentName
+    }
+    return (procedure.isFunction ? "FUNC" : "PROC") + String(procedure.procedure)
+}
+
+private func signatureParameterDescriptions(for procedure: ProcedureIdentifier) -> [String] {
+    if procedure.parameterLocations.count == procedure.parameters.count {
+        return procedure.parameterLocations.map(\.description)
+    }
+    return procedure.parameters.map(\.description)
+}
+
+private func procedureHeaderTextAndTargets(
+    for procedure: ProcedureIdentifier,
+    dataSize: Int,
+    parameterSize: Int,
+    lexicalLevel: Int
+) -> (text: String, targets: [HeaderEditTarget]) {
+    var text = procedure.isFunction ? "FUNCTION " : "PROCEDURE "
+    text += (procedure.segmentName ?? "SEG" + String(procedure.segment)) + "."
+
+    var targets: [HeaderEditTarget] = []
+    let procedureNameStart = text.count
+    let procedureName = defaultProcedureName(for: procedure)
+    text += procedureName
+    targets.append(HeaderEditTarget(
+        kind: .procedureName,
+        segment: procedure.segment,
+        procedure: procedure.procedure,
+        range: procedureNameStart..<text.count
+    ))
+
+    let parameters = signatureParameterDescriptions(for: procedure)
+    if !parameters.isEmpty {
+        text += "("
+        for (index, parameter) in parameters.enumerated() {
+            if index > 0 {
+                text += "; "
+            }
+            let start = text.count
+            text += parameter
+            targets.append(HeaderEditTarget(
+                kind: .parameter(index),
+                segment: procedure.segment,
+                procedure: procedure.procedure,
+                range: start..<text.count
+            ))
+        }
+        text += ")"
+    }
+
+    if procedure.isFunction {
+        text += ": "
+        let start = text.count
+        text += procedure.returnType ?? "UNKNOWN"
+        targets.append(HeaderEditTarget(
+            kind: .returnType,
+            segment: procedure.segment,
+            procedure: procedure.procedure,
+            range: start..<text.count
+        ))
+    }
+
+    text += " (* S=\(procedure.segment), P=\(procedure.procedure), LL=\(lexicalLevel), D=\(dataSize) PAR=\(parameterSize) *)"
+    return (text, targets)
+}
+
+private func renderKnownTypeDefinitionLines(
+    records: Set<PascalRecord>,
+    aliases: [String: String],
+    scalarTypes: [String: PascalScalarType],
+    constants: [String: Int],
+    subrangeTypes: [String: PascalSubrangeType]
+) -> [String] {
+    guard !records.isEmpty || !aliases.isEmpty || !scalarTypes.isEmpty || !constants.isEmpty || !subrangeTypes.isEmpty else {
+        return []
+    }
+
+    var lines: [String] = ["## Known Types", ""]
+
+    if !constants.isEmpty {
+        lines.append("CONST")
+        for constant in constants.keys.sorted() {
+            if let value = constants[constant] {
+                lines.append("  \(constant) = \(value);")
+            }
+        }
+        lines.append("")
+    }
+
+    lines.append("TYPE")
+
+    for scalarName in scalarTypes.keys.sorted() {
+        if let scalarType = scalarTypes[scalarName] {
+            lines.append("  \(scalarName) = (\(scalarType.cases.joined(separator: ", ")));")
+        }
+    }
+
+    for subrangeName in subrangeTypes.keys.sorted() {
+        if let subrangeType = subrangeTypes[subrangeName] {
+            lines.append("  \(subrangeName) = \(subrangeType.renderedType);")
+        }
+    }
+
+    for alias in aliases.keys.sorted() {
+        if subrangeTypes[alias] == nil, let type = aliases[alias] {
+            lines.append("  \(alias) = \(type);")
+        }
+    }
+
+    for record in records.sorted(by: { $0.name < $1.name }) {
+        lines.append("  \(record.name) = RECORD")
+        for offset in record.members.keys.sorted() {
+            guard let member = record.members[offset] else { continue }
+            let type = member.type.isEmpty ? "UNKNOWN" : member.type
+            lines.append("    \(member.name): \(type); (* offset \(offset) *)")
+        }
+        lines.append("  END;")
+    }
+
+    lines.append("")
+    return lines
+}
+
+private func unknownKnownTypeDiagnostics(
+    records: Set<PascalRecord>,
+    aliases: [String: String],
+    scalarTypes: [String: PascalScalarType],
+    subrangeTypes: [String: PascalSubrangeType]
+) -> [Diagnostic] {
+    let builtinTypes: Set<String> = [
+        "BOOLEAN", "BYTE", "CHAR", "INTEGER", "POINTER", "REAL", "STRING"
+    ]
+    let recordNames = Set(records.map(\.name))
+    let scalarNames = Set(scalarTypes.keys)
+    let subrangeNames = Set(subrangeTypes.keys)
+
+    func finalType(_ type: String) -> String {
+        var current = type.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        var seen: Set<String> = []
+        while let resolved = aliases[current], !seen.contains(current) {
+            seen.insert(current)
+            current = resolved.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        }
+        return current
+    }
+
+    func unresolvedFinalType(_ type: String) -> String? {
+        let resolved = finalType(type)
+        if resolved.isEmpty || resolved == "UNKNOWN" {
+            return resolved.isEmpty ? "UNKNOWN" : resolved
+        }
+        if resolved.hasPrefix("^") {
+            let pointee = String(resolved.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+            return unresolvedFinalType(pointee)
+        }
+        if resolved.hasPrefix("ARRAY OF ") {
+            let elementType = String(resolved.dropFirst("ARRAY OF ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return unresolvedFinalType(elementType)
+        }
+        if resolved.range(of: #"^[+-]?[0-9]+\.\.[+-]?[0-9]+$"#, options: .regularExpression) != nil {
+            return nil
+        }
+        if builtinTypes.contains(resolved)
+            || recordNames.contains(resolved)
+            || scalarNames.contains(resolved)
+            || subrangeNames.contains(resolved)
+        {
+            return nil
+        }
+        return resolved
+    }
+
+    var diagnostics: [Diagnostic] = []
+    for alias in aliases.keys.sorted() {
+        guard let type = aliases[alias],
+              let unknownType = unresolvedFinalType(type)
+        else { continue }
+        diagnostics.append(Diagnostic(
+            severity: .warning,
+            message: "TYPE \(alias) resolves to unknown final type \(unknownType)"
+        ))
+    }
+
+    for record in records.sorted(by: { $0.name < $1.name }) {
+        for offset in record.members.keys.sorted() {
+            guard let member = record.members[offset],
+                  let unknownType = unresolvedFinalType(member.type)
+            else { continue }
+            diagnostics.append(Diagnostic(
+                severity: .warning,
+                message: "RECORD \(record.name).\(member.name) at offset \(offset) resolves to unknown final type \(unknownType)"
+            ))
+        }
+    }
+    return diagnostics
 }
 
 /// Produce an array of ``OutputLine`` from a ``DisassemblyResult``.
@@ -121,16 +411,35 @@ public func renderStructuredLines(
     var lines: [OutputLine] = []
     var nextID = 0
 
-    func addLine(_ kind: LineKind, _ text: String, anchor: String? = nil) {
+    func addLine(
+        _ kind: LineKind,
+        _ text: String,
+        anchor: String? = nil,
+        location: Location? = nil,
+        headerEditTargets: [HeaderEditTarget] = []
+    ) {
         if text.contains("\n") {
             let parts = text.split(separator: "\n", omittingEmptySubsequences: false)
             for (index, part) in parts.enumerated() {
-                addLine(kind, String(part), anchor: index == 0 ? anchor : nil)
+                addLine(
+                    kind,
+                    String(part),
+                    anchor: index == 0 ? anchor : nil,
+                    location: index == 0 ? location : nil,
+                    headerEditTargets: index == 0 ? headerEditTargets : []
+                )
             }
             return
         }
 
-        lines.append(OutputLine(id: nextID, kind: kind, text: text, anchor: anchor))
+        lines.append(OutputLine(
+            id: nextID,
+            kind: kind,
+            text: text,
+            anchor: anchor,
+            locationReference: location.map(LocationReference.init),
+            headerEditTargets: headerEditTargets
+        ))
         nextID += 1
     }
 
@@ -143,36 +452,51 @@ public func renderStructuredLines(
     addLine(.markup, "")
     addLine(.markup, "\(result.segDictionary)")
 
-    if !result.typeConflicts.isEmpty {
-        addLine(.markup, "## Type Conflicts")
-        for conflict in sortedTypeConflicts(result.typeConflicts) {
-            addLine(.diagnostic, typeConflictText(conflict))
+    let diagnostics = typeConflictDiagnostics(result.typeConflicts)
+        + result.diagnostics
+        + unknownKnownTypeDiagnostics(
+            records: result.knownRecords,
+            aliases: result.typeAliases,
+            scalarTypes: result.scalarTypes,
+            subrangeTypes: result.subrangeTypes
+        )
+    if !diagnostics.isEmpty {
+        addLine(.markup, "## Diagnostics")
+        for diagnostic in diagnostics {
+            addLine(.diagnostic, "\(diagnostic.severity.rawValue.uppercased()): \(diagnostic.message)")
         }
         addLine(.diagnostic, "")
     }
 
-    if !result.diagnostics.isEmpty {
-        addLine(.markup, "## Diagnostics")
-        for diagnostic in result.diagnostics {
-            addLine(.diagnostic, "\(diagnostic.severity.rawValue.uppercased()): \(diagnostic.message)")
-        }
-        addLine(.diagnostic, "")
+    for line in renderKnownTypeDefinitionLines(
+        records: result.knownRecords,
+        aliases: result.typeAliases,
+        scalarTypes: result.scalarTypes,
+        constants: result.constants,
+        subrangeTypes: result.subrangeTypes
+    ) {
+        addLine(line.hasPrefix("##") ? .markup : .variable, line)
     }
 
     addLine(.markup, "## Globals")
     addLine(.markup, "")
 
     // Global variables
-    result.allLocations.filter({ $0.lexLevel == -1 && $0.segment == 0 }).sorted()
+    let accessedGlobalAddresses = accessedSystemGlobalAddresses(in: result.codeSegments)
+    result.allLocations.filter({
+        $0.lexLevel == -1
+            && $0.segment == 0
+            && $0.addr.map(accessedGlobalAddresses.contains) == true
+    }).sorted()
         .forEach({ loc in
-            addLine(.global, "G\(loc.addr ?? -1)=\(loc.description)")
+            addLine(.global, "G\(loc.addr ?? -1)=\(loc.description)", location: loc)
         })
     addLine(.global, "")
     
     for ds in result.dataSegments.sorted(by: { $0 < $1 }) {
         addLine(.variable, "## Data Segment \(ds)\n")
         result.allLocations.filter({ $0.segment == ds }).sorted().forEach( { loc in
-            addLine(.variable, "D\(loc.addr ?? -1)=\(loc.description)")
+            addLine(.variable, "D\(loc.addr ?? -1)=\(loc.description)", location: loc)
         })
     }
     addLine(.variable, "")
@@ -197,13 +521,22 @@ public func renderStructuredLines(
                 })
                 let procNum = proc.identifier?.procedure ?? -99
                 let anchor = "\(s).\(procNum)"
-                addLine(.header,
-                    "### "
-                        + (procDesc?.description ?? proc.identifier?.description
-                            ?? "")
-                        + " (* S=\(s), P=\(procNum), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)",
-                    anchor: anchor
-                )
+                let headerProcedure = procDesc ?? proc.identifier
+                if let headerProcedure {
+                    let header = procedureHeaderTextAndTargets(
+                        for: headerProcedure,
+                        dataSize: proc.dataSize,
+                        parameterSize: proc.parameterSize,
+                        lexicalLevel: proc.lexicalLevel
+                    )
+                    addLine(.header, header.text, anchor: anchor, headerEditTargets: header.targets)
+                } else {
+                    addLine(
+                        .header,
+                        " (* S=\(s), P=\(procNum), LL=\(proc.lexicalLevel), D=\(proc.dataSize) PAR=\(proc.parameterSize) *)",
+                        anchor: anchor
+                    )
+                }
 
                 // Callers
                 var callerNames: [String] = []
@@ -233,7 +566,7 @@ public func renderStructuredLines(
                     $0.procedure == proc.identifier?.procedure && $0.segment == s
                         && $0.addr != nil
                 }).sorted().forEach({ loc in
-                    addLine(.variable, "L\(loc.addr ?? -1)=\(loc.description)")
+                    addLine(.variable, "L\(loc.addr ?? -1)=\(loc.description)", location: loc)
                 })
 
                 addLine(.markup, "```")
@@ -264,7 +597,7 @@ public func renderStructuredLines(
                             repeating: " ",
                             count: indentLevel * 2
                         )
-                        addLine(.pseudocode, "\(indent)\(pseudo)")
+                        addLine(.pseudocode, "\(indent)\(pseudo)", location: inst.memLocation)
                         if pseudo.hasSuffix("BEGIN")
                             || pseudo.starts(with: "REPEAT")
                         {
@@ -336,7 +669,7 @@ public func renderStructuredLines(
                             if showStackState {
                                 pcLine += " " + prettyStack(inst.stackState ?? [])
                             }
-                            addLine(.pcode, pcLine)
+                            addLine(.pcode, pcLine, location: inst.memLocation)
                             if paramStrings.count > 1 {
                                 for i in 1..<paramStrings.count {
                                     addLine(.pcode,
@@ -368,10 +701,11 @@ public func renderStructuredLines(
                         {
                             indentLevel -= 1
                         }
-                        addLine(.pseudocode,
-                            String(repeating: " ", count: indentLevel * 2)
-                                + pseudo
-                        )
+                            addLine(.pseudocode,
+                                String(repeating: " ", count: indentLevel * 2)
+                                    + pseudo,
+                                location: inst.memLocation
+                            )
                         if pseudo.hasSuffix("BEGIN")
                             || pseudo.starts(with: "REPEAT")
                             || pseudo.starts(with: "CASE")
@@ -402,6 +736,11 @@ private func makeDisassemblyResult(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
+    knownRecords: Set<PascalRecord> = [],
+    typeAliases: [String: String] = [:],
+    scalarTypes: [String: PascalScalarType] = [:],
+    constants: [String: Int] = [:],
+    subrangeTypes: [String: PascalSubrangeType] = [:],
     typeConflicts: [TypeConflict],
     diagnostics: [Diagnostic] = []
 ) -> DisassemblyResult {
@@ -413,6 +752,11 @@ private func makeDisassemblyResult(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
+        knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
+        constants: constants,
+        subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics
     )
@@ -467,6 +811,11 @@ func outputResults(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
+    knownRecords: Set<PascalRecord> = [],
+    typeAliases: [String: String] = [:],
+    scalarTypes: [String: PascalScalarType] = [:],
+    constants: [String: Int] = [:],
+    subrangeTypes: [String: PascalSubrangeType] = [:],
     typeConflicts: [TypeConflict] = [],
     diagnostics: [Diagnostic] = [],
     verbose: Bool = false,
@@ -486,6 +835,11 @@ func outputResults(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
+        knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
+        constants: constants,
+        subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics,
         verbose: verbose,
@@ -507,6 +861,11 @@ func outputResults<Target: TextOutputStream>(
     allLocations: Set<Location>,
     allProcedures: [ProcedureIdentifier],
     allCallers: Set<Call>,
+    knownRecords: Set<PascalRecord> = [],
+    typeAliases: [String: String] = [:],
+    scalarTypes: [String: PascalScalarType] = [:],
+    constants: [String: Int] = [:],
+    subrangeTypes: [String: PascalSubrangeType] = [:],
     typeConflicts: [TypeConflict] = [],
     diagnostics: [Diagnostic] = [],
     verbose: Bool = false,
@@ -528,6 +887,11 @@ func outputResults<Target: TextOutputStream>(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
+        knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
+        constants: constants,
+        subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics
     )

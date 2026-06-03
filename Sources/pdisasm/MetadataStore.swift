@@ -104,6 +104,31 @@ struct MetadataStore {
         }
     }
 
+    func importTypeDefinitions(
+        fromPascal file: String,
+        to knownRecords: inout Set<PascalRecord>,
+        aliases: inout [String: String],
+        scalarTypes: inout [String: PascalScalarType],
+        constants: inout [String: Int],
+        subrangeTypes: inout [String: PascalSubrangeType],
+        isSystemRecord: Bool = false
+    ) {
+        do {
+            guard let source = try readText(file, extension: "pas") else { return }
+            let definitions = PascalTypeDefinitionParser.parse(
+                source,
+                isSystemRecord: isSystemRecord
+            )
+            knownRecords.formUnion(definitions.records)
+            aliases.merge(definitions.aliases) { _, new in new }
+            scalarTypes.merge(definitions.scalarTypes) { _, new in new }
+            constants.merge(definitions.constants) { _, new in new }
+            subrangeTypes.merge(definitions.subrangeTypes) { _, new in new }
+        } catch {
+            diagnostics?.error("Error reading \(file).pas: \(error)")
+        }
+    }
+
     private func fileURL(_ file: String, extension fileExtension: String) -> URL {
         appSupportDirectory
             .appendingPathComponent(file)
@@ -136,6 +161,12 @@ struct MetadataStore {
         let decoder = JSONDecoder()
         let data = try Data(contentsOf: url)
         return try decoder.decode(Value.self, from: data)
+    }
+
+    private func readText(_ file: String, extension fileExtension: String) throws -> String? {
+        let url = fileURL(file, extension: fileExtension)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
     private func writeJSON<Value: Encodable>(

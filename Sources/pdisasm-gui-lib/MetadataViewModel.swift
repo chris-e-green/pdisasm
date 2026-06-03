@@ -8,7 +8,46 @@ struct CSVRow: Identifiable {
     var values: [String: String]
 }
 
-/// View model for loading, editing, and saving CSV metadata files.
+enum MetadataFileKind {
+    case csv
+    case recordsJSON
+    case pascalTypes
+}
+
+struct RecordMemberRow: Identifiable {
+    let id = UUID()
+    var offset: String
+    var name: String
+    var type: String
+    var typeSource: String
+}
+
+struct RecordRow: Identifiable {
+    let id = UUID()
+    var name: String
+    var isSystemRecord: Bool
+    var members: [RecordMemberRow]
+}
+
+enum RecordMemberColumn {
+    case offset
+    case name
+    case type
+    case typeSource
+}
+
+enum MetadataEditorError: LocalizedError {
+    case invalidRecordOffset(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRecordOffset(let offset):
+            return "Record member offset must be an integer: \(offset)"
+        }
+    }
+}
+
+/// View model for loading, editing, and saving metadata files.
 @MainActor
 @Observable
 final class MetadataViewModel {
@@ -21,7 +60,19 @@ final class MetadataViewModel {
 
     // MARK: - State
 
-    /// Available CSV files discovered in the metadata directory.
+    private struct RecordFile: Codable {
+        var name: String
+        var isSystemRecord: Bool?
+        var members: [String: RecordIdentifier]
+    }
+
+    private struct RecordIdentifier: Codable {
+        var name: String
+        var type: String
+        var typeSource: String?
+    }
+
+    /// Available metadata files discovered in the metadata directory.
     var availableFiles: [URL] = []
 
     /// Currently selected file URL.
@@ -29,16 +80,24 @@ final class MetadataViewModel {
         didSet { loadFile() }
     }
 
+    var selectedFileKind: MetadataFileKind?
+
     /// Column headers from the CSV.
     var columns: [String] = []
 
     /// All rows loaded from the CSV.
     var rows: [CSVRow] = []
 
+    /// All records loaded from a records JSON file.
+    var records: [RecordRow] = []
+
+    /// Raw Pascal type definitions loaded from a types Pascal file.
+    var textContent: String = ""
+
     /// Whether there are unsaved edits.
     var isDirty: Bool = false
 
-    /// CSV filenames that are relevant to the current disassembly.
+    /// Metadata filenames that are relevant to the current disassembly.
     var relevantFilenames: [String] = [] {
         didSet { discoverFiles() }
     }
@@ -55,19 +114,28 @@ final class MetadataViewModel {
         let appSupportDir = URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
 
-        guard let allFiles = try? FileManager.default.contentsOfDirectory(at: appSupportDir, includingPropertiesForKeys: nil)
-            .filter({ $0.pathExtension == "csv" }) else {
-            availableFiles = []
-            return
-        }
+        let allFiles = (try? FileManager.default.contentsOfDirectory(
+            at: appSupportDir,
+            includingPropertiesForKeys: nil
+        ).filter({ isEditableMetadataFile($0) })) ?? []
 
         if relevantFilenames.isEmpty {
             availableFiles = allFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
         } else {
             let relevant = Set(relevantFilenames)
-            availableFiles = allFiles
+            var files = allFiles
                 .filter { relevant.contains($0.lastPathComponent) }
-                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            for filename in relevant where filename.hasPrefix("types_") && filename.hasSuffix(".pas") {
+                let url = appSupportDir.appendingPathComponent(filename)
+                if !files.contains(url) {
+                    files.append(url)
+                }
+            }
+            availableFiles = files.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+
+        if let selectedFile, !availableFiles.contains(selectedFile) {
+            self.selectedFile = nil
         }
     }
 
@@ -77,14 +145,38 @@ final class MetadataViewModel {
         guard let url = selectedFile else {
             columns = []
             rows = []
+            records = []
+            textContent = ""
+            selectedFileKind = nil
             return
         }
+        guard let kind = fileKind(for: url) else {
+            columns = []
+            rows = []
+            records = []
+            textContent = ""
+            selectedFileKind = nil
+            return
+        }
+        selectedFileKind = kind
+        switch kind {
+        case .csv:
+            loadCSVFile(url)
+        case .recordsJSON:
+            loadRecordsFile(url)
+        case .pascalTypes:
+            loadTextFile(url)
+        }
+    }
+
+    private func loadCSVFile(_ url: URL) {
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
             let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
             guard let header = lines.first else {
                 columns = []
                 rows = []
+                records = []
                 return
             }
             let loadedColumns = header.components(separatedBy: ",")
@@ -101,6 +193,55 @@ final class MetadataViewModel {
             ensureSourceColumn(for: MetadataColumn.returnType, sourceColumn: MetadataColumn.returnTypeSource)
             fillMissingSourceValues(typeColumn: MetadataColumn.type, sourceColumn: MetadataColumn.typeSource)
             fillMissingSourceValues(typeColumn: MetadataColumn.returnType, sourceColumn: MetadataColumn.returnTypeSource)
+            records = []
+            textContent = ""
+            isDirty = false
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadRecordsFile(_ url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            let decoded = try JSONDecoder().decode([RecordFile].self, from: data)
+            records = decoded.map { record in
+                RecordRow(
+                    name: record.name,
+                    isSystemRecord: record.isSystemRecord ?? false,
+                    members: record.members
+                        .map { offset, identifier in
+                            RecordMemberRow(
+                                offset: offset,
+                                name: identifier.name,
+                                type: identifier.type,
+                                typeSource: identifier.typeSource ?? ""
+                            )
+                        }
+                        .sorted { lhs, rhs in
+                            (Int(lhs.offset) ?? Int.max, lhs.offset) < (Int(rhs.offset) ?? Int.max, rhs.offset)
+                        }
+                )
+            }
+            columns = []
+            rows = []
+            textContent = ""
+            isDirty = false
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadTextFile(_ url: URL) {
+        do {
+            textContent = FileManager.default.fileExists(atPath: url.path)
+                ? try String(contentsOf: url, encoding: .utf8)
+                : ""
+            columns = []
+            rows = []
+            records = []
             isDirty = false
             errorMessage = nil
         } catch {
@@ -136,10 +277,99 @@ final class MetadataViewModel {
         isDirty = true
     }
 
+    func addRecord() {
+        records.append(RecordRow(name: "NEW_RECORD", isSystemRecord: false, members: []))
+        isDirty = true
+    }
+
+    func deleteRecord(_ record: RecordRow) {
+        records.removeAll { $0.id == record.id }
+        isDirty = true
+    }
+
+    func updateRecordName(_ record: RecordRow, newValue: String) {
+        guard let index = records.firstIndex(where: { $0.id == record.id }),
+              records[index].name != newValue else { return }
+        records[index].name = newValue
+        isDirty = true
+    }
+
+    func updateRecordIsSystem(_ record: RecordRow, newValue: Bool) {
+        guard let index = records.firstIndex(where: { $0.id == record.id }),
+              records[index].isSystemRecord != newValue else { return }
+        records[index].isSystemRecord = newValue
+        isDirty = true
+    }
+
+    func addMember(to record: RecordRow) {
+        guard let index = records.firstIndex(where: { $0.id == record.id }) else { return }
+        let nextOffset = (records[index].members.compactMap { Int($0.offset) }.max() ?? -1) + 1
+        records[index].members.append(RecordMemberRow(
+            offset: "\(nextOffset)",
+            name: "FIELD",
+            type: "UNKNOWN",
+            typeSource: "unknown"
+        ))
+        isDirty = true
+    }
+
+    func deleteMember(_ member: RecordMemberRow, from record: RecordRow) {
+        guard let recordIndex = records.firstIndex(where: { $0.id == record.id }) else { return }
+        records[recordIndex].members.removeAll { $0.id == member.id }
+        isDirty = true
+    }
+
+    func updateMember(_ member: RecordMemberRow, in record: RecordRow, column: RecordMemberColumn, newValue: String) {
+        guard let recordIndex = records.firstIndex(where: { $0.id == record.id }),
+              let memberIndex = records[recordIndex].members.firstIndex(where: { $0.id == member.id }) else { return }
+
+        switch column {
+        case .offset:
+            guard records[recordIndex].members[memberIndex].offset != newValue else { return }
+            records[recordIndex].members[memberIndex].offset = newValue
+        case .name:
+            guard records[recordIndex].members[memberIndex].name != newValue else { return }
+            records[recordIndex].members[memberIndex].name = newValue
+        case .type:
+            guard records[recordIndex].members[memberIndex].type != newValue else { return }
+            records[recordIndex].members[memberIndex].type = newValue
+            if records[recordIndex].members[memberIndex].typeSource.isEmpty ||
+                records[recordIndex].members[memberIndex].typeSource == "unknown" {
+                records[recordIndex].members[memberIndex].typeSource =
+                    newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newValue == "UNKNOWN"
+                    ? "unknown"
+                    : "user"
+            }
+        case .typeSource:
+            guard records[recordIndex].members[memberIndex].typeSource != newValue else { return }
+            records[recordIndex].members[memberIndex].typeSource = newValue
+        }
+        isDirty = true
+    }
+
+    func updateTextContent(_ newValue: String) {
+        guard textContent != newValue else { return }
+        textContent = newValue
+        isDirty = true
+    }
+
     // MARK: - Save
 
     func save() {
         guard let url = selectedFile else { return }
+        switch selectedFileKind {
+        case .csv:
+            saveCSVFile(url)
+        case .recordsJSON:
+            saveRecordsFile(url)
+        case .pascalTypes:
+            saveTextFile(url)
+        case nil:
+            return
+        }
+    }
+
+    private func saveCSVFile(_ url: URL) {
         var lines: [String] = [columns.joined(separator: ",")]
         for row in rows {
             let fields = columns.map { escapeCSVField(row.values[$0] ?? "") }
@@ -155,7 +385,73 @@ final class MetadataViewModel {
         }
     }
 
+    private func saveRecordsFile(_ url: URL) {
+        do {
+            let encoded = try records.map { record in
+                var members: [String: RecordIdentifier] = [:]
+                for member in record.members {
+                    let offset = member.offset.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard Int(offset) != nil else {
+                        throw MetadataEditorError.invalidRecordOffset(offset)
+                    }
+                    let source = member.typeSource.trimmingCharacters(in: .whitespacesAndNewlines)
+                    members[offset] = RecordIdentifier(
+                        name: member.name,
+                        type: member.type,
+                        typeSource: source.isEmpty ? nil : source
+                    )
+                }
+                return RecordFile(
+                    name: record.name,
+                    isSystemRecord: record.isSystemRecord,
+                    members: members
+                )
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(encoded)
+            try data.write(to: url, options: .atomic)
+            isDirty = false
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveTextFile(_ url: URL) {
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try textContent.write(to: url, atomically: true, encoding: .utf8)
+            isDirty = false
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - CSV Helpers
+
+    private func isEditableMetadataFile(_ url: URL) -> Bool {
+        if url.pathExtension == "csv" { return true }
+        return fileKind(for: url) == .recordsJSON
+            || fileKind(for: url) == .pascalTypes
+    }
+
+    private func fileKind(for url: URL) -> MetadataFileKind? {
+        if url.pathExtension == "csv" { return .csv }
+        if url.pathExtension == "json",
+           url.deletingPathExtension().lastPathComponent.hasPrefix("records") {
+            return .recordsJSON
+        }
+        if url.pathExtension == "pas",
+           url.deletingPathExtension().lastPathComponent.hasPrefix("types") {
+            return .pascalTypes
+        }
+        return nil
+    }
 
     private func parseCSVLine(_ line: String) -> [String] {
         var fields: [String] = []

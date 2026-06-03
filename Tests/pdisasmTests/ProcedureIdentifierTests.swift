@@ -24,6 +24,19 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertTrue(pid.description.contains("INIT(X:INTEGER; Y:CHAR)"))
     }
 
+    func testInitializerNormalizesArbitraryPointerParameterType() {
+        let pid = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [Identifier(name: "P", type: "POINTER", typeSource: .metadata)]
+        )
+
+        XCTAssertEqual(pid.parameters[0].name, "P")
+        XCTAssertEqual(pid.parameters[0].type, "UNKNOWN")
+        XCTAssertEqual(pid.parameters[0].typeSource, .unknown)
+    }
+
     func testDescriptionDefaultNames() {
         let pid = ProcedureIdentifier(isFunction: false, segment: 2, procedure: 5)
         XCTAssertEqual(pid.description, "PROCEDURE SEG2.PROC5")
@@ -105,6 +118,29 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(decoded.returnTypeSource, .metadata)
         XCTAssertEqual(decoded.parameters.count, 1)
         XCTAssertEqual(decoded.parameters[0].name, "X")
+    }
+
+    func testDecodeNormalizesArbitraryPointerParameterType() throws {
+        let json = """
+        {
+          "segmentNumber": 1,
+          "segmentName": "MYSEG",
+          "procNumber": 2,
+          "procName": "DOWORK",
+          "parameters": "P:POINTER",
+          "returnType": null,
+          "returnTypeSource": "unknown",
+          "isAssembly": false,
+          "isFunction": false
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(ProcedureIdentifier.self, from: json)
+
+        XCTAssertEqual(decoded.parameters.count, 1)
+        XCTAssertEqual(decoded.parameters[0].name, "P")
+        XCTAssertEqual(decoded.parameters[0].type, "UNKNOWN")
+        XCTAssertEqual(decoded.parameters[0].typeSource, .unknown)
     }
 
     func testCodableRoundTripNonFunction() throws {

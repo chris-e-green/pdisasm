@@ -5,11 +5,16 @@ final class PseudoCodeGeneratorTests: XCTestCase {
 
     private func makeGenerator(
         procs: [ProcedureIdentifier] = [],
-        labels: [Location] = []
+        labels: [Location] = [],
+        typeAliases: [String: String] = [:],
+        scalarTypes: [String: PascalScalarType] = [:],
+        records: Set<PascalRecord> = []
     ) -> PseudoCodeGenerator {
         return PseudoCodeGenerator(
             allProcedures: procs,
-            knownRecords: [],
+            knownRecords: records,
+            typeAliases: typeAliases,
+            scalarTypes: scalarTypes,
             allLocations: Set(labels)
         )
     }
@@ -271,6 +276,45 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "FLAG := TRUE")
     }
 
+    func testSTLScalarTypeConvertsIntegerToCaseName() {
+        var stack = StackSimulator()
+        stack.push(("2", "INTEGER"))
+        let loc = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 5, name: "SK", type: "SEGKINDS")
+        let inst = Instruction(opcode: stl, mnemonic: "STL", memLocation: loc)
+        var gen = makeGenerator(
+            labels: [loc],
+            scalarTypes: [
+                "SEGKINDS": PascalScalarType(
+                    name: "SEGKINDS",
+                    cases: ["LINKED", "HOSTSEG", "SEGPROC", "UNITSEG", "SEPRTSEG"]
+                )
+            ]
+        )
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: loc)
+
+        XCTAssertEqual(result, "SK := SEGPROC")
+    }
+
+    func testSTOScalarTypeConvertsIntegerToCaseName() {
+        var stack = StackSimulator()
+        stack.push(("SK", "SEGKINDS"), kind: .address)
+        stack.push(("1", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: sto, mnemonic: "STO")
+        var gen = makeGenerator(
+            scalarTypes: [
+                "SEGKINDS": PascalScalarType(
+                    name: "SEGKINDS",
+                    cases: ["LINKED", "HOSTSEG", "SEGPROC"]
+                )
+            ]
+        )
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "SK := HOSTSEG")
+    }
+
     func testInferredTypeDoesNotOverrideMetadataType() {
         let loc = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 5, name: "VALUE", type: "REAL", typeSource: .metadata)
         var gen = makeGenerator(labels: [loc])
@@ -336,6 +380,36 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "MYSEG.DOWORK(ARG)")
         XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.type, "INTEGER")
         XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.typeSource, .inferred)
+    }
+
+    func testCallProcedureDoesNotInferArbitraryPointerParameterType() {
+        let arg = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 5,
+            name: "ARG",
+            type: "UNKNOWN"
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "ARG", type: "POINTER", kind: .address, location: arg))
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            segmentName: "MYSEG",
+            procedure: 5,
+            procName: "DOWORK",
+            parameters: [Identifier(name: "X", type: "UNKNOWN")]
+        )
+        let dest = Location(segment: 1, procedure: 5)
+        let inst = Instruction(opcode: cip, mnemonic: "CIP", destination: dest)
+        var gen = makeGenerator(procs: [calledProc], labels: [arg])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "MYSEG.DOWORK(ARG)")
+        XCTAssertEqual(calledProc.parameters[0].type, "UNKNOWN")
+        XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.type, "UNKNOWN")
     }
 
     func testCallProcedureConsumesTwoWordRealArgument() {
@@ -989,6 +1063,27 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(type, "BOOLEAN")
     }
 
+    func testINNWithCharValueFormatsNumericSetAsCharacterRanges() {
+        var stack = StackSimulator()
+        stack.push(("CH", "CHAR"))
+        stack.push(("2047", "INTEGER"))   // word 7: 112...122
+        stack.push(("65534", "INTEGER"))  // word 6: 97...111
+        stack.push(("2047", "INTEGER"))   // word 5: 80...90
+        stack.push(("65534", "INTEGER"))  // word 4: 65...79
+        stack.push(("0", "INTEGER"))
+        stack.push(("0", "INTEGER"))
+        stack.push(("0", "INTEGER"))
+        stack.push(("0", "INTEGER"))
+        stack.push(("8", "INTEGER"))
+        let inst = Instruction(opcode: inn, mnemonic: "INN")
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop("BOOLEAN", true)
+        XCTAssertEqual(val, "CH IN ['A'..'Z', 'a'..'z']")
+        XCTAssertEqual(type, "BOOLEAN")
+    }
+
     func testNEQI() {
         var stack = StackSimulator()
         stack.push(("A", "INTEGER"))
@@ -1071,7 +1166,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(stack.peekStackValue().kind, .address)
         let (val, _) = stack.pop()
-        XCTAssertEqual(val, "GVAR")
+        XCTAssertEqual(val, "^GVAR")
         XCTAssertTrue(gen.allLocations.contains(loc))
     }
 
@@ -1096,7 +1191,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         let (val, _) = stack.pop()
-        XCTAssertEqual(val, "(PTR + 4)")
+        XCTAssertEqual(val, "^(PTR + 4)")
     }
 
     func testIND() {
@@ -1107,8 +1202,107 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(stack.peekStackValue().kind, .value)
         let (val, type) = stack.pop()
-        XCTAssertEqual(val, "*(BASE + 2)")
+        XCTAssertEqual(val, "(BASE + 2)^")
         XCTAssertEqual(type, "INTEGER")
+    }
+
+    func testINDZeroOnAddressLoadsVariable() {
+        var stack = StackSimulator()
+        stack.push(("BASE", "INTEGER"), kind: .address)
+        let inst = Instruction(opcode: ind, mnemonic: "IND", params: [0])
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "BASE")
+        XCTAssertEqual(type, "INTEGER")
+    }
+
+    func testINDZeroOnPointerValueDereferencesWithPascalSyntax() {
+        var stack = StackSimulator()
+        stack.push(("PTR", "^NODE"), kind: .value)
+        let inst = Instruction(opcode: ind, mnemonic: "IND", params: [0])
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "PTR^")
+        XCTAssertEqual(type, "NODE")
+    }
+
+    func testINDZeroResolvesPointerAlias() {
+        var stack = StackSimulator()
+        stack.push(("PTR", "ITEMREF"), kind: .value)
+        let inst = Instruction(opcode: ind, mnemonic: "IND", params: [0])
+        var gen = makeGenerator(typeAliases: ["ITEMREF": "^ITEM"])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop()
+        XCTAssertEqual(val, "PTR^")
+        XCTAssertEqual(type, "ITEM")
+    }
+
+    func testRecordFieldAccessResolvesParsedPascalTypeDefinitions() {
+        let definitions = PascalTypeDefinitionParser.parse("""
+            CONST
+            C1=8;
+            C4=4;
+            MAXSEGS=15;
+            TYPE
+            ALPHA=PACKED ARRAY[1..C1] OF CHAR;
+            SEGNO=1..MAXSEGS;
+            SEGKINDS=(LINKED,HOSTSEG,SEGPROC,UNITSEG,SEPRTSEG);
+            WORDREF=^WORD;
+            ITEMREF=^ITEM;
+            WORD=RECORD
+              KEY: ALPHA;
+              KIND: SEGKINDS;
+              FIRST,LAST: ITEMREF;
+              LEFT,RIGHT: WORDREF;
+            END;
+            ITEM=PACKED RECORD
+              LNO: 0..C4;
+              NEXT: ITEMREF;
+            END;
+            """)
+        let word = definitions.records.first { $0.name == "WORD" }
+        let item = definitions.records.first { $0.name == "ITEM" }
+        XCTAssertEqual(definitions.constants["MAXSEGS"], 15)
+        XCTAssertEqual(definitions.subrangeTypes["SEGNO"]?.lowerBound, 1)
+        XCTAssertEqual(definitions.subrangeTypes["SEGNO"]?.upperBound, 15)
+        XCTAssertEqual(definitions.aliases["SEGNO"], "INTEGER")
+        XCTAssertEqual(definitions.aliases["WORDREF"], "^WORD")
+        XCTAssertEqual(definitions.aliases["ITEMREF"], "^ITEM")
+        XCTAssertEqual(definitions.aliases["ALPHA"], "ARRAY OF CHAR")
+        XCTAssertNil(definitions.aliases["SEGKINDS"])
+        XCTAssertEqual(definitions.scalarTypes["SEGKINDS"]?.namesByValue[0], "LINKED")
+        XCTAssertEqual(definitions.scalarTypes["SEGKINDS"]?.namesByValue[2], "SEGPROC")
+        XCTAssertEqual(definitions.scalarTypes["SEGKINDS"]?.valuesByName["SEPRTSEG"], 4)
+        XCTAssertEqual(word?.members[0]?.name, "KEY")
+        XCTAssertEqual(word?.members[1]?.name, "KIND")
+        XCTAssertEqual(word?.members[1]?.type, "SEGKINDS")
+        XCTAssertEqual(word?.members[2]?.name, "FIRST")
+        XCTAssertEqual(word?.members[2]?.type, "ITEMREF")
+        XCTAssertEqual(item?.members[0]?.name, "LNO")
+        XCTAssertEqual(item?.members[0]?.type, "0..4")
+
+        var stack = StackSimulator()
+        stack.push(("W", "WORDREF"), kind: .value)
+        var gen = makeGenerator(
+            typeAliases: definitions.aliases,
+            scalarTypes: definitions.scalarTypes,
+            records: definitions.records
+        )
+
+        _ = gen.generateForInstruction(Instruction(opcode: ind, mnemonic: "IND", params: [0]), stack: &stack, loc: nil)
+        _ = gen.generateForInstruction(Instruction(opcode: ind, mnemonic: "IND", params: [2]), stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "W^.FIRST")
+        XCTAssertEqual(value.type, "ITEMREF")
     }
 
     func testINDUsesRealRepresentationAccess() {
@@ -1165,7 +1359,46 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(stack.peekStackValue().kind, .address)
         let (val, _) = stack.pop()
-        XCTAssertEqual(val, "ARR[3]")
+        XCTAssertEqual(val, "^ARR[3]")
+    }
+
+    func testIXAStringIndexZeroRendersLength() {
+        var stack = StackSimulator()
+        stack.push(("S", "STRING"))
+        stack.push(("0", "INTEGER"))
+        let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [1])
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "LENGTH(S)")
+        XCTAssertEqual(value.type, "INTEGER")
+    }
+
+    func testIXAStringPositiveIndexInfersChar() {
+        var stack = StackSimulator()
+        stack.push(("S", "STRING"))
+        stack.push(("1", "INTEGER"))
+        let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [1])
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "S[1]")
+        XCTAssertEqual(value.type, "CHAR")
+    }
+
+    func testIXAStringSymbolicIndexInfersChar() {
+        var stack = StackSimulator()
+        stack.push(("S", "STRING"))
+        stack.push(("I", "INTEGER"))
+        let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [1])
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "S[I]")
+        XCTAssertEqual(value.type, "CHAR")
     }
 
     func testIXPPreservesBaseAddressKind() {
@@ -1190,6 +1423,32 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let (val, type) = stack.pop()
         XCTAssertEqual(val, "BUF[5]")
         XCTAssertEqual(type, "BYTE")
+    }
+
+    func testLDBStringOffsetZeroRendersLength() {
+        var stack = StackSimulator()
+        stack.push(("S", "STRING"))
+        stack.push(("0", "INTEGER"))
+        let inst = Instruction(opcode: ldb, mnemonic: "LDB")
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "LENGTH(S)")
+        XCTAssertEqual(value.type, "INTEGER")
+    }
+
+    func testLDBStringPositiveOffsetInfersChar() {
+        var stack = StackSimulator()
+        stack.push(("S", "STRING"))
+        stack.push(("1", "INTEGER"))
+        let inst = Instruction(opcode: ldb, mnemonic: "LDB")
+        var gen = makeGenerator()
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "S[1]")
+        XCTAssertEqual(value.type, "CHAR")
     }
 
     func testLDBUsesRealRepresentationAccess() {

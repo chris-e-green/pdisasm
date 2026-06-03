@@ -203,6 +203,7 @@ struct DetailView: View {
     @Bindable var viewModel: DisassemblyViewModel
     @State private var dragSelectionAnchorIndex: Int?
     @State private var dragSelectionDidStart = false
+    @State private var outputScrollView: NSScrollView?
     private let outputRowHeight: CGFloat = 20
     private let outputContentVerticalPadding: CGFloat = 4
 
@@ -227,70 +228,82 @@ struct DetailView: View {
                 GeometryReader { geo in
                     let lines = viewModel.filteredLines
 
-                    ScrollViewReader { scrollProxy in
-                        ScrollView([.horizontal, .vertical]) {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
-                                    let lineID = line.anchor ?? "line-\(line.id)"
-                                    let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
-                                    let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
-                                    let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
-                                    Text(line.text)
-                                        .font(.system(.body, design: .monospaced))
-                                        .fixedSize(horizontal: true, vertical: false)
-                                        .frame(minWidth: geo.size.width, alignment: .leading)
-                                        .frame(height: outputRowHeight, alignment: .center)
-                                        .padding(.horizontal, 8)
-                                        .background(rowBackgroundColor(
-                                            for: line.kind,
-                                            isSelected: isSelected,
-                                            isMatch: isMatch,
-                                            isCurrentMatch: isCurrentMatch
-                                        ))
-                                        .contentShape(Rectangle())
-                                        .contextMenu {
-                                            Button("Copy Selected Lines") {
-                                                if !isSelected {
-                                                    viewModel.selectOutputLine(
-                                                        lineID: line.id,
-                                                        at: index,
-                                                        extending: false,
-                                                        toggling: false
-                                                    )
-                                                }
-                                                viewModel.copySelectedOutputLines()
+                    ScrollView([.horizontal, .vertical]) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(lines.indices, id: \.self) { index in
+                                let line = lines[index]
+                                let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
+                                let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
+                                let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
+                                Text(line.text)
+                                    .font(.system(.body, design: .monospaced))
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .frame(minWidth: geo.size.width, alignment: .leading)
+                                    .frame(height: outputRowHeight, alignment: .center)
+                                    .padding(.horizontal, 8)
+                                    .background(rowBackgroundColor(
+                                        for: line.kind,
+                                        isSelected: isSelected,
+                                        isMatch: isMatch,
+                                        isCurrentMatch: isCurrentMatch
+                                    ))
+                                    .contentShape(Rectangle())
+                                    .contextMenu {
+                                        Button("Copy Selected Lines") {
+                                            if !isSelected {
+                                                viewModel.selectOutputLine(
+                                                    lineID: line.id,
+                                                    at: index,
+                                                    extending: false,
+                                                    toggling: false
+                                                )
                                             }
-
-                                            Button("Clear Selection") {
-                                                viewModel.clearOutputSelection()
-                                            }
-                                            .disabled(viewModel.selectedOutputLineCount == 0)
+                                            viewModel.copySelectedOutputLines()
                                         }
-                                        .id(lineID)
-                                }
-                            }
-                            .padding(.vertical, outputContentVerticalPadding)
-                            .frame(minWidth: geo.size.width, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .highPriorityGesture(outputDragSelectionGesture())
-                        }
-                        .onChange(of: viewModel.procedureScrollRequest) { _, _ in
-                            if let anchor = viewModel.selectedProcedure {
-                                withAnimation {
-                                    scrollProxy.scrollTo(anchor, anchor: .top)
-                                }
+
+                                        Button("Clear Selection") {
+                                            viewModel.clearOutputSelection()
+                                        }
+                                        .disabled(viewModel.selectedOutputLineCount == 0)
+                                    }
                             }
                         }
-                        .onChange(of: viewModel.currentMatchAnchor) { _, newValue in
-                            if let anchor = newValue {
-                                withAnimation {
-                                    scrollProxy.scrollTo(anchor, anchor: .center)
-                                }
+                        .padding(.vertical, outputContentVerticalPadding)
+                        .frame(minWidth: geo.size.width, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(outputDragSelectionGesture())
+                        .background(ScrollViewAccessor { scrollView in
+                            if outputScrollView !== scrollView {
+                                outputScrollView = scrollView
                             }
+                        })
+                    }
+                    .onChange(of: viewModel.procedureScrollRequest) { _, _ in
+                        if let index = viewModel.selectedProcedureFilteredIndex {
+                            scrollOutput(to: index, anchor: .top)
+                        }
+                    }
+                    .onChange(of: viewModel.outputRestoreScrollRequest) { _, _ in
+                        if let index = viewModel.outputRestoreFilteredIndex {
+                            scrollOutput(to: index, anchor: .top)
+                            DispatchQueue.main.async {
+                                scrollOutput(to: index, anchor: .top)
+                            }
+                        }
+                    }
+                    .onChange(of: viewModel.currentMatchScrollIndex) { _, newValue in
+                        if let index = newValue {
+                            scrollOutput(to: index, anchor: .center)
                         }
                     }
                 }
             }
+        }
+        .sheet(item: $viewModel.locationEditDraft) { _ in
+            LocationEditSheet(viewModel: viewModel)
+        }
+        .sheet(item: $viewModel.procedureSignatureEditDraft) { _ in
+            ProcedureSignatureEditSheet(viewModel: viewModel)
         }
     }
 
@@ -319,6 +332,16 @@ struct DetailView: View {
                         ?? outputRowIndex(at: value.startLocation)
                     if let index, viewModel.filteredLines.indices.contains(index) {
                         let line = viewModel.filteredLines[index]
+                        if NSApp.currentEvent?.clickCount == 2 {
+                            viewModel.beginEditingOutputLine(
+                                on: line,
+                                filteredIndex: index,
+                                atCharacterOffset: outputCharacterOffset(at: value.location)
+                            )
+                            dragSelectionAnchorIndex = nil
+                            dragSelectionDidStart = false
+                            return
+                        }
                         let modifiers = NSEvent.modifierFlags
                         viewModel.selectOutputLine(
                             lineID: line.id,
@@ -343,6 +366,149 @@ struct DetailView: View {
 
         let rowIndex = Int((location.y - outputContentVerticalPadding) / outputRowHeight)
         return min(max(rowIndex, 0), viewModel.filteredLines.count - 1)
+    }
+
+    private enum ScrollAnchor {
+        case top
+        case center
+    }
+
+    private func scrollOutput(to index: Int, anchor: ScrollAnchor) {
+        guard let scrollView = outputScrollView else { return }
+        guard viewModel.filteredLines.indices.contains(index) else { return }
+
+        let clipView = scrollView.contentView
+        let currentX = clipView.bounds.origin.x
+        let documentHeight = CGFloat(viewModel.filteredLines.count) * outputRowHeight
+            + (outputContentVerticalPadding * 2)
+        let visibleHeight = clipView.bounds.height
+        var y = outputContentVerticalPadding + CGFloat(index) * outputRowHeight
+        if anchor == .center {
+            y -= max((visibleHeight - outputRowHeight) / 2, 0)
+        }
+        let maxY = max(documentHeight - visibleHeight, 0)
+        y = min(max(y, 0), maxY)
+
+        if let documentView = scrollView.documentView, !documentView.isFlipped {
+            y = maxY - y
+        }
+
+        clipView.scroll(to: NSPoint(x: currentX, y: y))
+        scrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func outputCharacterOffset(at location: CGPoint) -> Int {
+        let horizontalPadding: CGFloat = 8
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let characterWidth = max(font.advancement(forGlyph: font.glyph(withName: "0")).width, 1)
+        return max(Int((location.x - horizontalPadding) / characterWidth), 0)
+    }
+
+    private struct LocationEditSheet: View {
+        @Bindable var viewModel: DisassemblyViewModel
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(viewModel.locationEditDraft?.title ?? "Location")
+                    .font(.headline)
+                    .monospaced()
+
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                    GridRow {
+                        Text("Name")
+                        TextField("Name", text: Binding(
+                            get: { viewModel.locationEditDraft?.name ?? "" },
+                            set: { viewModel.locationEditDraft?.name = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minWidth: 280)
+                    }
+
+                    GridRow {
+                        Text("Type")
+                        TextField("Type", text: Binding(
+                            get: { viewModel.locationEditDraft?.type ?? "" },
+                            set: { viewModel.locationEditDraft?.type = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        viewModel.locationEditDraft = nil
+                        dismiss()
+                    }
+                    Button("Save") {
+                        viewModel.saveLocationEdit()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 420)
+        }
+    }
+
+    private struct ProcedureSignatureEditSheet: View {
+        @Bindable var viewModel: DisassemblyViewModel
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(viewModel.procedureSignatureEditDraft?.title ?? "Signature")
+                    .font(.headline)
+                    .monospaced()
+
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                    if viewModel.procedureSignatureEditDraft?.editsName == true {
+                        GridRow {
+                            Text("Name")
+                            TextField("Name", text: Binding(
+                                get: { viewModel.procedureSignatureEditDraft?.name ?? "" },
+                                set: { viewModel.procedureSignatureEditDraft?.name = $0 }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minWidth: 280)
+                        }
+                    }
+
+                    if viewModel.procedureSignatureEditDraft?.editsType == true {
+                        GridRow {
+                            Text("Type")
+                            TextField("Type", text: Binding(
+                                get: { viewModel.procedureSignatureEditDraft?.type ?? "" },
+                                set: { viewModel.procedureSignatureEditDraft?.type = $0 }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minWidth: 280)
+                        }
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        viewModel.procedureSignatureEditDraft = nil
+                        dismiss()
+                    }
+                    Button("Save") {
+                        viewModel.saveProcedureSignatureEdit()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 420)
+        }
     }
 
     private func rowBackgroundColor(
@@ -372,6 +538,28 @@ struct DetailView: View {
         case .global:      return Color.purple.opacity(0.06)
         case .header:      return Color.yellow.opacity(0.10)
         case .diagnostic:  return Color.red.opacity(0.08)
+        }
+    }
+}
+
+private struct ScrollViewAccessor: NSViewRepresentable {
+    let onResolve: (NSScrollView) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        resolveScrollView(from: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        resolveScrollView(from: nsView)
+    }
+
+    private func resolveScrollView(from view: NSView) {
+        DispatchQueue.main.async {
+            if let scrollView = view.enclosingScrollView {
+                onResolve(scrollView)
+            }
         }
     }
 }

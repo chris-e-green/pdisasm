@@ -139,6 +139,7 @@ extension PseudoCodeGenerator {
         if let actualType = value.type,
            !actualType.isEmpty,
            actualType != "UNKNOWN",
+           actualType != "POINTER",
            type == "UNKNOWN" {
             _ = called.parameters[parameterIndex].assignType(actualType, source: .inferred)
             inferStackValueType(value, actualType, evidence: "\(called.shortDescription) argument \(parameter.name)")

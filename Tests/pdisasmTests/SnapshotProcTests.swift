@@ -47,6 +47,6 @@ final class SnapshotProcTests: XCTestCase {
         // load fixture and check for key markers
         let _ = try String(contentsOf: Bundle.module.url(forResource:"sample_snapshot_proc", withExtension: "txt", subdirectory: "Fixtures")!, encoding: .ascii)
         XCTAssertTrue(outStr.contains("## Segment Unknown (0)"), "Missing segment header")
-        XCTAssertTrue(outStr.contains("###  (* S="), "Missing procedure header")
+        XCTAssertTrue(outStr.contains(" (* S="), "Missing procedure header")
     }
 }

@@ -38,6 +38,7 @@ final class OutputFlagTests: XCTestCase {
         let proc = Procedure()
         proc.identifier = ProcedureIdentifier(isFunction: false, segment: 0, segmentName: "TEST", procedure: 1, procName: "MYPROC")
         proc.instructions[0] = Instruction(opcode: 0xAD, mnemonic: "RNP", params: [0], comment: "Return", stackState: ["{V: 5, T: INTEGER, K: c}"])
+        proc.instructions[0]?.pseudoCode = "MYPROC := 5"
         proc.entryPoints = [0]
 
         let codeSeg = CodeSegment(procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: [0]), procedures: [proc])
@@ -77,6 +78,50 @@ final class OutputFlagTests: XCTestCase {
         }
         XCTAssertFalse(out.contains("#  test"))
         XCTAssertFalse(out.contains("## Segment"))
+        XCTAssertFalse(out.contains("```"))
+    }
+
+    func testShowMarkupFalseLeavesPseudocodeIntact() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        var markupStream = StringStream()
+        outputResults(
+            to: &markupStream,
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegs: codeSegs,
+            dataSegs: [],
+            allLocations: locs,
+            allProcedures: procs,
+            allCallers: callers,
+            showMarkup: true,
+            showPCode: false,
+            showPseudoCode: true
+        )
+
+        var plainStream = StringStream()
+        outputResults(
+            to: &plainStream,
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegs: codeSegs,
+            dataSegs: [],
+            allLocations: locs,
+            allProcedures: procs,
+            allCallers: callers,
+            showMarkup: false,
+            showPCode: false,
+            showPseudoCode: true
+        )
+
+        let expectedPseudocode = ["BEGIN", "  MYPROC := 5", "END"]
+        for line in expectedPseudocode {
+            XCTAssertTrue(markupStream.text.contains(line))
+            XCTAssertTrue(plainStream.text.contains(line))
+        }
+
+        XCTAssertFalse(plainStream.text.contains("#  test"))
+        XCTAssertFalse(plainStream.text.contains("## Segment"))
+        XCTAssertFalse(plainStream.text.contains("```"))
     }
 
     // MARK: - showPCode
@@ -134,6 +179,58 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertFalse(out.contains("BEGIN"))
     }
 
+    func testGlobalOutputOnlyIncludesAccessedGlobals() {
+        let (dict, _, _, procs, callers) = makeMinimalInputs()
+        let accessedGlobal = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: -1,
+            addr: 2,
+            name: "ACCESSED",
+            type: "INTEGER"
+        )
+        let unaccessedGlobal = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: -1,
+            addr: 3,
+            name: "UNACCESSED",
+            type: "INTEGER"
+        )
+
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, segmentName: "TEST", procedure: 1, procName: "MYPROC")
+        proc.instructions[0] = Instruction(
+            opcode: 0xC6,
+            mnemonic: "LDO",
+            params: [2],
+            memLocation: Location(segment: 0, procedure: 1, lexLevel: -1, addr: 2)
+        )
+        let codeSegs = [
+            1: CodeSegment(
+                procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: [0]),
+                procedures: [proc]
+            )
+        ]
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: [accessedGlobal, unaccessedGlobal],
+                allProcedures: procs,
+                allCallers: callers,
+                showPCode: false,
+                showPseudoCode: false
+            )
+        }
+
+        XCTAssertTrue(out.contains("G2=ACCESSED:INTEGER"))
+        XCTAssertFalse(out.contains("UNACCESSED"))
+    }
+
     func testOutputReportsTypeConflictsOnce() {
         let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
         let loc = Location(
@@ -164,10 +261,103 @@ final class OutputFlagTests: XCTestCase {
             )
         }
 
-        XCTAssertTrue(out.contains("## Type Conflicts"))
-        XCTAssertTrue(out.contains("TYPE CONFLICT S2 P3 L1 A4"))
+        XCTAssertFalse(out.contains("## Type Conflicts"))
+        XCTAssertTrue(out.contains("## Diagnostics"))
+        XCTAssertTrue(out.contains("WARNING: TYPE CONFLICT S2 P3 L1 A4"))
         XCTAssertTrue(out.contains("kept REAL (metadata)"))
         XCTAssertTrue(out.contains("rejected INTEGER (inferred)"))
         XCTAssertEqual(out.components(separatedBy: "TYPE CONFLICT").count - 1, 1)
+    }
+
+    func testKnownTypesOutputShowsAliasesRecordsAndOffsets() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let record = PascalRecord(
+            name: "WORD",
+            members: [
+                0: Identifier(name: "KEY", type: "ALPHA"),
+                1: Identifier(name: "FIRST", type: "ITEMREF"),
+                3: Identifier(name: "RIGHT", type: "WORDREF")
+            ]
+        )
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: locs,
+                allProcedures: procs,
+                allCallers: callers,
+                knownRecords: [record],
+                typeAliases: [
+                    "ALPHA": "ARRAY OF CHAR",
+                    "ITEMREF": "^ITEM",
+                    "SEGNO": "INTEGER",
+                    "WORDREF": "^WORD"
+                ],
+                scalarTypes: [
+                    "SEGKINDS": PascalScalarType(
+                        name: "SEGKINDS",
+                        cases: ["LINKED", "HOSTSEG", "SEGPROC"]
+                    )
+                ],
+                constants: ["MAXSEGS": 15],
+                subrangeTypes: [
+                    "SEGNO": PascalSubrangeType(name: "SEGNO", lowerBound: 1, upperBound: 15)
+                ],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("## Known Types"))
+        XCTAssertTrue(out.contains("CONST"))
+        XCTAssertTrue(out.contains("  MAXSEGS = 15;"))
+        XCTAssertTrue(out.contains("TYPE"))
+        XCTAssertTrue(out.contains("  SEGKINDS = (LINKED, HOSTSEG, SEGPROC);"))
+        XCTAssertTrue(out.contains("  SEGNO = 1..15;"))
+        XCTAssertTrue(out.contains("  ALPHA = ARRAY OF CHAR;"))
+        XCTAssertFalse(out.contains("  SEGNO = INTEGER;"))
+        XCTAssertTrue(out.contains("  WORDREF = ^WORD;"))
+        XCTAssertTrue(out.contains("  WORD = RECORD"))
+        XCTAssertTrue(out.contains("    KEY: ALPHA; (* offset 0 *)"))
+        XCTAssertTrue(out.contains("    FIRST: ITEMREF; (* offset 1 *)"))
+        XCTAssertTrue(out.contains("    RIGHT: WORDREF; (* offset 3 *)"))
+        XCTAssertTrue(out.contains("  END;"))
+    }
+
+    func testKnownTypesOutputFlagsUnknownFinalTypes() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let record = PascalRecord(
+            name: "WORD",
+            members: [
+                0: Identifier(name: "KEY", type: "ALPHA"),
+                1: Identifier(name: "NEXT", type: "ITEMREF")
+            ]
+        )
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: locs,
+                allProcedures: procs,
+                allCallers: callers,
+                knownRecords: [record],
+                typeAliases: [
+                    "ALPHA": "ARRAY OF GLYPH",
+                    "ITEMREF": "^ITEM"
+                ],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("## Diagnostics"))
+        XCTAssertTrue(out.contains("WARNING: TYPE ALPHA resolves to unknown final type GLYPH"))
+        XCTAssertTrue(out.contains("WARNING: TYPE ITEMREF resolves to unknown final type ITEM"))
+        XCTAssertTrue(out.contains("WARNING: RECORD WORD.KEY at offset 0 resolves to unknown final type GLYPH"))
+        XCTAssertTrue(out.contains("WARNING: RECORD WORD.NEXT at offset 1 resolves to unknown final type ITEM"))
     }
 }

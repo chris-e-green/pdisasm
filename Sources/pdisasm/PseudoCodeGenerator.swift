@@ -6,6 +6,8 @@ import Foundation
 struct PseudoCodeGenerator {
     let allProcedures: [ProcedureIdentifier]
     let knownRecords: Set<PascalRecord>
+    let typeAliases: [String: String]
+    let scalarTypes: [String: PascalScalarType]
     var allLocations: Set<Location>
     var labelLookup: [String: Location]
     var typeConflicts: [TypeConflict] = []
@@ -17,9 +19,17 @@ struct PseudoCodeGenerator {
 //        self.labelLookup = labelLookup
 //    }
 
-    init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>) {
+    init(
+        allProcedures: [ProcedureIdentifier],
+        knownRecords: Set<PascalRecord>,
+        typeAliases: [String: String] = [:],
+        scalarTypes: [String: PascalScalarType] = [:],
+        allLocations: Set<Location>
+    ) {
         self.allProcedures = allProcedures
         self.knownRecords = knownRecords
+        self.typeAliases = typeAliases
+        self.scalarTypes = scalarTypes
         self.allLocations = allLocations
         var lookup: [String: Location] = [:]
         for label in allLocations {
@@ -158,7 +168,8 @@ struct PseudoCodeGenerator {
                     }
                     
                 default:
-                    let (src, _) = stack.pop(true)
+                    var (src, _) = stack.pop(true)
+                    src = scalarLiteralText(src, destinationType: destType)
                     if let type = destType, !type.isEmpty && type != "UNKNOWN"  {
                         setLocType(src, type)
                     }
@@ -324,9 +335,10 @@ struct PseudoCodeGenerator {
             return nil
         case inn:
             let (_, set) = stack.popSet()
-            let (chkVal, _) = stack.pop()
-            setLocType(chkVal, "INTEGER")
-            stack.push(("\(chkVal) IN \(set)", "BOOLEAN"))
+            let (chkVal, chkType) = stack.pop()
+            let elementType = chkType == "CHAR" ? "CHAR" : "INTEGER"
+            setLocType(chkVal, elementType)
+            stack.push(("\(chkVal) IN \(formatSetMembership(set, elementType: elementType))", "BOOLEAN"))
             return nil
         case int:
             let (set1Len, set1) = stack.popSet()
@@ -501,11 +513,21 @@ struct PseudoCodeGenerator {
             let index = stack.popStackValue()
             let base = stack.popStackValue()
             let offset = stack.parenthesizedText(index)
+            let baseType = resolveType(base.type)
+            if baseType == "STRING" && offset == "0" {
+                stack.push(StackValue(
+                    text: "LENGTH(\(stack.parenthesizedText(base)))",
+                    type: "INTEGER",
+                    kind: .value,
+                    location: base.location
+                ))
+                return nil
+            }
             stack.push(StackValue(
                 text: representationByteText(base, offset: offset, stack: stack),
-                type: "BYTE",
+                type: baseType == "STRING" ? "CHAR" : "BYTE",
                 kind: .value,
-                location: base.type == "REAL" ? nil : base.location
+                location: baseType == "REAL" ? nil : base.location
             ))
             return nil
         case ldp:
@@ -523,11 +545,11 @@ struct PseudoCodeGenerator {
             let val = inst.params[0]
             let base = stack.popStackValue()
             let a = stack.parenthesizedText(base)
-            let t = base.type
+            let t = resolveType(base.type)
             let resultKind = stack.derivedAddressKind(from: base)
             if let t = t, t.hasPrefix("ARRAY") {
                 stack.push(StackValue(text: "\(a)[\(val)]", type: String(t.split(separator: " ").last!), kind: resultKind, location: base.location))
-            } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[val] {
+            } else if let structInfo = recordDefinition(for: t), let field = structInfo.members[val] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: resultKind, location: base.location))
             }
             else {
@@ -538,8 +560,8 @@ struct PseudoCodeGenerator {
             let val = inst.params[0]
             let base = stack.popStackValue()
             let a = stack.parenthesizedText(base)
-            let t = base.type
-            if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[val] {
+            let t = resolveType(base.type)
+            if let structInfo = recordDefinition(for: t), let field = structInfo.members[val] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
                 return nil
             }
@@ -548,7 +570,7 @@ struct PseudoCodeGenerator {
             } else {
                 stack.push(StackValue(
                     text: representationWordText(base, offset: "\(val)", stack: stack),
-                    type: "INTEGER",
+                    type: dereferencedType(base.type) ?? "INTEGER",
                     kind: .value,
                     location: base.location
                 ))
@@ -560,14 +582,19 @@ struct PseudoCodeGenerator {
             let base = stack.popStackValue()
             let eltIndex = stack.parenthesizedText(index)
             let arrayBase = stack.parenthesizedText(base)
-            let t = base.type
+            let t = resolveType(base.type)
             let resultKind = stack.derivedAddressKind(from: base)
             if let type = t, type.starts(with: "ARRAY") {
                 let elementType = String(type.split(separator: " ").last!)
                 stack.push(StackValue(text: "\(arrayBase)[\(eltIndex)]", type: elementType, kind: resultKind, location: base.location))
                 return nil
             }
-            stack.push(StackValue(text: "\(arrayBase)[\(eltIndex)]", type: t, kind: resultKind, location: base.location))
+            stack.push(StackValue(
+                text: indexedValueText(base: arrayBase, index: eltIndex, baseType: t),
+                type: indexedValueType(index: eltIndex, baseType: t),
+                kind: resultKind,
+                location: base.location
+            ))
             return nil
         case ixp:
             let elementsPerWord = inst.params[0]
@@ -589,10 +616,10 @@ struct PseudoCodeGenerator {
             let offs = inst.params[0]
             let base = stack.popStackValue()
             let a = stack.parenthesizedText(base)
-            let t = base.type
+            let t = resolveType(base.type)
             if let t = t, t.hasPrefix("ARRAY") {
                 stack.push(StackValue(text: "\(a)[\(offs)]", type: String(t.split(separator: " ").last!), kind: .value, location: base.location))
-            } else if let type = t, let structInfo = knownRecords.first(where: { $0.name == type }), let field = structInfo.members[offs] {
+            } else if let structInfo = recordDefinition(for: t), let field = structInfo.members[offs] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
             } else {
                 if t == "REAL" {
@@ -600,7 +627,7 @@ struct PseudoCodeGenerator {
                 } else {
                     stack.push(StackValue(
                         text: representationWordText(base, offset: "\(offs)", stack: stack),
-                        type: t,
+                        type: dereferencedType(t) ?? t,
                         kind: .value,
                         location: base.location
                     ))
@@ -696,6 +723,97 @@ struct PseudoCodeGenerator {
         } else {
             return loc
         }
+    }
+
+    private func indexedValueText(base: String, index: String, baseType: String?) -> String {
+        if resolveType(baseType) == "STRING" && index == "0" {
+            return "LENGTH(\(base))"
+        }
+        return "\(base)[\(index)]"
+    }
+
+    private func indexedValueType(index: String, baseType: String?) -> String? {
+        let baseType = resolveType(baseType)
+        guard baseType == "STRING" else {
+            return baseType
+        }
+        return index == "0" ? "INTEGER" : "CHAR"
+    }
+
+    private func dereferencedType(_ type: String?) -> String? {
+        guard let type = resolveType(type), type.hasPrefix("^") else {
+            return nil
+        }
+        let pointee = type.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+        return pointee.isEmpty ? nil : resolveType(pointee)
+    }
+
+    private func recordDefinition(for type: String?) -> PascalRecord? {
+        guard let type = resolveType(type) else { return nil }
+        return knownRecords.first { $0.name == type }
+    }
+
+    private func resolveType(_ type: String?) -> String? {
+        guard let type else { return nil }
+        var current = type.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        var seen: Set<String> = []
+        while let resolved = typeAliases[current], !seen.contains(current) {
+            seen.insert(current)
+            current = resolved.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        }
+        return current
+    }
+
+    func scalarLiteralText(_ source: String, destinationType: String?) -> String {
+        guard let resolvedType = resolveType(destinationType),
+              let scalarType = scalarTypes[resolvedType],
+              let value = Int(source.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let caseName = scalarType.namesByValue[value]
+        else {
+            return source
+        }
+        return caseName
+    }
+
+    private func formatSetMembership(_ set: String, elementType: String) -> String {
+        guard elementType == "CHAR",
+            set.hasPrefix("["),
+            set.hasSuffix("]")
+        else {
+            return set
+        }
+
+        let body = set.dropFirst().dropLast()
+        let elements = body.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let formatted = elements.map { element in
+            let rangeParts = element.components(separatedBy: "...")
+            if rangeParts.count == 2,
+                let lower = Int(rangeParts[0]),
+                let upper = Int(rangeParts[1])
+            {
+                return "\(charLiteral(lower))..\(charLiteral(upper))"
+            }
+            if let value = Int(element) {
+                return charLiteral(value)
+            }
+            return element
+        }
+        return "[" + formatted.joined(separator: ", ") + "]"
+    }
+
+    private func charLiteral(_ value: Int) -> String {
+        guard value >= 0x20 && value <= 0x7E,
+            let scalar = UnicodeScalar(value)
+        else {
+            return "CHR(\(value))"
+        }
+        let character = String(Character(scalar))
+        if character == "'" {
+            return "''''"
+        }
+        return "'\(character)'"
     }
 
 }

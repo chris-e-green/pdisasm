@@ -36,9 +36,10 @@ func normaliseMemoryLocations(
                     inst.memLocation?.segment = 0
                     inst.memLocation?.procedure = 1
                 case 0:
-                    if let p = allCallers.first(where: {
-                        $0.origin.lexLevel == 0
-                    }) {
+                    if loc.segment == proc.identifier?.segment,
+                       let p = allCallers.first(where: {
+                           $0.origin.lexLevel == 0
+                       }) {
                         inst.memLocation?.procedure = p.origin.procedure
                         inst.memLocation?.segment = p.origin.segment
                     }
@@ -84,6 +85,11 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let allLocations: Set<Location>
     public let allProcedures: [ProcedureIdentifier]
     public let allCallers: Set<Call>
+    public let knownRecords: Set<PascalRecord>
+    public let typeAliases: [String: String]
+    public let scalarTypes: [String: PascalScalarType]
+    public let constants: [String: Int]
+    public let subrangeTypes: [String: PascalSubrangeType]
     public let typeConflicts: [TypeConflict]
     public let diagnostics: [Diagnostic]
 }
@@ -191,6 +197,8 @@ private struct MetadataContext {
     let sysProceduresCSVFile: String
     let sysRecordsFile: String
     let allRecordsFile: String
+    let sysTypesFile: String
+    let allTypesFile: String
     let globalsFile: String
     let appSupportDirectory: URL
     let store: MetadataStore
@@ -205,6 +213,8 @@ private struct MetadataContext {
         sysProceduresCSVFile = "procedures_ver_\(version)"
         sysRecordsFile = "records_ver_\(version)"
         allRecordsFile = "records_\(fileIdentifier)"
+        sysTypesFile = "types_ver_\(version)"
+        allTypesFile = "types_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
         appSupportDirectory = URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
@@ -216,6 +226,10 @@ private struct MetadataContext {
 
     func load(
         knownRecords: inout Set<PascalRecord>,
+        typeAliases: inout [String: String],
+        scalarTypes: inout [String: PascalScalarType],
+        constants: inout [String: Int],
+        subrangeTypes: inout [String: PascalSubrangeType],
         allLocations: inout Set<Location>,
         allProcedures: inout [ProcedureIdentifier],
         globalNames: inout [Int: Identifier]
@@ -225,6 +239,23 @@ private struct MetadataContext {
 
         store.importKnownRecords(fromJson: sysRecordsFile, to: &knownRecords)
         store.importKnownRecords(fromJson: allRecordsFile, to: &knownRecords)
+        store.importTypeDefinitions(
+            fromPascal: sysTypesFile,
+            to: &knownRecords,
+            aliases: &typeAliases,
+            scalarTypes: &scalarTypes,
+            constants: &constants,
+            subrangeTypes: &subrangeTypes,
+            isSystemRecord: true
+        )
+        store.importTypeDefinitions(
+            fromPascal: allTypesFile,
+            to: &knownRecords,
+            aliases: &typeAliases,
+            scalarTypes: &scalarTypes,
+            constants: &constants,
+            subrangeTypes: &subrangeTypes
+        )
         store.importLabels(fromCSV: allLabelsCSVFile, to: &allLocations)
         store.importLabels(fromCSV: sysLabelsCSVFile, to: &sysLocations)
         allLocations.formUnion(sysLocations)
@@ -340,6 +371,8 @@ private func normaliseDecodedLocations(
 private func simulatePascalProcedures(
     codeSegments: [Int: CodeSegment],
     knownRecords: Set<PascalRecord>,
+    typeAliases: [String: String],
+    scalarTypes: [String: PascalScalarType],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
     diagnostics: DiagnosticCollector
@@ -354,6 +387,8 @@ private func simulatePascalProcedures(
             typeConflicts.append(contentsOf: simulateStackAndGeneratePseudocode(
                 proc: proc,
                 knownRecords: knownRecords,
+                typeAliases: typeAliases,
+                scalarTypes: scalarTypes,
                 allProcedures: &allProcedures,
                 allLocations: &allLocations,
                 diagnostics: diagnostics
@@ -407,6 +442,8 @@ private func prepareDecodedProgram(
 private func runPascalAnalysisPass(
     codeSegments: [Int: CodeSegment],
     knownRecords: Set<PascalRecord>,
+    typeAliases: [String: String],
+    scalarTypes: [String: PascalScalarType],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
     diagnostics: DiagnosticCollector
@@ -414,6 +451,8 @@ private func runPascalAnalysisPass(
     var typeConflicts = simulatePascalProcedures(
         codeSegments: codeSegments,
         knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
         allProcedures: &allProcedures,
         allLocations: &allLocations,
         diagnostics: diagnostics
@@ -452,12 +491,20 @@ public func disassemble(
     var typeConflicts: [TypeConflict] = []
     var dataSegments: [Int] = []
     var knownRecords = defaultKnownRecords()
+    var typeAliases: [String: String] = [:]
+    var scalarTypes: [String: PascalScalarType] = [:]
+    var constants: [String: Int] = [:]
+    var subrangeTypes: [String: PascalSubrangeType] = [:]
 
     // Try loading name maps from Application Support. Missing metadata is fine;
     // writeback is controlled separately by the caller.
     var globalNames: [Int: Identifier] = [:]
     metadata.load(
         knownRecords: &knownRecords,
+        typeAliases: &typeAliases,
+        scalarTypes: &scalarTypes,
+        constants: &constants,
+        subrangeTypes: &subrangeTypes,
         allLocations: &allLocations,
         allProcedures: &allProcedures,
         globalNames: &globalNames
@@ -486,6 +533,8 @@ public func disassemble(
     typeConflicts.append(contentsOf: runPascalAnalysisPass(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
         allProcedures: &allProcedures,
         allLocations: &allLocations,
         diagnostics: diagnostics
@@ -495,6 +544,8 @@ public func disassemble(
     typeConflicts.append(contentsOf: runPascalAnalysisPass(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
         allProcedures: &allProcedures,
         allLocations: &allLocations,
         diagnostics: diagnostics
@@ -508,6 +559,11 @@ public func disassemble(
         allLocations: allLocations,
         allProcedures: allProcedures,
         allCallers: allCallers,
+        knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
+        constants: constants,
+        subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics.diagnostics
     )
@@ -559,6 +615,11 @@ public func renderDisassembly(
         allLocations: result.allLocations,
         allProcedures: result.allProcedures,
         allCallers: result.allCallers,
+        knownRecords: result.knownRecords,
+        typeAliases: result.typeAliases,
+        scalarTypes: result.scalarTypes,
+        constants: result.constants,
+        subrangeTypes: result.subrangeTypes,
         typeConflicts: result.typeConflicts,
         diagnostics: result.diagnostics,
         verbose: verbose,
@@ -599,6 +660,11 @@ public func runPdisasm(
         allLocations: result.allLocations,
         allProcedures: result.allProcedures,
         allCallers: result.allCallers,
+        knownRecords: result.knownRecords,
+        typeAliases: result.typeAliases,
+        scalarTypes: result.scalarTypes,
+        constants: result.constants,
+        subrangeTypes: result.subrangeTypes,
         typeConflicts: result.typeConflicts,
         diagnostics: result.diagnostics,
         verbose: verbose,

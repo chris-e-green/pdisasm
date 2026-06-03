@@ -88,6 +88,111 @@ final class OpcodeDecoderTests: XCTestCase {
         XCTAssertEqual(result.memLocation?.addr, 2)
     }
 
+    func testExtendedGlobalReferencesUseNilProcedureUntilResolved() throws {
+        let ldeResult = try decode(bytes: [lde, 0x01, 0x02], opcode: lde)
+        XCTAssertEqual(ldeResult.memLocation?.segment, 1)
+        XCTAssertNil(ldeResult.memLocation?.procedure)
+        XCTAssertEqual(ldeResult.memLocation?.lexLevel, 0)
+        XCTAssertEqual(ldeResult.memLocation?.addr, 2)
+
+        let laeResult = try decode(bytes: [lae, 0x01, 0x03], opcode: lae)
+        XCTAssertEqual(laeResult.memLocation?.segment, 1)
+        XCTAssertNil(laeResult.memLocation?.procedure)
+        XCTAssertEqual(laeResult.memLocation?.lexLevel, 0)
+        XCTAssertEqual(laeResult.memLocation?.addr, 3)
+
+        let steResult = try decode(bytes: [ste, 0x01, 0x04], opcode: ste)
+        XCTAssertEqual(steResult.memLocation?.segment, 1)
+        XCTAssertNil(steResult.memLocation?.procedure)
+        XCTAssertEqual(steResult.memLocation?.lexLevel, 0)
+        XCTAssertEqual(steResult.memLocation?.addr, 4)
+    }
+
+    func testNestedProcedureGlobalReferenceUsesNilProcedureUntilResolved() throws {
+        let cd = CodeData(data: Data([sldo1]), instructionPointer: 0, header: 0)
+        let decoder = OpcodeDecoder(codeData: cd)
+        let seg = Segment(
+            codeAddress: 0,
+            codeLength: 1,
+            name: "T",
+            segmentKind: .dataseg,
+            textAddress: 0,
+            segNum: 1,
+            machineType: 0,
+            version: 0
+        )
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 2)
+        proc.lexicalLevel = 1
+
+        let result = try decoder.decode(
+            opcode: sldo1,
+            at: 0,
+            currSeg: seg,
+            segment: 1,
+            procedure: 2,
+            proc: proc,
+            addr: 0
+        )
+
+        XCTAssertEqual(result.memLocation?.segment, 1)
+        XCTAssertNil(result.memLocation?.procedure)
+        XCTAssertEqual(result.memLocation?.lexLevel, 0)
+        XCTAssertEqual(result.memLocation?.addr, 1)
+    }
+
+    func testNormaliseMemoryLocationsResolvesNilProcedureGlobalReference() {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 2)
+        proc.lexicalLevel = 1
+        proc.instructions[0] = Instruction(
+            opcode: lde,
+            mnemonic: "LDE",
+            memLocation: Location(segment: 1, procedure: nil, lexLevel: 0, addr: 2)
+        )
+
+        normaliseMemoryLocations(
+            proc,
+            [
+                Call(
+                    from: Location(segment: 1, procedure: 1, lexLevel: 0),
+                    to: Location(segment: 1, procedure: 2, lexLevel: 1)
+                )
+            ]
+        )
+
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.segment, 1)
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.procedure, 1)
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.lexLevel, 0)
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.addr, 2)
+    }
+
+    func testNormaliseMemoryLocationsPreservesExplicitExternalDataSegment() {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 20, procedure: 12)
+        proc.lexicalLevel = 1
+        proc.instructions[0] = Instruction(
+            opcode: lde,
+            mnemonic: "LDE",
+            memLocation: Location(segment: 21, procedure: nil, lexLevel: 0, addr: 193)
+        )
+
+        normaliseMemoryLocations(
+            proc,
+            [
+                Call(
+                    from: Location(segment: 20, procedure: 16, lexLevel: 0),
+                    to: Location(segment: 20, procedure: 12, lexLevel: 1)
+                )
+            ]
+        )
+
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.segment, 21)
+        XCTAssertNil(proc.instructions[0]?.memLocation?.procedure)
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.lexLevel, 0)
+        XCTAssertEqual(proc.instructions[0]?.memLocation?.addr, 193)
+    }
+
     func testLSA() throws {
         // LSA: length=3, then "abc"
         let result = try decode(bytes: [0xA6, 0x03, 0x61, 0x62, 0x63], opcode: lsa)

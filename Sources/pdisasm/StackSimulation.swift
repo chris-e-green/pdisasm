@@ -5,6 +5,8 @@ import Foundation
 func simulateStackAndGeneratePseudocode(
     proc: Procedure,
     knownRecords: Set<PascalRecord>,
+    typeAliases: [String: String] = [:],
+    scalarTypes: [String: PascalScalarType] = [:],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
     diagnostics: DiagnosticCollector? = nil
@@ -16,6 +18,8 @@ func simulateStackAndGeneratePseudocode(
     var pseudoGen = PseudoCodeGenerator(
         allProcedures: allProcedures,
         knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
         allLocations: allLocations
     )
     var controlFlow = ControlFlowAnalyzer()
@@ -54,11 +58,20 @@ func simulateStackAndGeneratePseudocode(
                 loc: nil
             )
             pseudoCode = pseudoCodeStatement?.renderedText
+            if controlFlow.pseudoCodeAddressesToSkip.contains(address) {
+                pseudoCodeStatement = nil
+                pseudoCode = nil
+            }
         }
 
         inst.pseudoCodeStatement = pseudoCodeStatement
         inst.pseudoCode = pseudoCode
         inst.stackState = simulator.stackDescription
+    }
+
+    for address in controlFlow.pseudoCodeAddressesToSkip {
+        proc.instructions[address]?.pseudoCodeStatement = nil
+        proc.instructions[address]?.pseudoCode = nil
     }
 
     // Write back location mutations from the pseudo-code generator

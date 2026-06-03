@@ -87,6 +87,30 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertTrue(sim.values.isEmpty)
     }
 
+    func testAddressValuePopsAsPascalPointerToVariable() {
+        var sim = StackSimulator()
+        sim.push(("ADDR", "INTEGER"), kind: .address)
+
+        let (value, type) = sim.pop()
+
+        XCTAssertEqual(value, "^ADDR")
+        XCTAssertEqual(type, "INTEGER")
+    }
+
+    func testAddressDestinationStillStoresIntoVariable() {
+        let sim = StackSimulator()
+        let target = StackValue(text: "ADDR", type: "INTEGER", kind: .address)
+
+        XCTAssertEqual(sim.assignmentTargetText(target), "ADDR")
+    }
+
+    func testPointerDestinationDereferencesWithPascalSyntax() {
+        let sim = StackSimulator()
+        let target = StackValue(text: "PTR", type: "^INTEGER", kind: .pointer)
+
+        XCTAssertEqual(sim.assignmentTargetText(target), "PTR^")
+    }
+
     func testStackDescriptionIncludesStackValueFields() {
         let loc = Location(segment: 1, procedure: 2, lexLevel: 3, addr: 4)
         var sim = StackSimulator()

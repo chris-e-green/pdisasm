@@ -156,7 +156,20 @@ extension PseudoCodeGenerator {
         if base.type == "REAL" {
             return "REAL_WORD(\(stack.parenthesizedText(base)), \(offset))"
         }
-        return "*(\(stack.parenthesizedText(base)) + \(offset))"
+        let trimmedOffset = offset.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.kind == .address && trimmedOffset == "0" {
+            return stack.parenthesizedText(base)
+        }
+        if trimmedOffset == "0" {
+            return stack.dereferencedText(base)
+        }
+        let pointerExpression = StackValue(
+            text: "\(stack.parenthesizedText(base)) + \(offset)",
+            type: base.type,
+            kind: .pointer,
+            location: base.location
+        )
+        return stack.dereferencedText(pointerExpression)
     }
 
     func representationWordLocation(

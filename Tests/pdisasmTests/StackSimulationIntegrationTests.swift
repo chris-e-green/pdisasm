@@ -36,6 +36,125 @@ final class StackSimulationIntegrationTests: XCTestCase {
         return proc
     }
 
+    private func simulate(_ proc: Procedure) -> Procedure {
+        var allProcedures: [ProcedureIdentifier] = [proc.identifier].compactMap { $0 }
+        var allLocations: Set<Location> = []
+        simulateStackAndGeneratePseudocode(
+            proc: proc,
+            knownRecords: [],
+            allProcedures: &allProcedures,
+            allLocations: &allLocations
+        )
+        return proc
+    }
+
+    private func makeForLikeProcedure(
+        comparisonOpcode: UInt8,
+        comparisonMnemonic: String,
+        arithmeticOpcode: UInt8,
+        arithmeticMnemonic: String,
+        constantOpcode: UInt8,
+        initialValue: UInt8 = 1
+    ) -> Procedure {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 1, procName: "LOOP")
+        proc.lexicalLevel = 1
+        proc.enterIC = 0
+        proc.exitIC = 14
+
+        let loopVariable = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 1, name: "I", type: "INTEGER")
+        let limit = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 2, name: "LIMIT", type: "INTEGER")
+
+        proc.instructions[0] = Instruction(opcode: initialValue, mnemonic: "SLDC")
+        proc.instructions[1] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[2] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[3] = Instruction(opcode: ldl, mnemonic: "LDL", params: [2], memLocation: limit)
+        proc.instructions[4] = Instruction(opcode: comparisonOpcode, mnemonic: comparisonMnemonic)
+        proc.instructions[5] = Instruction(opcode: fjp, mnemonic: "FJP", params: [14])
+        proc.instructions[7] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[8] = Instruction(opcode: constantOpcode, mnemonic: "SLDC")
+        proc.instructions[9] = Instruction(opcode: arithmeticOpcode, mnemonic: arithmeticMnemonic)
+        proc.instructions[10] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[12] = Instruction(opcode: ujp, mnemonic: "UJP", params: [2])
+        proc.instructions[14] = Instruction(opcode: rnp, mnemonic: "RNP", params: [0])
+
+        return proc
+    }
+
+    private func makeForWithConstantLimitProcedure() -> Procedure {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 1, procName: "LOOP")
+        proc.lexicalLevel = 1
+        proc.enterIC = 0
+        proc.exitIC = 16
+
+        let loopVariable = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 1, name: "J", type: "INTEGER")
+        let limit = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 2, name: "JMAX", type: "INTEGER")
+
+        proc.instructions[0] = Instruction(opcode: 3, mnemonic: "SLDC")
+        proc.instructions[1] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[2] = Instruction(opcode: 8, mnemonic: "SLDC")
+        proc.instructions[3] = Instruction(opcode: stl, mnemonic: "STL", params: [2], memLocation: limit)
+        proc.instructions[4] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[5] = Instruction(opcode: ldl, mnemonic: "LDL", params: [2], memLocation: limit)
+        proc.instructions[6] = Instruction(opcode: leqi, mnemonic: "LEQI")
+        proc.instructions[7] = Instruction(opcode: fjp, mnemonic: "FJP", params: [16])
+        proc.instructions[9] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[10] = Instruction(opcode: 1, mnemonic: "SLDC")
+        proc.instructions[11] = Instruction(opcode: adi, mnemonic: "ADI")
+        proc.instructions[12] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[14] = Instruction(opcode: ujp, mnemonic: "UJP", params: [4])
+        proc.instructions[16] = Instruction(opcode: rnp, mnemonic: "RNP", params: [0])
+
+        return proc
+    }
+
+    private func makeForWithSubscriptedLimitProcedure() -> Procedure {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 1, procName: "LOOP")
+        proc.lexicalLevel = 1
+        proc.enterIC = 0
+        proc.exitIC = 16
+
+        let loopVariable = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 1, name: "S_IDX", type: "INTEGER")
+        let limit = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 2, name: "S_LEN", type: "INTEGER")
+        let copiedLength = Location(segment: 1, procedure: 1, lexLevel: 1, addr: 3, name: "LENGTH(S_COPY)", type: "INTEGER")
+
+        proc.instructions[0] = Instruction(opcode: 1, mnemonic: "SLDC")
+        proc.instructions[1] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[2] = Instruction(opcode: ldl, mnemonic: "LDL", params: [3], memLocation: copiedLength)
+        proc.instructions[3] = Instruction(opcode: stl, mnemonic: "STL", params: [2], memLocation: limit)
+        proc.instructions[4] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[5] = Instruction(opcode: ldl, mnemonic: "LDL", params: [2], memLocation: limit)
+        proc.instructions[6] = Instruction(opcode: leqi, mnemonic: "LEQI")
+        proc.instructions[7] = Instruction(opcode: fjp, mnemonic: "FJP", params: [16])
+        proc.instructions[9] = Instruction(opcode: ldl, mnemonic: "LDL", params: [1], memLocation: loopVariable)
+        proc.instructions[10] = Instruction(opcode: 1, mnemonic: "SLDC")
+        proc.instructions[11] = Instruction(opcode: adi, mnemonic: "ADI")
+        proc.instructions[12] = Instruction(opcode: stl, mnemonic: "STL", params: [1], memLocation: loopVariable)
+        proc.instructions[14] = Instruction(opcode: ujp, mnemonic: "UJP", params: [4])
+        proc.instructions[16] = Instruction(opcode: rnp, mnemonic: "RNP", params: [0])
+
+        return proc
+    }
+
+    private func makeIfWithSharedGotoTargetProcedure() -> Procedure {
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(isFunction: false, segment: 1, procedure: 1, procName: "GOTOIF")
+        proc.lexicalLevel = 1
+        proc.enterIC = 0
+        proc.exitIC = 20
+
+        proc.instructions[0] = Instruction(opcode: 1, mnemonic: "SLDC")
+        proc.instructions[1] = Instruction(opcode: fjp, mnemonic: "FJP", params: [4])
+        proc.instructions[3] = Instruction(opcode: ujp, mnemonic: "UJP", params: [20])
+        proc.instructions[4] = Instruction(opcode: 2, mnemonic: "SLDC")
+        proc.instructions[5] = Instruction(opcode: ujp, mnemonic: "UJP", params: [20])
+        proc.instructions[20] = Instruction(opcode: rnp, mnemonic: "RNP", params: [0])
+
+        return proc
+    }
+
     // MARK: - SLDC pushes to stack state
 
     func testSLDCPushesValue() {
@@ -173,5 +292,80 @@ final class StackSimulationIntegrationTests: XCTestCase {
             let joined = state.joined()
             XCTAssertTrue(joined.contains("="), "Expected = in stack: \(joined)")
         }
+    }
+
+    func testSimpleToForLoopIsRenderedAsForAndSuppressesIncrementAssignment() {
+        let proc = simulate(makeForLikeProcedure(
+            comparisonOpcode: leqi,
+            comparisonMnemonic: "LEQI",
+            arithmeticOpcode: adi,
+            arithmeticMnemonic: "ADI",
+            constantOpcode: 1
+        ))
+
+        XCTAssertEqual(proc.instructions[5]?.pseudoCode, "FOR I := 1 TO LIMIT DO BEGIN")
+        XCTAssertNil(proc.instructions[1]?.pseudoCode)
+        XCTAssertNil(proc.instructions[10]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* FOR I := 1 TO LIMIT *)")
+    }
+
+    func testSimpleDowntoForLoopIsRenderedAsForAndSuppressesDecrementAssignment() {
+        let proc = simulate(makeForLikeProcedure(
+            comparisonOpcode: geqi,
+            comparisonMnemonic: "GEQI",
+            arithmeticOpcode: sbi,
+            arithmeticMnemonic: "SBI",
+            constantOpcode: 1,
+            initialValue: 8
+        ))
+
+        XCTAssertEqual(proc.instructions[5]?.pseudoCode, "FOR I := 8 DOWNTO LIMIT DO BEGIN")
+        XCTAssertNil(proc.instructions[1]?.pseudoCode)
+        XCTAssertNil(proc.instructions[10]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* FOR I := 8 DOWNTO LIMIT *)")
+    }
+
+    func testForLoopFoldsConstantLimitSetupAssignment() {
+        let proc = simulate(makeForWithConstantLimitProcedure())
+
+        XCTAssertNil(proc.instructions[1]?.pseudoCode)
+        XCTAssertNil(proc.instructions[3]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[7]?.pseudoCode, "FOR J := 3 TO 8 DO BEGIN")
+        XCTAssertNil(proc.instructions[12]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[16]?.prePseudoCode.last, "END (* FOR J := 3 TO 8 *)")
+    }
+
+    func testForLoopFoldsSubscriptedLimitSetupAssignment() {
+        let proc = simulate(makeForWithSubscriptedLimitProcedure())
+
+        XCTAssertNil(proc.instructions[1]?.pseudoCode)
+        XCTAssertNil(proc.instructions[3]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[7]?.pseudoCode, "FOR S_IDX := 1 TO LENGTH(S_COPY) DO BEGIN")
+        XCTAssertNil(proc.instructions[12]?.pseudoCode)
+        XCTAssertEqual(proc.instructions[16]?.prePseudoCode.last, "END (* FOR S_IDX := 1 TO LENGTH(S_COPY) *)")
+    }
+
+    func testIncrementByMoreThanOneRemainsWhile() {
+        let proc = simulate(makeForLikeProcedure(
+            comparisonOpcode: leqi,
+            comparisonMnemonic: "LEQI",
+            arithmeticOpcode: adi,
+            arithmeticMnemonic: "ADI",
+            constantOpcode: 2
+        ))
+
+        XCTAssertEqual(proc.instructions[5]?.pseudoCode, "WHILE I <= LIMIT DO BEGIN")
+        XCTAssertEqual(proc.instructions[10]?.pseudoCode, "I := I + 2")
+        XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* WHILE I <= LIMIT *)")
+    }
+
+    func testSharedForwardUjpTargetInsideIfIsRenderedAsGotoNotElse() {
+        let proc = simulate(makeIfWithSharedGotoTargetProcedure())
+
+        XCTAssertEqual(proc.instructions[1]?.pseudoCode, "IF ODD(1) THEN BEGIN")
+        XCTAssertEqual(proc.instructions[3]?.pseudoCode, "GOTO LAB20")
+        XCTAssertEqual(proc.instructions[4]?.prePseudoCode.last, "END (* IF ODD(1) *)")
+        XCTAssertFalse(proc.instructions[4]?.prePseudoCode.contains("END ELSE BEGIN") == true)
+        XCTAssertFalse(proc.instructions[20]?.prePseudoCode.contains { $0.starts(with: "END (* ELSE") } == true)
     }
 }

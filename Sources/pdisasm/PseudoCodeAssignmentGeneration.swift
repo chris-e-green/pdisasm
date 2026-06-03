@@ -42,6 +42,7 @@ extension PseudoCodeGenerator {
                 src = "TRUE"
             }
         default:
+            src = scalarLiteralText(src, destinationType: destType)
             if let type = destType, !type.isEmpty && type != "UNKNOWN" {
                 setLocType(src, type)
             }
