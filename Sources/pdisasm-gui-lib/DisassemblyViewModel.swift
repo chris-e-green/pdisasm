@@ -244,6 +244,12 @@ final class DisassemblyViewModel {
         selectionAnchorIndex = anchor
     }
 
+    func selectOutputRows(_ rows: IndexSet) {
+        let validRows = rows.filter { filteredLines.indices.contains($0) }
+        selectedOutputLineIDs = Set(validRows.map { filteredLines[$0].id })
+        selectionAnchorIndex = validRows.first
+    }
+
     func clearOutputSelection() {
         selectedOutputLineIDs.removeAll()
         selectionAnchorIndex = nil

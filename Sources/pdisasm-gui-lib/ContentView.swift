@@ -208,11 +208,6 @@ struct SidebarView: View {
 
 struct DetailView: View {
     @Bindable var viewModel: DisassemblyViewModel
-    @State private var dragSelectionAnchorIndex: Int?
-    @State private var dragSelectionDidStart = false
-    @State private var outputScrollView: NSScrollView?
-    private let outputRowHeight: CGFloat = 20
-    private let outputContentVerticalPadding: CGFloat = 4
 
     var body: some View {
         Group {
@@ -235,49 +230,18 @@ struct DetailView: View {
                 VStack(spacing: 0) {
                     outputHeader
                     Divider()
-                    GeometryReader { geo in
-                        let lines = viewModel.filteredLines
-
-                        ScrollView([.horizontal, .vertical]) {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(lines.indices, id: \.self) { index in
-                                    let line = lines[index]
-                                    outputRow(
-                                        line: line,
-                                        index: index,
-                                        width: geo.size.width
-                                    )
-                                }
-                            }
-                            .padding(.vertical, outputContentVerticalPadding)
-                            .frame(minWidth: geo.size.width, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .highPriorityGesture(outputDragSelectionGesture())
-                            .background(ScrollViewAccessor { scrollView in
-                                if outputScrollView !== scrollView {
-                                    outputScrollView = scrollView
-                                }
-                            })
-                        }
-                        .onChange(of: viewModel.procedureScrollRequest) { _, _ in
-                            if let index = viewModel.selectedProcedureFilteredIndex {
-                                scrollOutput(to: index, anchor: .top)
-                            }
-                        }
-                        .onChange(of: viewModel.outputRestoreScrollRequest) { _, _ in
-                            if let index = viewModel.outputRestoreFilteredIndex {
-                                scrollOutput(to: index, anchor: .top)
-                                DispatchQueue.main.async {
-                                    scrollOutput(to: index, anchor: .top)
-                                }
-                            }
-                        }
-                        .onChange(of: viewModel.currentMatchScrollIndex) { _, newValue in
-                            if let index = newValue {
-                                scrollOutput(to: index, anchor: .center)
-                            }
-                        }
-                    }
+                    DisassemblyTableView(
+                        viewModel: viewModel,
+                        lines: viewModel.filteredLines,
+                        selectedLineIDs: viewModel.selectedOutputLineIDs,
+                        procedureScrollRequest: viewModel.procedureScrollRequest,
+                        selectedProcedureFilteredIndex: viewModel.selectedProcedureFilteredIndex,
+                        restoreScrollRequest: viewModel.outputRestoreScrollRequest,
+                        restoreFilteredIndex: viewModel.outputRestoreFilteredIndex,
+                        currentMatchScrollIndex: viewModel.currentMatchScrollIndex,
+                        searchMatchIndices: viewModel.searchMatchIndices,
+                        searchMatchIndexSet: Set(viewModel.searchMatchIndices)
+                    )
                     Divider()
                     statusBar
                 }
@@ -292,56 +256,6 @@ struct DetailView: View {
         .sheet(item: $viewModel.commentEditDraft) { _ in
             CommentEditSheet(viewModel: viewModel)
         }
-    }
-
-    private func outputDragSelectionGesture() -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                guard let currentIndex = outputRowIndex(at: value.location) else {
-                    return
-                }
-
-                if !dragSelectionDidStart {
-                    dragSelectionDidStart = true
-                    dragSelectionAnchorIndex = outputRowIndex(at: value.startLocation) ?? currentIndex
-                }
-
-                guard !isClick(value) else {
-                    return
-                }
-
-                let anchorIndex = dragSelectionAnchorIndex ?? currentIndex
-                viewModel.selectOutputLineRange(from: anchorIndex, to: currentIndex)
-            }
-            .onEnded { value in
-                if isClick(value) {
-                    let index = outputRowIndex(at: value.location)
-                        ?? outputRowIndex(at: value.startLocation)
-                    if let index, viewModel.filteredLines.indices.contains(index) {
-                        let line = viewModel.filteredLines[index]
-                        if NSApp.currentEvent?.clickCount == 2 {
-                            viewModel.beginEditingOutputLine(
-                                on: line,
-                                filteredIndex: index,
-                                atCharacterOffset: outputCharacterOffset(at: value.location)
-                            )
-                            dragSelectionAnchorIndex = nil
-                            dragSelectionDidStart = false
-                            return
-                        }
-                        let modifiers = NSEvent.modifierFlags
-                        viewModel.selectOutputLine(
-                            lineID: line.id,
-                            at: index,
-                            extending: modifiers.contains(.shift),
-                            toggling: modifiers.contains(.command)
-                        )
-                    }
-                }
-
-                dragSelectionAnchorIndex = nil
-                dragSelectionDidStart = false
-            }
     }
 
     private var outputHeader: some View {
@@ -378,109 +292,6 @@ struct DetailView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    private func outputRow(line: OutputLine, index: Int, width: CGFloat) -> some View {
-        let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
-        let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
-        let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
-
-        return HStack(spacing: 0) {
-            Text("\(line.id + 1)")
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .frame(width: 56, alignment: .trailing)
-                .padding(.trailing, 8)
-                .textSelection(.disabled)
-
-            Text(line.text)
-                .font(.system(.body, design: .monospaced))
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 8)
-        }
-        .frame(minWidth: width, alignment: .leading)
-        .frame(height: outputRowHeight, alignment: .center)
-        .background(rowBackgroundColor(
-            for: line.kind,
-            isSelected: isSelected,
-            isMatch: isMatch,
-            isCurrentMatch: isCurrentMatch
-        ))
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button("Copy Selected Lines") {
-                if !isSelected {
-                    viewModel.selectOutputLine(
-                        lineID: line.id,
-                        at: index,
-                        extending: false,
-                        toggling: false
-                    )
-                }
-                viewModel.copySelectedOutputLines()
-            }
-
-            Button("Edit Comment") {
-                viewModel.beginEditingComment(
-                    on: line,
-                    filteredIndex: index
-                )
-            }
-            .disabled(line.commentReference == nil)
-
-            Button("Clear Selection") {
-                viewModel.clearOutputSelection()
-            }
-            .disabled(viewModel.selectedOutputLineCount == 0)
-        }
-    }
-
-    private func isClick(_ value: DragGesture.Value) -> Bool {
-        abs(value.translation.width) < 3 && abs(value.translation.height) < 3
-    }
-
-    private func outputRowIndex(at location: CGPoint) -> Int? {
-        guard !viewModel.filteredLines.isEmpty else { return nil }
-
-        let rowIndex = Int((location.y - outputContentVerticalPadding) / outputRowHeight)
-        return min(max(rowIndex, 0), viewModel.filteredLines.count - 1)
-    }
-
-    private enum ScrollAnchor {
-        case top
-        case center
-    }
-
-    private func scrollOutput(to index: Int, anchor: ScrollAnchor) {
-        guard let scrollView = outputScrollView else { return }
-        guard viewModel.filteredLines.indices.contains(index) else { return }
-
-        let clipView = scrollView.contentView
-        let currentX = clipView.bounds.origin.x
-        let documentHeight = CGFloat(viewModel.filteredLines.count) * outputRowHeight
-            + (outputContentVerticalPadding * 2)
-        let visibleHeight = clipView.bounds.height
-        var y = outputContentVerticalPadding + CGFloat(index) * outputRowHeight
-        if anchor == .center {
-            y -= max((visibleHeight - outputRowHeight) / 2, 0)
-        }
-        let maxY = max(documentHeight - visibleHeight, 0)
-        y = min(max(y, 0), maxY)
-
-        if let documentView = scrollView.documentView, !documentView.isFlipped {
-            y = maxY - y
-        }
-
-        clipView.scroll(to: NSPoint(x: currentX, y: y))
-        scrollView.reflectScrolledClipView(clipView)
-    }
-
-    private func outputCharacterOffset(at location: CGPoint) -> Int {
-        let gutterWidth: CGFloat = 64
-        let horizontalPadding: CGFloat = gutterWidth + 8
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let characterWidth = max(font.advancement(forGlyph: font.glyph(withName: "0")).width, 1)
-        return max(Int((location.x - horizontalPadding) / characterWidth), 0)
     }
 
     private struct LocationEditSheet: View {
@@ -639,57 +450,6 @@ struct DetailView: View {
         }
     }
 
-    private func rowBackgroundColor(
-        for kind: LineKind,
-        isSelected: Bool,
-        isMatch: Bool,
-        isCurrentMatch: Bool
-    ) -> Color {
-        if isSelected {
-            return Color.accentColor.opacity(0.22)
-        }
-        if isCurrentMatch {
-            return Color.yellow.opacity(0.30)
-        }
-        if isMatch {
-            return Color.yellow.opacity(0.14)
-        }
-        return backgroundColor(for: kind)
-    }
-
-    private func backgroundColor(for kind: LineKind) -> Color {
-        switch kind {
-        case .markup:      return Color.gray.opacity(0.04)
-        case .pcode:       return Color.blue.opacity(0.025)
-        case .pseudocode:  return Color.green.opacity(0.035)
-        case .variable:    return Color.orange.opacity(0.035)
-        case .global:      return Color.purple.opacity(0.03)
-        case .header:      return Color.gray.opacity(0.08)
-        case .diagnostic:  return Color.red.opacity(0.06)
-        }
-    }
-}
-
-private struct ScrollViewAccessor: NSViewRepresentable {
-    let onResolve: (NSScrollView) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        resolveScrollView(from: view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        resolveScrollView(from: nsView)
-    }
-
-    private func resolveScrollView(from view: NSView) {
-        DispatchQueue.main.async {
-            if let scrollView = view.enclosingScrollView {
-                onResolve(scrollView)
-            }
-        }
-    }
 }
 
 #Preview {

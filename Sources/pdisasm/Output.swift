@@ -356,10 +356,13 @@ private func unknownKnownTypeDiagnostics(
     records: Set<PascalRecord>,
     aliases: [String: String],
     scalarTypes: [String: PascalScalarType],
-    subrangeTypes: [String: PascalSubrangeType]
+    subrangeTypes: [String: PascalSubrangeType],
+    locations: Set<Location> = [],
+    procedures: [ProcedureIdentifier] = []
 ) -> [Diagnostic] {
     let builtinTypes: Set<String> = [
-        "BOOLEAN", "BYTE", "CHAR", "INTEGER", "POINTER", "REAL", "STRING"
+        "ARRAY", "BOOLEAN", "BYTE", "CHAR", "FILE", "INTEGER", "LONGINT",
+        "PACKED ARRAY", "POINTER", "REAL", "SET", "STRING", "TEXT", "WORD"
     ]
     let recordNames = Set(records.map(\.name))
     let scalarNames = Set(scalarTypes.keys)
@@ -389,6 +392,17 @@ private func unknownKnownTypeDiagnostics(
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return unresolvedFinalType(elementType)
         }
+        if let ofRange = resolved.range(of: " OF ", options: [.backwards]),
+           resolved.hasPrefix("ARRAY[") || resolved.hasPrefix("PACKED ARRAY[") {
+            let elementType = String(resolved[ofRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return unresolvedFinalType(elementType)
+        }
+        if resolved.hasPrefix("SET OF ") {
+            let elementType = String(resolved.dropFirst("SET OF ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return unresolvedFinalType(elementType)
+        }
         if resolved.range(of: #"^[+-]?[0-9]+\.\.[+-]?[0-9]+$"#, options: .regularExpression) != nil {
             return nil
         }
@@ -403,14 +417,26 @@ private func unknownKnownTypeDiagnostics(
     }
 
     var diagnostics: [Diagnostic] = []
+    var seenMessages: Set<String> = []
+
+    func appendWarning(_ message: String) {
+        guard !seenMessages.contains(message) else { return }
+        seenMessages.insert(message)
+        diagnostics.append(Diagnostic(severity: .warning, message: message))
+    }
+
+    func unresolvedUsedType(_ type: String) -> String? {
+        guard let unknownType = unresolvedFinalType(type),
+              unknownType != "UNKNOWN"
+        else { return nil }
+        return unknownType
+    }
+
     for alias in aliases.keys.sorted() {
         guard let type = aliases[alias],
               let unknownType = unresolvedFinalType(type)
         else { continue }
-        diagnostics.append(Diagnostic(
-            severity: .warning,
-            message: "TYPE \(alias) resolves to unknown final type \(unknownType)"
-        ))
+        appendWarning("TYPE \(alias) resolves to unknown final type \(unknownType)")
     }
 
     for record in records.sorted(by: { $0.name < $1.name }) {
@@ -424,10 +450,27 @@ private func unknownKnownTypeDiagnostics(
         for member in diagnosticMembers.sorted(by: { $0.offset < $1.offset }) {
             guard let unknownType = unresolvedFinalType(member.identifier.type)
             else { continue }
-            diagnostics.append(Diagnostic(
-                severity: .warning,
-                message: "RECORD \(record.name).\(member.identifier.name) at offset \(member.offset) resolves to unknown final type \(unknownType)"
-            ))
+            appendWarning("RECORD \(record.name).\(member.identifier.name) at offset \(member.offset) resolves to unknown final type \(unknownType)")
+        }
+    }
+
+    for location in locations.sorted() {
+        guard let unknownType = unresolvedUsedType(location.type) else { continue }
+        appendWarning("LOCATION \(location.displayName) uses undefined type \(unknownType)")
+    }
+
+    for procedure in procedures.sorted(by: {
+        if $0.segment != $1.segment { return $0.segment < $1.segment }
+        return $0.procedure < $1.procedure
+    }) {
+        for parameter in procedure.parameters {
+            guard let unknownType = unresolvedUsedType(parameter.type) else { continue }
+            appendWarning("PROCEDURE \(procedure.shortDescription) parameter \(parameter.name) uses undefined type \(unknownType)")
+        }
+        if procedure.isFunction,
+           let returnType = procedure.returnType,
+           let unknownType = unresolvedUsedType(returnType) {
+            appendWarning("FUNCTION \(procedure.shortDescription) return type uses undefined type \(unknownType)")
         }
     }
     return diagnostics
@@ -493,7 +536,9 @@ public func renderStructuredLines(
             records: result.knownRecords,
             aliases: result.typeAliases,
             scalarTypes: result.scalarTypes,
-            subrangeTypes: result.subrangeTypes
+            subrangeTypes: result.subrangeTypes,
+            locations: result.allLocations,
+            procedures: result.allProcedures
         )
     if !diagnostics.isEmpty {
         addLine(.markup, "## Diagnostics")

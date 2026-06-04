@@ -456,4 +456,53 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertTrue(out.contains("WARNING: RECORD WORD.KEY at offset 0 resolves to unknown final type GLYPH"))
         XCTAssertTrue(out.contains("WARNING: RECORD WORD.NEXT at offset 1 resolves to unknown final type ITEM"))
     }
+
+    func testOutputFlagsUndefinedTypesUsedByCode() {
+        let (dict, codeSegs, _, _, callers) = makeMinimalInputs()
+        let location = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 1,
+            addr: 4,
+            name: "CURRENT",
+            type: "ITEMREF",
+            typeSource: .metadata
+        )
+        let procedure = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            segmentName: "TEST",
+            procedure: 2,
+            procName: "LOOKUP",
+            parameters: [
+                Identifier(name: "KEY", type: "ALPHA"),
+                Identifier(name: "NEXT", type: "^NODE"),
+                Identifier(name: "COUNT", type: "INTEGER")
+            ],
+            returnType: "ITEMREF"
+        )
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: [location],
+                allProcedures: [procedure],
+                allCallers: callers,
+                typeAliases: [
+                    "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+                ],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("## Diagnostics"))
+        XCTAssertTrue(out.contains("WARNING: LOCATION CURRENT uses undefined type ITEMREF"))
+        XCTAssertTrue(out.contains("WARNING: PROCEDURE TEST.LOOKUP parameter NEXT uses undefined type NODE"))
+        XCTAssertTrue(out.contains("WARNING: FUNCTION TEST.LOOKUP return type uses undefined type ITEMREF"))
+        XCTAssertFalse(out.contains("parameter KEY uses undefined type"))
+        XCTAssertFalse(out.contains("undefined type CHAR"))
+    }
 }
