@@ -106,12 +106,20 @@ public struct ContentView: View {
                 }
                 .disabled(viewModel.selectedOutputLineCount == 0)
 
-                Toggle("Markup", isOn: $viewModel.showMarkup)
-                Toggle("P-Code", isOn: $viewModel.showPCode)
-                Toggle("Stack", isOn: $viewModel.showStackState)
-                Toggle("Pseudocode", isOn: $viewModel.showPseudoCode)
-                Toggle("Variables", isOn: $viewModel.showVariables)
-                Toggle("Verbose", isOn: $viewModel.verbose)
+                Menu {
+                    Toggle("Markup", isOn: $viewModel.showMarkup)
+                    Toggle("P-Code", isOn: $viewModel.showPCode)
+                    Toggle("Stack State", isOn: $viewModel.showStackState)
+                    Toggle("Pseudocode", isOn: $viewModel.showPseudoCode)
+                    Toggle("Variables", isOn: $viewModel.showVariables)
+
+                    Divider()
+
+                    Toggle("Verbose Output", isOn: $viewModel.verbose)
+                } label: {
+                    Label("Display", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .help(viewModel.displaySummary)
             }
         }
         .fileImporter(
@@ -176,18 +184,17 @@ struct SidebarView: View {
                 description: Text("Open a .bin file to see its segments and procedures.")
             )
         } else {
-            List {
+            List(selection: Binding(
+                get: { viewModel.selectedProcedure },
+                set: { viewModel.selectProcedure($0) }
+            )) {
                 ForEach(viewModel.segments) { segment in
                     Section(segment.name) {
                         ForEach(segment.procedures) { proc in
-                            Button {
-                                viewModel.scrollToProcedure(proc.id)
-                            } label: {
-                                Text(proc.name)
-                                    .font(.system(.body, design: .monospaced))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
+                            Text(proc.name)
+                                .font(.system(.body, design: .monospaced))
+                                .lineLimit(1)
+                                .tag(proc.id)
                         }
                     }
                 }
@@ -225,85 +232,54 @@ struct DetailView: View {
                     description: Text("Open a Pascal P-code binary (.bin) to get started.")
                 )
             } else {
-                GeometryReader { geo in
-                    let lines = viewModel.filteredLines
+                VStack(spacing: 0) {
+                    outputHeader
+                    Divider()
+                    GeometryReader { geo in
+                        let lines = viewModel.filteredLines
 
-                    ScrollView([.horizontal, .vertical]) {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(lines.indices, id: \.self) { index in
-                                let line = lines[index]
-                                let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
-                                let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
-                                let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
-                                Text(line.text)
-                                    .font(.system(.body, design: .monospaced))
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .frame(minWidth: geo.size.width, alignment: .leading)
-                                    .frame(height: outputRowHeight, alignment: .center)
-                                    .padding(.horizontal, 8)
-                                    .background(rowBackgroundColor(
-                                        for: line.kind,
-                                        isSelected: isSelected,
-                                        isMatch: isMatch,
-                                        isCurrentMatch: isCurrentMatch
-                                    ))
-                                    .contentShape(Rectangle())
-                                    .contextMenu {
-                                        Button("Copy Selected Lines") {
-                                            if !isSelected {
-                                                viewModel.selectOutputLine(
-                                                    lineID: line.id,
-                                                    at: index,
-                                                    extending: false,
-                                                    toggling: false
-                                                )
-                                            }
-                                            viewModel.copySelectedOutputLines()
-                                        }
-
-                                        Button("Edit Comment") {
-                                            viewModel.beginEditingComment(
-                                                on: line,
-                                                filteredIndex: index
-                                            )
-                                        }
-                                        .disabled(line.commentReference == nil)
-
-                                        Button("Clear Selection") {
-                                            viewModel.clearOutputSelection()
-                                        }
-                                        .disabled(viewModel.selectedOutputLineCount == 0)
-                                    }
+                        ScrollView([.horizontal, .vertical]) {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                ForEach(lines.indices, id: \.self) { index in
+                                    let line = lines[index]
+                                    outputRow(
+                                        line: line,
+                                        index: index,
+                                        width: geo.size.width
+                                    )
+                                }
                             }
+                            .padding(.vertical, outputContentVerticalPadding)
+                            .frame(minWidth: geo.size.width, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .highPriorityGesture(outputDragSelectionGesture())
+                            .background(ScrollViewAccessor { scrollView in
+                                if outputScrollView !== scrollView {
+                                    outputScrollView = scrollView
+                                }
+                            })
                         }
-                        .padding(.vertical, outputContentVerticalPadding)
-                        .frame(minWidth: geo.size.width, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .highPriorityGesture(outputDragSelectionGesture())
-                        .background(ScrollViewAccessor { scrollView in
-                            if outputScrollView !== scrollView {
-                                outputScrollView = scrollView
-                            }
-                        })
-                    }
-                    .onChange(of: viewModel.procedureScrollRequest) { _, _ in
-                        if let index = viewModel.selectedProcedureFilteredIndex {
-                            scrollOutput(to: index, anchor: .top)
-                        }
-                    }
-                    .onChange(of: viewModel.outputRestoreScrollRequest) { _, _ in
-                        if let index = viewModel.outputRestoreFilteredIndex {
-                            scrollOutput(to: index, anchor: .top)
-                            DispatchQueue.main.async {
+                        .onChange(of: viewModel.procedureScrollRequest) { _, _ in
+                            if let index = viewModel.selectedProcedureFilteredIndex {
                                 scrollOutput(to: index, anchor: .top)
                             }
                         }
-                    }
-                    .onChange(of: viewModel.currentMatchScrollIndex) { _, newValue in
-                        if let index = newValue {
-                            scrollOutput(to: index, anchor: .center)
+                        .onChange(of: viewModel.outputRestoreScrollRequest) { _, _ in
+                            if let index = viewModel.outputRestoreFilteredIndex {
+                                scrollOutput(to: index, anchor: .top)
+                                DispatchQueue.main.async {
+                                    scrollOutput(to: index, anchor: .top)
+                                }
+                            }
+                        }
+                        .onChange(of: viewModel.currentMatchScrollIndex) { _, newValue in
+                            if let index = newValue {
+                                scrollOutput(to: index, anchor: .center)
+                            }
                         }
                     }
+                    Divider()
+                    statusBar
                 }
             }
         }
@@ -368,6 +344,97 @@ struct DetailView: View {
             }
     }
 
+    private var outputHeader: some View {
+        HStack(spacing: 10) {
+            Text(viewModel.fileURL?.lastPathComponent ?? "Disassembly")
+                .font(.headline)
+                .lineLimit(1)
+            Text(viewModel.displaySummary)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+            if viewModel.isSearching {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 10) {
+            Text(viewModel.statusText)
+                .lineLimit(1)
+            Spacer()
+            if let selectedProcedure = viewModel.selectedProcedure {
+                Text("Procedure \(selectedProcedure)")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func outputRow(line: OutputLine, index: Int, width: CGFloat) -> some View {
+        let isMatch = viewModel.lineMatchesCommittedSearch(atFilteredIndex: index)
+        let isCurrentMatch = viewModel.isCurrentMatch(atFilteredIndex: index)
+        let isSelected = viewModel.selectedOutputLineIDs.contains(line.id)
+
+        return HStack(spacing: 0) {
+            Text("\(line.id + 1)")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .frame(width: 56, alignment: .trailing)
+                .padding(.trailing, 8)
+                .textSelection(.disabled)
+
+            Text(line.text)
+                .font(.system(.body, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 8)
+        }
+        .frame(minWidth: width, alignment: .leading)
+        .frame(height: outputRowHeight, alignment: .center)
+        .background(rowBackgroundColor(
+            for: line.kind,
+            isSelected: isSelected,
+            isMatch: isMatch,
+            isCurrentMatch: isCurrentMatch
+        ))
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Copy Selected Lines") {
+                if !isSelected {
+                    viewModel.selectOutputLine(
+                        lineID: line.id,
+                        at: index,
+                        extending: false,
+                        toggling: false
+                    )
+                }
+                viewModel.copySelectedOutputLines()
+            }
+
+            Button("Edit Comment") {
+                viewModel.beginEditingComment(
+                    on: line,
+                    filteredIndex: index
+                )
+            }
+            .disabled(line.commentReference == nil)
+
+            Button("Clear Selection") {
+                viewModel.clearOutputSelection()
+            }
+            .disabled(viewModel.selectedOutputLineCount == 0)
+        }
+    }
+
     private func isClick(_ value: DragGesture.Value) -> Bool {
         abs(value.translation.width) < 3 && abs(value.translation.height) < 3
     }
@@ -409,7 +476,8 @@ struct DetailView: View {
     }
 
     private func outputCharacterOffset(at location: CGPoint) -> Int {
-        let horizontalPadding: CGFloat = 8
+        let gutterWidth: CGFloat = 64
+        let horizontalPadding: CGFloat = gutterWidth + 8
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let characterWidth = max(font.advancement(forGlyph: font.glyph(withName: "0")).width, 1)
         return max(Int((location.x - horizontalPadding) / characterWidth), 0)
@@ -418,6 +486,7 @@ struct DetailView: View {
     private struct LocationEditSheet: View {
         @Bindable var viewModel: DisassemblyViewModel
         @Environment(\.dismiss) private var dismiss
+        @FocusState private var isNameFocused: Bool
 
         var body: some View {
             VStack(alignment: .leading, spacing: 14) {
@@ -435,6 +504,7 @@ struct DetailView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .frame(minWidth: 280)
+                        .focused($isNameFocused)
                     }
 
                     GridRow {
@@ -454,6 +524,7 @@ struct DetailView: View {
                         viewModel.locationEditDraft = nil
                         dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Save") {
                         viewModel.saveLocationEdit()
                         dismiss()
@@ -463,12 +534,14 @@ struct DetailView: View {
             }
             .padding(20)
             .frame(minWidth: 420)
+            .onAppear { isNameFocused = true }
         }
     }
 
     private struct ProcedureSignatureEditSheet: View {
         @Bindable var viewModel: DisassemblyViewModel
         @Environment(\.dismiss) private var dismiss
+        @FocusState private var isFirstFieldFocused: Bool
 
         var body: some View {
             VStack(alignment: .leading, spacing: 14) {
@@ -487,6 +560,7 @@ struct DetailView: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                             .frame(minWidth: 280)
+                            .focused($isFirstFieldFocused)
                         }
                     }
 
@@ -500,6 +574,7 @@ struct DetailView: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                             .frame(minWidth: 280)
+                            .focused($isFirstFieldFocused)
                         }
                     }
                 }
@@ -510,6 +585,7 @@ struct DetailView: View {
                         viewModel.procedureSignatureEditDraft = nil
                         dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Save") {
                         viewModel.saveProcedureSignatureEdit()
                         dismiss()
@@ -519,12 +595,14 @@ struct DetailView: View {
             }
             .padding(20)
             .frame(minWidth: 420)
+            .onAppear { isFirstFieldFocused = true }
         }
     }
 
     private struct CommentEditSheet: View {
         @Bindable var viewModel: DisassemblyViewModel
         @Environment(\.dismiss) private var dismiss
+        @FocusState private var isCommentFocused: Bool
 
         var body: some View {
             VStack(alignment: .leading, spacing: 14) {
@@ -539,6 +617,7 @@ struct DetailView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .frame(minWidth: 420)
+                .focused($isCommentFocused)
 
                 HStack {
                     Spacer()
@@ -546,6 +625,7 @@ struct DetailView: View {
                         viewModel.commentEditDraft = nil
                         dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Save") {
                         viewModel.saveCommentEdit()
                         dismiss()
@@ -555,6 +635,7 @@ struct DetailView: View {
             }
             .padding(20)
             .frame(minWidth: 500)
+            .onAppear { isCommentFocused = true }
         }
     }
 
@@ -565,26 +646,26 @@ struct DetailView: View {
         isCurrentMatch: Bool
     ) -> Color {
         if isSelected {
-            return Color.accentColor.opacity(0.25)
+            return Color.accentColor.opacity(0.22)
         }
         if isCurrentMatch {
-            return Color.yellow.opacity(0.4)
+            return Color.yellow.opacity(0.30)
         }
         if isMatch {
-            return Color.yellow.opacity(0.2)
+            return Color.yellow.opacity(0.14)
         }
         return backgroundColor(for: kind)
     }
 
     private func backgroundColor(for kind: LineKind) -> Color {
         switch kind {
-        case .markup:      return Color.gray.opacity(0.08)
-        case .pcode:       return Color.blue.opacity(0.06)
-        case .pseudocode:  return Color.green.opacity(0.08)
-        case .variable:    return Color.orange.opacity(0.08)
-        case .global:      return Color.purple.opacity(0.06)
-        case .header:      return Color.yellow.opacity(0.10)
-        case .diagnostic:  return Color.red.opacity(0.08)
+        case .markup:      return Color.gray.opacity(0.04)
+        case .pcode:       return Color.blue.opacity(0.025)
+        case .pseudocode:  return Color.green.opacity(0.035)
+        case .variable:    return Color.orange.opacity(0.035)
+        case .global:      return Color.purple.opacity(0.03)
+        case .header:      return Color.gray.opacity(0.08)
+        case .diagnostic:  return Color.red.opacity(0.06)
         }
     }
 }

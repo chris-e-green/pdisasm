@@ -28,11 +28,17 @@ public struct MetadataEditorView: View {
                 )
             } else {
                 VStack(spacing: 0) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
                         TextField("Filter", text: $searchText)
                             .textFieldStyle(.plain)
+                        Spacer()
+                        if viewModel.isDirty {
+                            Text("Edited")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(8)
                     .background(Color(nsColor: .controlBackgroundColor))
@@ -47,6 +53,17 @@ public struct MetadataEditorView: View {
                     case nil:
                         EmptyView()
                     }
+                    Divider()
+                    HStack {
+                        Text(viewModel.statusText)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(nsColor: .controlBackgroundColor))
                 }
                 .navigationTitle(viewModel.selectedFile?.lastPathComponent ?? "")
                 .toolbar {
@@ -77,6 +94,16 @@ public struct MetadataEditorView: View {
                         }
                         .disabled(!viewModel.isDirty)
                         .keyboardShortcut("s", modifiers: .command)
+                    }
+                }
+                .onDeleteCommand {
+                    switch viewModel.selectedFileKind {
+                    case .csv:
+                        viewModel.deleteSelectedRows()
+                    case .recordsJSON:
+                        viewModel.deleteSelectedRecord()
+                    case .pascalTypes, nil:
+                        break
                     }
                 }
             }
@@ -179,8 +206,14 @@ public struct MetadataEditorView: View {
             }
         }
         .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(record.id == viewModel.selectedRecordID
+            ? Color.accentColor.opacity(0.18)
+            : Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            viewModel.selectedRecordID = record.id
+        }
     }
 
     private func recordsHeader(_ text: String, width: CGFloat) -> some View {
@@ -245,6 +278,13 @@ public struct MetadataEditorView: View {
                             .padding(.vertical, 2)
                             .frame(minWidth: 100, alignment: .leading)
                         }
+                    }
+                    .background(row.id == viewModel.selectedCSVRowID
+                        ? Color.accentColor.opacity(0.18)
+                        : Color.clear)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.selectedCSVRowID = row.id
                     }
                     .contextMenu {
                         Button("Delete Row", role: .destructive) {

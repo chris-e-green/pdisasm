@@ -20,6 +20,7 @@ struct PdisasmApp: App {
         WindowGroup {
             ContentView(appState: appState)
         }
+        .defaultSize(width: 1200, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Open…") {
@@ -34,6 +35,18 @@ struct PdisasmApp: App {
                     openWindow(id: "metadata-editor")
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") {
+                    NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
+                }
+                .keyboardShortcut("z", modifiers: .command)
+
+                Button("Redo") {
+                    NSApp.sendAction(Selector(("redo:")), to: nil, from: nil)
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
             }
 
             CommandGroup(replacing: .pasteboard) {
@@ -108,6 +121,18 @@ struct PdisasmApp: App {
 
         WindowGroup("Metadata Editor", id: "metadata-editor") {
             MetadataEditorView(relevantFilenames: appState.relevantMetadataFiles)
+        }
+        .defaultSize(width: 980, height: 700)
+
+        Settings {
+            Form {
+                Text("pdisasm")
+                    .font(.headline)
+                Text("Metadata files are stored in Application Support/pdisasm.")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(20)
+            .frame(width: 420)
         }
     }
 }

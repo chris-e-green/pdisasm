@@ -158,8 +158,50 @@ final class DisassemblyViewModel {
         procedureScrollRequest += 1
     }
 
+    func selectProcedure(_ procedureID: String?) {
+        guard let procedureID else {
+            selectedProcedure = nil
+            selectedProcedureFilteredIndex = nil
+            return
+        }
+        scrollToProcedure(procedureID)
+    }
+
     var selectedOutputLineCount: Int {
         filteredLines.filter { selectedOutputLineIDs.contains($0.id) }.count
+    }
+
+    var procedureCount: Int {
+        segments.reduce(0) { $0 + $1.procedures.count }
+    }
+
+    var statusText: String {
+        guard fileURL != nil else { return "No file open" }
+        if isLoading { return "Disassembling..." }
+        if let errorMessage { return errorMessage }
+
+        var parts: [String] = []
+        parts.append("\(segments.count) segments")
+        parts.append("\(procedureCount) procedures")
+        parts.append("\(filteredLines.count) lines")
+        if selectedOutputLineCount > 0 {
+            parts.append("\(selectedOutputLineCount) selected")
+        }
+        if !searchMatchIndices.isEmpty {
+            parts.append("\(searchMatchIndices.count) matches")
+        }
+        return parts.joined(separator: "   ")
+    }
+
+    var displaySummary: String {
+        var enabled: [String] = []
+        if showMarkup { enabled.append("Markup") }
+        if showPCode { enabled.append("P-Code") }
+        if showPseudoCode { enabled.append("Pseudocode") }
+        if showVariables { enabled.append("Variables") }
+        if showStackState { enabled.append("Stack") }
+        if verbose { enabled.append("Verbose") }
+        return enabled.isEmpty ? "No optional sections" : enabled.joined(separator: ", ")
     }
 
     var selectedOutputText: String {
@@ -989,6 +1031,7 @@ final class DisassemblyViewModel {
 
     func openFile(url: URL) {
         fileURL = url
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
         persistURL(url)
         runDisassembly()
     }

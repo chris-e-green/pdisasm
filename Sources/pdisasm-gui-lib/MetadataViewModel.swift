@@ -96,6 +96,8 @@ final class MetadataViewModel {
 
     /// Whether there are unsaved edits.
     var isDirty: Bool = false
+    var selectedCSVRowID: UUID?
+    var selectedRecordID: UUID?
 
     /// Metadata filenames that are relevant to the current disassembly.
     var relevantFilenames: [String] = [] {
@@ -103,6 +105,22 @@ final class MetadataViewModel {
     }
 
     var errorMessage: String?
+
+    var statusText: String {
+        guard let selectedFile else { return "No metadata file selected" }
+        let dirty = isDirty ? "Edited" : "Saved"
+        switch selectedFileKind {
+        case .csv:
+            return "\(selectedFile.lastPathComponent)   \(rows.count) rows   \(columns.count) columns   \(dirty)"
+        case .recordsJSON:
+            let memberCount = records.reduce(0) { $0 + $1.members.count }
+            return "\(selectedFile.lastPathComponent)   \(records.count) records   \(memberCount) members   \(dirty)"
+        case .pascalTypes:
+            return "\(selectedFile.lastPathComponent)   \(textContent.count) characters   \(dirty)"
+        case nil:
+            return selectedFile.lastPathComponent
+        }
+    }
 
     // MARK: - Init
 
@@ -148,6 +166,8 @@ final class MetadataViewModel {
             records = []
             textContent = ""
             selectedFileKind = nil
+            selectedCSVRowID = nil
+            selectedRecordID = nil
             return
         }
         guard let kind = fileKind(for: url) else {
@@ -156,6 +176,8 @@ final class MetadataViewModel {
             records = []
             textContent = ""
             selectedFileKind = nil
+            selectedCSVRowID = nil
+            selectedRecordID = nil
             return
         }
         selectedFileKind = kind
@@ -195,6 +217,8 @@ final class MetadataViewModel {
             fillMissingSourceValues(typeColumn: MetadataColumn.returnType, sourceColumn: MetadataColumn.returnTypeSource)
             records = []
             textContent = ""
+            selectedCSVRowID = nil
+            selectedRecordID = nil
             isDirty = false
             errorMessage = nil
         } catch {
@@ -227,6 +251,8 @@ final class MetadataViewModel {
             columns = []
             rows = []
             textContent = ""
+            selectedCSVRowID = nil
+            selectedRecordID = nil
             isDirty = false
             errorMessage = nil
         } catch {
@@ -242,6 +268,8 @@ final class MetadataViewModel {
             columns = []
             rows = []
             records = []
+            selectedCSVRowID = nil
+            selectedRecordID = nil
             isDirty = false
             errorMessage = nil
         } catch {
@@ -274,7 +302,17 @@ final class MetadataViewModel {
 
     func deleteRows(at offsets: IndexSet) {
         rows.remove(atOffsets: offsets)
+        if let selectedCSVRowID, !rows.contains(where: { $0.id == selectedCSVRowID }) {
+            self.selectedCSVRowID = nil
+        }
         isDirty = true
+    }
+
+    func deleteSelectedRows() {
+        guard let selectedCSVRowID,
+              let index = rows.firstIndex(where: { $0.id == selectedCSVRowID })
+        else { return }
+        deleteRows(at: IndexSet(integer: index))
     }
 
     func addRecord() {
@@ -284,7 +322,17 @@ final class MetadataViewModel {
 
     func deleteRecord(_ record: RecordRow) {
         records.removeAll { $0.id == record.id }
+        if selectedRecordID == record.id {
+            selectedRecordID = nil
+        }
         isDirty = true
+    }
+
+    func deleteSelectedRecord() {
+        guard let selectedRecordID,
+              let record = records.first(where: { $0.id == selectedRecordID })
+        else { return }
+        deleteRecord(record)
     }
 
     func updateRecordName(_ record: RecordRow, newValue: String) {
