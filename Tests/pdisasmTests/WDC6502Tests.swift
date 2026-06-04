@@ -436,6 +436,42 @@ final class WDC6502Tests: XCTestCase {
         XCTAssertTrue(proc.instructions[13]?.mnemonic.contains("68 69 6a") == true)
     }
 
+    func testDataRowsOverlappedByLaterDecodedInstructionOperandsAreRemoved() throws {
+        var bytes: [UInt8] = []
+        bytes += [0x4c, 0x20, 0x00] // JMP $0020
+        bytes += Array(repeating: 0xea, count: 12) // initially data at 0x0003..0x000e
+        bytes += [0x84, 0x85] // later decoded as STY $85 at 0x000f, crossing row 0x0010
+        bytes += [0x60] // RTS at 0x0011
+        bytes += Array(repeating: 0xea, count: 14) // initially data at 0x0012..0x001f
+        bytes += [0xd0, 0xed] // BNE $000f from 0x0020
+        bytes += [0x60] // RTS at 0x0022
+
+        bytes += [0x00, 0x00]   // interp
+        bytes += [0x00, 0x00]   // proc
+        bytes += [0x00, 0x00]   // seg
+        bytes += [0x00, 0x00]   // base
+        let enterSelfRefPos = bytes.count
+        bytes += [UInt8(enterSelfRefPos), 0x00]
+        bytes += [0x01, 0x00]
+
+        let code = Data(bytes)
+        var proc = Procedure()
+        var assemblerEntryPoints: Set<Int> = []
+
+        try decodeAssemblerProcedure(
+            segmentNumber: 1,
+            procedureNumber: 1,
+            proc: &proc,
+            code: code,
+            addr: code.count - 2,
+            assemblerEntryPoints: &assemblerEntryPoints
+        )
+
+        XCTAssertTrue(proc.instructions[0x000f]?.mnemonic.contains("STY $85") == true)
+        XCTAssertTrue(proc.instructions[0x0011]?.mnemonic.contains("RTS") == true)
+        XCTAssertFalse(proc.instructions[0x0010]?.mnemonic.contains(" | ") == true)
+    }
+
     func testDecodesFinalOpcodeAtCodeRegionEnd() throws {
         var bytes: [UInt8] = []
         bytes += [0xea, 0x60] // NOP, RTS

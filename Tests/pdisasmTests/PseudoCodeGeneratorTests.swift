@@ -42,6 +42,24 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertTrue(stack.values.isEmpty)
     }
 
+    func testSTOToRecordWithoutFieldPointerUsesOffsetZeroMember() {
+        let record = PascalRecord(
+            name: "DISPSTATE",
+            members: [
+                0: Identifier(name: "LEFT", type: "INTEGER"),
+                1: Identifier(name: "RIGHT", type: "INTEGER"),
+                2: Identifier(name: "BOTTOM", type: "INTEGER")
+            ]
+        )
+        var stack = StackSimulator()
+        stack.push(("DISPSTATE_COPY", "DISPSTATE"), kind: .value)
+        stack.push(("0", "INTEGER"), kind: .constant)
+        let inst = Instruction(opcode: sto, mnemonic: "STO")
+        var gen = makeGenerator(records: [record])
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+        XCTAssertEqual(result, "DISPSTATE_COPY.LEFT := 0")
+    }
+
     // MARK: - MOV generates assignment
 
     func testMOVAssignment() {
@@ -1303,6 +1321,41 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         let value = stack.popStackValue()
         XCTAssertEqual(value.text, "W^.FIRST")
         XCTAssertEqual(value.type, "ITEMREF")
+    }
+
+    func testVariantRecordFieldsShareOffsets() {
+        let definitions = PascalTypeDefinitionParser.parse("""
+            TYPE
+            NODE=RECORD
+              NEXT: ^NODE;
+              CASE KIND: INTEGER OF
+                0: (IVALUE: INTEGER);
+                1: (RVALUE: REAL);
+                2: (CH: CHAR; COUNT: INTEGER)
+            END;
+            UNTYPED=RECORD
+              PREFIX: INTEGER;
+              CASE INTEGER OF
+                0: (LEFT: INTEGER);
+                1: (RIGHT: CHAR)
+            END;
+            """)
+
+        let node = definitions.records.first { $0.name == "NODE" }
+        XCTAssertEqual(node?.members[0]?.name, "NEXT")
+        XCTAssertEqual(node?.members[1]?.name, "KIND")
+        XCTAssertEqual(node?.members[2]?.name, "IVALUE")
+        XCTAssertEqual(node?.allMembers.first { $0.identifier.name == "IVALUE" }?.offset, 2)
+        XCTAssertEqual(node?.allMembers.first { $0.identifier.name == "RVALUE" }?.offset, 2)
+        XCTAssertEqual(node?.allMembers.first { $0.identifier.name == "CH" }?.offset, 2)
+        XCTAssertEqual(node?.allMembers.first { $0.identifier.name == "COUNT" }?.offset, 3)
+        XCTAssertEqual(node?.allMembers.first { $0.identifier.name == "RVALUE" }?.variantLabel, "1")
+
+        let untyped = definitions.records.first { $0.name == "UNTYPED" }
+        XCTAssertEqual(untyped?.members[0]?.name, "PREFIX")
+        XCTAssertEqual(untyped?.members[1]?.name, "LEFT")
+        XCTAssertEqual(untyped?.allMembers.first { $0.identifier.name == "LEFT" }?.offset, 1)
+        XCTAssertEqual(untyped?.allMembers.first { $0.identifier.name == "RIGHT" }?.offset, 1)
     }
 
     func testINDUsesRealRepresentationAccess() {

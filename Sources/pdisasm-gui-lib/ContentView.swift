@@ -261,6 +261,14 @@ struct DetailView: View {
                                             viewModel.copySelectedOutputLines()
                                         }
 
+                                        Button("Edit Comment") {
+                                            viewModel.beginEditingComment(
+                                                on: line,
+                                                filteredIndex: index
+                                            )
+                                        }
+                                        .disabled(line.commentReference == nil)
+
                                         Button("Clear Selection") {
                                             viewModel.clearOutputSelection()
                                         }
@@ -304,6 +312,9 @@ struct DetailView: View {
         }
         .sheet(item: $viewModel.procedureSignatureEditDraft) { _ in
             ProcedureSignatureEditSheet(viewModel: viewModel)
+        }
+        .sheet(item: $viewModel.commentEditDraft) { _ in
+            CommentEditSheet(viewModel: viewModel)
         }
     }
 
@@ -508,6 +519,42 @@ struct DetailView: View {
             }
             .padding(20)
             .frame(minWidth: 420)
+        }
+    }
+
+    private struct CommentEditSheet: View {
+        @Bindable var viewModel: DisassemblyViewModel
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(viewModel.commentEditDraft?.title ?? "Comment")
+                    .font(.headline)
+                    .monospaced()
+
+                TextField("Comment", text: Binding(
+                    get: { viewModel.commentEditDraft?.comment ?? "" },
+                    set: { viewModel.commentEditDraft?.comment = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .frame(minWidth: 420)
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        viewModel.commentEditDraft = nil
+                        dismiss()
+                    }
+                    Button("Save") {
+                        viewModel.saveCommentEdit()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 500)
         }
     }
 

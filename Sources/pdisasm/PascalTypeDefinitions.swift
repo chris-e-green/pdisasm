@@ -60,9 +60,11 @@ enum PascalTypeDefinitionParser {
                 continue
             }
             if isRecordType(rhs) {
+                let allMembers = parseRecordAllMembers(rhs, constants: definitions.constants)
                 definitions.records.insert(PascalRecord(
                     name: declaration.name,
-                    members: parseRecordMembers(rhs, constants: definitions.constants),
+                    members: primaryMembers(from: allMembers),
+                    allMembers: allMembers,
                     isSystemRecord: isSystemRecord
                 ))
             } else if let cases = parseScalarCases(rhs) {
@@ -165,23 +167,189 @@ enum PascalTypeDefinitionParser {
         return result
     }
 
-    private static func parseRecordMembers(_ typeText: String, constants: [String: Int]) -> [Int: Identifier] {
-        guard let body = recordBody(typeText) else { return [:] }
+    private static func parseRecordAllMembers(
+        _ typeText: String,
+        constants: [String: Int]
+    ) -> [PascalRecordMember] {
+        guard let body = recordBody(typeText) else { return [] }
+        let parsed = parseRecordMemberList(
+            body,
+            startOffset: 0,
+            constants: constants,
+            variantLabel: nil
+        )
+        return parsed.members
+    }
+
+    private static func primaryMembers(from allMembers: [PascalRecordMember]) -> [Int: Identifier] {
         var members: [Int: Identifier] = [:]
-        var offset = 0
-        for declaration in body.split(separator: ";") {
-            let parts = declaration.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else { continue }
-            let names = parts[0].split(separator: ",").map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            }
-            let type = normalizeType(String(parts[1]), constants: constants)
-            for name in names where !name.isEmpty {
-                members[offset] = Identifier(name: name, type: type)
-                offset += 1
-            }
+        for member in allMembers where members[member.offset] == nil {
+            members[member.offset] = member.identifier
         }
         return members
+    }
+
+    private static func parseRecordMemberList(
+        _ body: String,
+        startOffset: Int,
+        constants: [String: Int],
+        variantLabel: String?
+    ) -> (members: [PascalRecordMember], size: Int) {
+        let chars = Array(body)
+        var index = 0
+        var offset = startOffset
+        var members: [PascalRecordMember] = []
+
+        while index < chars.count {
+            skipSeparators(chars, &index)
+            guard index < chars.count else { break }
+
+            if startsWithWord("CASE", chars, index) {
+                let parsedCase = parseVariantCase(
+                    chars,
+                    from: index,
+                    startOffset: offset,
+                    constants: constants
+                )
+                guard parsedCase.nextIndex > index else { break }
+                members.append(contentsOf: parsedCase.members)
+                offset += parsedCase.size
+                index = parsedCase.nextIndex
+                continue
+            }
+
+            let declarationStart = index
+            guard let declarationEnd = nextTopLevelIndex(of: ";", in: chars, from: index) else {
+                index = chars.count
+                let declaration = String(chars[declarationStart..<index])
+                let parsed = parseFieldDeclaration(
+                    declaration,
+                    startOffset: offset,
+                    constants: constants,
+                    variantLabel: variantLabel
+                )
+                members.append(contentsOf: parsed.members)
+                offset += parsed.size
+                break
+            }
+
+            index = declarationEnd + 1
+            let declaration = String(chars[declarationStart..<declarationEnd])
+            let parsed = parseFieldDeclaration(
+                declaration,
+                startOffset: offset,
+                constants: constants,
+                variantLabel: variantLabel
+            )
+            members.append(contentsOf: parsed.members)
+            offset += parsed.size
+        }
+
+        return (members, max(offset - startOffset, 0))
+    }
+
+    private static func parseVariantCase(
+        _ chars: [Character],
+        from start: Int,
+        startOffset: Int,
+        constants: [String: Int]
+    ) -> (members: [PascalRecordMember], size: Int, nextIndex: Int) {
+        var index = start + 4
+        guard let ofIndex = nextTopLevelWord("OF", in: chars, from: index) else {
+            return ([], 0, start)
+        }
+
+        let header = String(chars[index..<ofIndex])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var members: [PascalRecordMember] = []
+        var variantBaseOffset = startOffset
+
+        if let colonIndex = topLevelColonIndex(in: Array(header)) {
+            let headerChars = Array(header)
+            let tagName = String(headerChars[..<colonIndex])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            let tagType = String(headerChars[(colonIndex + 1)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tagName.isEmpty {
+                members.append(PascalRecordMember(
+                    offset: startOffset,
+                    identifier: Identifier(
+                        name: tagName,
+                        type: normalizeType(tagType, constants: constants)
+                    )
+                ))
+                variantBaseOffset += 1
+            }
+        }
+
+        index = ofIndex + 2
+        var maxVariantSize = 0
+        while index < chars.count {
+            skipSeparators(chars, &index)
+            guard index < chars.count else { break }
+
+            guard let colonIndex = topLevelColonIndex(in: chars, from: index) else {
+                break
+            }
+            let label = String(chars[index..<colonIndex])
+                .split(whereSeparator: { $0.isWhitespace })
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            var valueIndex = colonIndex + 1
+            skipWhitespace(chars, &valueIndex)
+            guard valueIndex < chars.count, chars[valueIndex] == "(",
+                  let closeIndex = matchingParenIndex(in: chars, from: valueIndex)
+            else {
+                break
+            }
+
+            let armBody = String(chars[(valueIndex + 1)..<closeIndex])
+            let parsedArm = parseRecordMemberList(
+                armBody,
+                startOffset: variantBaseOffset,
+                constants: constants,
+                variantLabel: label.isEmpty ? nil : label
+            )
+            members.append(contentsOf: parsedArm.members)
+            maxVariantSize = max(maxVariantSize, parsedArm.size)
+            index = closeIndex + 1
+            if index < chars.count, chars[index] == ";" {
+                index += 1
+            }
+        }
+
+        return (
+            members,
+            (variantBaseOffset - startOffset) + maxVariantSize,
+            index
+        )
+    }
+
+    private static func parseFieldDeclaration(
+        _ declaration: String,
+        startOffset: Int,
+        constants: [String: Int],
+        variantLabel: String?
+    ) -> (members: [PascalRecordMember], size: Int) {
+        let chars = Array(declaration)
+        guard let colonIndex = topLevelColonIndex(in: chars) else { return ([], 0) }
+        let names = String(chars[..<colonIndex]).split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        }
+        let type = normalizeType(String(chars[(colonIndex + 1)...]), constants: constants)
+        var members: [PascalRecordMember] = []
+        var offset = startOffset
+        for name in names where !name.isEmpty {
+            members.append(PascalRecordMember(
+                offset: offset,
+                identifier: Identifier(name: name, type: type),
+                variantLabel: variantLabel
+            ))
+            offset += 1
+        }
+        return (members, offset - startOffset)
     }
 
     private static func recordBody(_ typeText: String) -> String? {
@@ -302,6 +470,68 @@ enum PascalTypeDefinitionParser {
         while index < chars.count {
             if chars[index] == character {
                 return index
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func nextTopLevelIndex(
+        of character: Character,
+        in chars: [Character],
+        from start: Int
+    ) -> Int? {
+        var index = start
+        var parenDepth = 0
+        while index < chars.count {
+            if chars[index] == "(" {
+                parenDepth += 1
+            } else if chars[index] == ")" {
+                parenDepth = max(parenDepth - 1, 0)
+            } else if chars[index] == character && parenDepth == 0 {
+                return index
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func nextTopLevelWord(
+        _ word: String,
+        in chars: [Character],
+        from start: Int
+    ) -> Int? {
+        var index = start
+        var parenDepth = 0
+        while index < chars.count {
+            if chars[index] == "(" {
+                parenDepth += 1
+            } else if chars[index] == ")" {
+                parenDepth = max(parenDepth - 1, 0)
+            } else if parenDepth == 0 && startsWithWord(word, chars, index) {
+                return index
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func topLevelColonIndex(in chars: [Character], from start: Int = 0) -> Int? {
+        nextTopLevelIndex(of: ":", in: chars, from: start)
+    }
+
+    private static func matchingParenIndex(in chars: [Character], from openIndex: Int) -> Int? {
+        guard openIndex < chars.count, chars[openIndex] == "(" else { return nil }
+        var index = openIndex
+        var depth = 0
+        while index < chars.count {
+            if chars[index] == "(" {
+                depth += 1
+            } else if chars[index] == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
             }
             index += 1
         }

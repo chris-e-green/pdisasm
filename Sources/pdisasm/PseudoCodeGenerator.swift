@@ -753,6 +753,10 @@ struct PseudoCodeGenerator {
         return knownRecords.first { $0.name == type }
     }
 
+    func recordField(at offset: Int, for type: String?) -> Identifier? {
+        recordDefinition(for: type)?.members[offset]
+    }
+
     private func resolveType(_ type: String?) -> String? {
         guard let type else { return nil }
         var current = type.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()

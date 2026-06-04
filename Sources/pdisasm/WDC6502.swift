@@ -257,10 +257,11 @@ private func processAssemblerDataRegion(
     instructionPointer: inout Int,
     inCode: inout Bool
 ) throws {
-    func emitDataInstruction(start: Int, bytes: String, ascii: String) {
+    func emitDataInstruction(start: Int, end: Int, bytes: String, ascii: String) {
         proc.instructions[start] = Instruction(
             opcode: opcodeByte,
             mnemonic: bytes + String(repeating: " ", count: max(0, 50 - bytes.count)) + " | " + ascii,
+            params: [start, end],
             isPascal: false,
             stackState: []
         )
@@ -282,7 +283,12 @@ private func processAssemblerDataRegion(
 
     while instructionPointer < codeEnd && !inCode {
         if instructionPointer.isMultiple(of: 16) && !bytesString.isEmpty {
-            emitDataInstruction(start: dataChunkStart, bytes: bytesString, ascii: asciiString)
+            emitDataInstruction(
+                start: dataChunkStart,
+                end: instructionPointer,
+                bytes: bytesString,
+                ascii: asciiString
+            )
             bytesString = ""
             asciiString = ""
             dataChunkStart = instructionPointer
@@ -318,7 +324,12 @@ private func processAssemblerDataRegion(
     }
 
     if !bytesString.isEmpty {
-        emitDataInstruction(start: dataChunkStart, bytes: bytesString, ascii: asciiString)
+        emitDataInstruction(
+            start: dataChunkStart,
+            end: instructionPointer,
+            bytes: bytesString,
+            ascii: asciiString
+        )
     }
 }
 
@@ -335,6 +346,42 @@ func decodeAssemblerProcedure(
 
     func isAssemblerDataInstruction(_ instruction: Instruction) -> Bool {
         instruction.mnemonic.contains(" | ")
+    }
+
+    func assemblerDataRange(_ instruction: Instruction, at offset: Int) -> Range<Int>? {
+        guard isAssemblerDataInstruction(instruction) else { return nil }
+        if instruction.params.count == 2, instruction.params[0] < instruction.params[1] {
+            return instruction.params[0]..<instruction.params[1]
+        }
+        return offset..<min(offset + 16, code.count)
+    }
+
+    func assemblerCodeRange(_ instruction: Instruction, at offset: Int) -> Range<Int>? {
+        guard instruction.isPascal == false, !isAssemblerDataInstruction(instruction) else {
+            return nil
+        }
+        let length = (wdc6502[instruction.opcode]?.paramLength ?? 0) + 1
+        return offset..<min(offset + length, code.count)
+    }
+
+    func rangesOverlap(_ lhs: Range<Int>, _ rhs: Range<Int>) -> Bool {
+        lhs.lowerBound < rhs.upperBound && rhs.lowerBound < lhs.upperBound
+    }
+
+    func removeAssemblerDataOverlappingCode() {
+        let codeRanges = proc.instructions.compactMap { offset, instruction in
+            assemblerCodeRange(instruction, at: offset)
+        }
+        guard !codeRanges.isEmpty else { return }
+
+        for (offset, instruction) in proc.instructions {
+            guard let dataRange = assemblerDataRange(instruction, at: offset),
+                  codeRanges.contains(where: { rangesOverlap(dataRange, $0) })
+            else {
+                continue
+            }
+            proc.instructions.removeValue(forKey: offset)
+        }
     }
 
     if let existingIdentifier = proc.identifier {
@@ -438,8 +485,7 @@ func decodeAssemblerProcedure(
         // If this entry point lands inside an emitted data line, drop overlapping
         // data starts so code decode can proceed from the actual entry point.
         for (offset, instruction) in proc.instructions
-        where isAssemblerDataInstruction(instruction)
-            && offset <= entryPoint && offset + 16 > entryPoint
+        where assemblerDataRange(instruction, at: offset)?.contains(entryPoint) == true
         {
             proc.instructions.removeValue(forKey: offset)
         }
@@ -474,6 +520,8 @@ func decodeAssemblerProcedure(
             }
         }
     }
+
+    removeAssemblerDataOverlappingCode()
 }
 
 func resolveAssemblerProcedureTargets(

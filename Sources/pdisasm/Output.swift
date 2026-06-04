@@ -178,6 +178,7 @@ public struct OutputLine: Identifiable, Sendable {
     /// Optional anchor identifier (e.g. "2.3") used as a scroll target for procedure headers.
     public let anchor: String?
     public let locationReference: LocationReference?
+    public let commentReference: InstructionReference?
     public let headerEditTargets: [HeaderEditTarget]
 
     public init(
@@ -186,6 +187,7 @@ public struct OutputLine: Identifiable, Sendable {
         text: String,
         anchor: String? = nil,
         locationReference: LocationReference? = nil,
+        commentReference: InstructionReference? = nil,
         headerEditTargets: [HeaderEditTarget] = []
     ) {
         self.id = id
@@ -193,8 +195,19 @@ public struct OutputLine: Identifiable, Sendable {
         self.text = text
         self.anchor = anchor
         self.locationReference = locationReference
+        self.commentReference = commentReference
         self.headerEditTargets = headerEditTargets
     }
+}
+
+private func assemblerCommentText(for instruction: Instruction) -> String? {
+    let comments = [instruction.comment, instruction.userComment]
+        .compactMap { comment -> String? in
+            let trimmed = comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    guard !comments.isEmpty else { return nil }
+    return comments.joined(separator: "; ")
 }
 
 private func defaultProcedureName(for procedure: ProcedureIdentifier) -> String {
@@ -314,10 +327,23 @@ private func renderKnownTypeDefinitionLines(
 
     for record in records.sorted(by: { $0.name < $1.name }) {
         lines.append("  \(record.name) = RECORD")
-        for offset in record.members.keys.sorted() {
-            guard let member = record.members[offset] else { continue }
-            let type = member.type.isEmpty ? "UNKNOWN" : member.type
-            lines.append("    \(member.name): \(type); (* offset \(offset) *)")
+        let renderedMembers = record.allMembers.isEmpty
+            ? record.members.keys.sorted().compactMap { offset in
+                record.members[offset].map {
+                    PascalRecordMember(offset: offset, identifier: $0)
+                }
+            }
+            : record.allMembers.sorted {
+                if $0.offset != $1.offset {
+                    return $0.offset < $1.offset
+                }
+                return $0.identifier.name < $1.identifier.name
+            }
+        for member in renderedMembers {
+            let identifier = member.identifier
+            let type = identifier.type.isEmpty ? "UNKNOWN" : identifier.type
+            let variant = member.variantLabel.map { " variant \($0)," } ?? ""
+            lines.append("    \(identifier.name): \(type); (*\(variant) offset \(member.offset) *)")
         }
         lines.append("  END;")
     }
@@ -388,13 +414,19 @@ private func unknownKnownTypeDiagnostics(
     }
 
     for record in records.sorted(by: { $0.name < $1.name }) {
-        for offset in record.members.keys.sorted() {
-            guard let member = record.members[offset],
-                  let unknownType = unresolvedFinalType(member.type)
+        let diagnosticMembers = record.allMembers.isEmpty
+            ? record.members.keys.sorted().compactMap { offset in
+                record.members[offset].map {
+                    PascalRecordMember(offset: offset, identifier: $0)
+                }
+            }
+            : record.allMembers
+        for member in diagnosticMembers.sorted(by: { $0.offset < $1.offset }) {
+            guard let unknownType = unresolvedFinalType(member.identifier.type)
             else { continue }
             diagnostics.append(Diagnostic(
                 severity: .warning,
-                message: "RECORD \(record.name).\(member.name) at offset \(offset) resolves to unknown final type \(unknownType)"
+                message: "RECORD \(record.name).\(member.identifier.name) at offset \(member.offset) resolves to unknown final type \(unknownType)"
             ))
         }
     }
@@ -416,6 +448,7 @@ public func renderStructuredLines(
         _ text: String,
         anchor: String? = nil,
         location: Location? = nil,
+        commentReference: InstructionReference? = nil,
         headerEditTargets: [HeaderEditTarget] = []
     ) {
         if text.contains("\n") {
@@ -426,6 +459,7 @@ public func renderStructuredLines(
                     String(part),
                     anchor: index == 0 ? anchor : nil,
                     location: index == 0 ? location : nil,
+                    commentReference: index == 0 ? commentReference : nil,
                     headerEditTargets: index == 0 ? headerEditTargets : []
                 )
             }
@@ -438,6 +472,7 @@ public func renderStructuredLines(
             text: text,
             anchor: anchor,
             locationReference: location.map(LocationReference.init),
+            commentReference: commentReference,
             headerEditTargets: headerEditTargets
         ))
         nextID += 1
@@ -680,7 +715,7 @@ public func renderStructuredLines(
                             }
                         } else { // not pascal
                             pcLine += inst.mnemonic
-                            if let comment = inst.comment {
+                            if let comment = assemblerCommentText(for: inst) {
                                 pcLine += " ; \(comment)"
                             }
                             if let destination = inst.destination {
@@ -690,7 +725,15 @@ public func renderStructuredLines(
                                     allProcedures: result.allProcedures
                                 )
                             }
-                            addLine(.pcode, pcLine)
+                            addLine(
+                                .pcode,
+                                pcLine,
+                                commentReference: InstructionReference(
+                                    segment: s,
+                                    procedure: proc.identifier?.procedure,
+                                    addr: address
+                                )
+                            )
                         }
                     }
 

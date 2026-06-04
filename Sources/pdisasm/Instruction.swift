@@ -7,6 +7,7 @@ public class Instruction {
     public var memLocation: Location?
     public var destination: Location?
     public var comment: String?
+    public var userComment: String?
     public var isPascal: Bool = true
     public var stackState: [String]?
     public var prePseudoCode: [String]  // pseudo-code to print before instruction
@@ -22,6 +23,7 @@ public class Instruction {
         memLocation: Location? = nil,
         destination: Location? = nil,
         comment: String? = nil,
+        userComment: String? = nil,
         isPascal: Bool = true,
         stackState: [String]? = nil,
         pseudoCode: String? = nil,
@@ -35,6 +37,7 @@ public class Instruction {
         self.memLocation = memLocation
         self.destination = destination
         self.comment = comment
+        self.userComment = userComment
         self.isPascal = isPascal
         self.stackState = stackState
         self.pseudoCodeStatement = pseudoCode.map {

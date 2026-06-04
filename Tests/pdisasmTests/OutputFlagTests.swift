@@ -142,6 +142,67 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertFalse(out.contains("0000:"))
     }
 
+    func testAssemblerUserCommentsRenderAndExposeEditableReference() {
+        let seg = Segment(
+            codeAddress: 0,
+            codeLength: 0,
+            name: "ASM",
+            segmentKind: .unitseg,
+            textAddress: 0,
+            segNum: 1,
+            machineType: 7,
+            version: 0
+        )
+        let dict = SegDictionary(segTable: [1: seg], intrinsics: [], comment: "")
+        let proc = Procedure()
+        proc.identifier = ProcedureIdentifier(
+            isFunction: false,
+            isAssembly: true,
+            segment: 1,
+            segmentName: "ASM",
+            procedure: 2,
+            procName: "DOIT"
+        )
+        proc.instructions[0x443] = Instruction(
+            opcode: 0xa4,
+            mnemonic: "a4 80   LDY $80",
+            comment: "decoded",
+            userComment: "user note",
+            isPascal: false
+        )
+        proc.entryPoints = [0x443]
+        let codeSeg = CodeSegment(
+            procedureDictionary: ProcedureDictionary(procedureCount: 1, procedurePointers: [0]),
+            procedures: [proc]
+        )
+        let result = DisassemblyResult(
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegments: [1: codeSeg],
+            dataSegments: [],
+            allLocations: [],
+            allProcedures: [proc.identifier!],
+            allCallers: [],
+            knownRecords: [],
+            typeAliases: [:],
+            scalarTypes: [:],
+            constants: [:],
+            subrangeTypes: [:],
+            typeConflicts: [],
+            diagnostics: []
+        )
+
+        let lines = renderStructuredLines(from: result)
+        let assemblerLine = lines.first { $0.text.contains("LDY $80") }
+
+        XCTAssertTrue(assemblerLine?.text.contains("; decoded; user note") == true)
+        XCTAssertEqual(assemblerLine?.commentReference, InstructionReference(
+            segment: 1,
+            procedure: 2,
+            addr: 0x443
+        ))
+    }
+
     // MARK: - showStackState
 
     func testShowStackStateTrueIncludesStackState() {
@@ -324,6 +385,41 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertTrue(out.contains("    FIRST: ITEMREF; (* offset 1 *)"))
         XCTAssertTrue(out.contains("    RIGHT: WORDREF; (* offset 3 *)"))
         XCTAssertTrue(out.contains("  END;"))
+    }
+
+    func testKnownTypesOutputShowsVariantRecordMembers() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        let record = PascalRecord(
+            name: "NODE",
+            members: [
+                0: Identifier(name: "KIND", type: "INTEGER"),
+                1: Identifier(name: "IVALUE", type: "INTEGER")
+            ],
+            allMembers: [
+                PascalRecordMember(offset: 0, identifier: Identifier(name: "KIND", type: "INTEGER")),
+                PascalRecordMember(offset: 1, identifier: Identifier(name: "IVALUE", type: "INTEGER"), variantLabel: "0"),
+                PascalRecordMember(offset: 1, identifier: Identifier(name: "RVALUE", type: "REAL"), variantLabel: "1")
+            ]
+        )
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [],
+                allLocations: locs,
+                allProcedures: procs,
+                allCallers: callers,
+                knownRecords: [record],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("  NODE = RECORD"))
+        XCTAssertTrue(out.contains("    KIND: INTEGER; (* offset 0 *)"))
+        XCTAssertTrue(out.contains("    IVALUE: INTEGER; (* variant 0, offset 1 *)"))
+        XCTAssertTrue(out.contains("    RVALUE: REAL; (* variant 1, offset 1 *)"))
     }
 
     func testKnownTypesOutputFlagsUnknownFinalTypes() {

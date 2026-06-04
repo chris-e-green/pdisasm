@@ -30,7 +30,12 @@ extension PseudoCodeGenerator {
         var destName = stack.assignmentTargetText(destValue)
         let srcType = srcValue.type
         let destType = destValue.type
-        switch destType {
+        var assignmentDestType = destType
+        if let field = recordField(at: 0, for: destType) {
+            destName = "\(stack.parenthesizedText(destValue)).\(field.name)"
+            assignmentDestType = field.type
+        }
+        switch assignmentDestType {
         case "CHAR":
             if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
                 src = "'\(String(format: "%c", ch))'"
@@ -42,15 +47,15 @@ extension PseudoCodeGenerator {
                 src = "TRUE"
             }
         default:
-            src = scalarLiteralText(src, destinationType: destType)
-            if let type = destType, !type.isEmpty && type != "UNKNOWN" {
+            src = scalarLiteralText(src, destinationType: assignmentDestType)
+            if let type = assignmentDestType, !type.isEmpty && type != "UNKNOWN" {
                 setLocType(src, type)
             }
             if let type = srcType, !type.isEmpty && type != "UNKNOWN" {
                 setLocType(destName, type)
             }
         }
-        if let type = destType, type.starts(with: "ARRAY") {
+        if let type = assignmentDestType, type.starts(with: "ARRAY") {
             destName = "\(destName)[0]"  // for now just show the first element being assigned
         }
         return .assignment(targetValue: destValue, targetText: destName, source: src)

@@ -199,6 +199,7 @@ private struct MetadataContext {
     let allRecordsFile: String
     let sysTypesFile: String
     let allTypesFile: String
+    let commentsFile: String
     let globalsFile: String
     let appSupportDirectory: URL
     let store: MetadataStore
@@ -215,6 +216,7 @@ private struct MetadataContext {
         allRecordsFile = "records_\(fileIdentifier)"
         sysTypesFile = "types_ver_\(version)"
         allTypesFile = "types_\(fileIdentifier)"
+        commentsFile = "comments_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
         appSupportDirectory = URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
@@ -232,6 +234,7 @@ private struct MetadataContext {
         subrangeTypes: inout [String: PascalSubrangeType],
         allLocations: inout Set<Location>,
         allProcedures: inout [ProcedureIdentifier],
+        lineComments: inout [InstructionReference: String],
         globalNames: inout [Int: Identifier]
     ) {
         var sysLocations: Set<Location> = []
@@ -261,6 +264,7 @@ private struct MetadataContext {
         allLocations.formUnion(sysLocations)
 
         store.importGlobalLabels(fromJson: globalsFile, to: &globalNames)
+        store.importDisassemblyComments(fromJson: commentsFile, to: &lineComments)
 
         store.importProcedures(fromCSV: allProceduresCSVFile, to: &allProcedures)
         store.importProcedures(fromCSV: sysProceduresCSVFile, to: &sysProcedures)
@@ -422,6 +426,28 @@ private func decodeCodeSegments(
     )
 }
 
+private func applyDisassemblyComments(
+    _ comments: [InstructionReference: String],
+    to codeSegments: [Int: CodeSegment]
+) {
+    guard !comments.isEmpty else { return }
+    for (segment, codeSegment) in codeSegments {
+        for proc in codeSegment.procedures {
+            let procedure = proc.identifier?.procedure
+            for (addr, instruction) in proc.instructions {
+                let reference = InstructionReference(
+                    segment: segment,
+                    procedure: procedure,
+                    addr: addr
+                )
+                guard let comment = comments[reference] else { continue }
+                let trimmed = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+                instruction.userComment = trimmed.isEmpty ? nil : trimmed
+            }
+        }
+    }
+}
+
 private func prepareDecodedProgram(
     codeSegments: [Int: CodeSegment],
     allCallers: inout Set<Call>,
@@ -495,6 +521,7 @@ public func disassemble(
     var scalarTypes: [String: PascalScalarType] = [:]
     var constants: [String: Int] = [:]
     var subrangeTypes: [String: PascalSubrangeType] = [:]
+    var lineComments: [InstructionReference: String] = [:]
 
     // Try loading name maps from Application Support. Missing metadata is fine;
     // writeback is controlled separately by the caller.
@@ -507,6 +534,7 @@ public func disassemble(
         subrangeTypes: &subrangeTypes,
         allLocations: &allLocations,
         allProcedures: &allProcedures,
+        lineComments: &lineComments,
         globalNames: &globalNames
     )
 
@@ -520,6 +548,8 @@ public func disassemble(
         dataSegments: &dataSegments,
         diagnostics: diagnostics
     )
+
+    applyDisassemblyComments(lineComments, to: allCodeSegs)
 
     typeConflicts.append(contentsOf: prepareDecodedProgram(
         codeSegments: allCodeSegs,

@@ -54,6 +54,14 @@ final class DisassemblyViewModel {
         }
     }
 
+    struct CommentEditDraft: Identifiable {
+        let id = UUID()
+        let reference: InstructionReference
+        let title: String
+        let sourceFilteredIndex: Int?
+        var comment: String
+    }
+
     // MARK: - State
 
     var isLoading: Bool = false
@@ -80,6 +88,7 @@ final class DisassemblyViewModel {
     private var selectionAnchorIndex: Int?
     var locationEditDraft: LocationEditDraft?
     var procedureSignatureEditDraft: ProcedureSignatureEditDraft?
+    var commentEditDraft: CommentEditDraft?
 
     // MARK: - Search
 
@@ -209,7 +218,23 @@ final class DisassemblyViewModel {
         if let characterOffset, beginEditingProcedureSignature(on: line, atCharacterOffset: characterOffset) {
             return
         }
+        if beginEditingComment(on: line, filteredIndex: filteredIndex) {
+            return
+        }
         beginEditingLocation(on: line, filteredIndex: filteredIndex)
+    }
+
+    @discardableResult
+    func beginEditingComment(on line: OutputLine, filteredIndex: Int? = nil) -> Bool {
+        guard let reference = line.commentReference else { return false }
+        let existingComment = instruction(matching: reference)?.userComment ?? ""
+        commentEditDraft = CommentEditDraft(
+            reference: reference,
+            title: "S\(reference.segment) P\(reference.procedure ?? -1) \(String(format: "$%04x", reference.addr))",
+            sourceFilteredIndex: filteredIndex,
+            comment: existingComment
+        )
+        return true
     }
 
     private func beginEditingLocation(on line: OutputLine, filteredIndex: Int?) {
@@ -288,6 +313,17 @@ final class DisassemblyViewModel {
         }
     }
 
+    func saveCommentEdit() {
+        guard let draft = commentEditDraft else { return }
+        do {
+            try upsertUserComment(draft)
+            commentEditDraft = nil
+            runDisassembly(restoringFilteredIndex: draft.sourceFilteredIndex)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func firstSelectedOutputLineIndex() -> Int? {
         filteredLines.firstIndex { selectedOutputLineIDs.contains($0.id) }
     }
@@ -311,6 +347,15 @@ final class DisassemblyViewModel {
         disassemblyResult?.allProcedures.first {
             $0.segment == target.segment && $0.procedure == target.procedure
         }
+    }
+
+    private func instruction(matching reference: InstructionReference) -> Instruction? {
+        guard let codeSegment = disassemblyResult?.codeSegments[reference.segment] else {
+            return nil
+        }
+        return codeSegment.procedures
+            .first { $0.identifier?.procedure == reference.procedure }?
+            .instructions[reference.addr]
     }
 
     private func location(matching reference: LocationReference, in locations: Set<Location>) -> Location? {
@@ -452,6 +497,53 @@ final class DisassemblyViewModel {
             columns.map { escapeCSVField(row[$0] ?? "") }.joined(separator: ",")
         }).joined(separator: "\n") + "\n"
         try content.write(to: proceduresURL, atomically: true, encoding: .utf8)
+    }
+
+    private func upsertUserComment(_ draft: CommentEditDraft) throws {
+        guard let fileURL else { throw CommentEditError.noOpenFile }
+        let metadataURL = URL.applicationSupportDirectory
+            .appendingPathComponent("pdisasm")
+        try FileManager.default.createDirectory(
+            at: metadataURL,
+            withIntermediateDirectories: true
+        )
+
+        let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
+        let commentsURL = metadataURL
+            .appendingPathComponent("comments_\(fileIdentifier)")
+            .appendingPathExtension("json")
+
+        let decoder = JSONDecoder()
+        let comments: [DisassemblyComment]
+        if FileManager.default.fileExists(atPath: commentsURL.path) {
+            let data = try Data(contentsOf: commentsURL)
+            comments = try decoder.decode([DisassemblyComment].self, from: data)
+        } else {
+            comments = []
+        }
+
+        let trimmed = draft.comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        var byReference = Dictionary(uniqueKeysWithValues: comments.map {
+            ($0.reference, $0.comment)
+        })
+        if trimmed.isEmpty {
+            byReference.removeValue(forKey: draft.reference)
+        } else {
+            byReference[draft.reference] = trimmed
+        }
+
+        let updatedComments = byReference.map {
+            DisassemblyComment(reference: $0.key, comment: $0.value)
+        }.sorted {
+            if $0.segment != $1.segment { return $0.segment < $1.segment }
+            if $0.procedure != $1.procedure { return ($0.procedure ?? -1) < ($1.procedure ?? -1) }
+            return $0.addr < $1.addr
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(updatedComments)
+        try data.write(to: commentsURL, options: .atomic)
     }
 
     private func procedureMetadataURL(
@@ -658,6 +750,17 @@ final class DisassemblyViewModel {
                 return "The selected parameter was not found."
             case .notFunction:
                 return "Only functions have return types."
+            }
+        }
+    }
+
+    private enum CommentEditError: LocalizedError {
+        case noOpenFile
+
+        var errorDescription: String? {
+            switch self {
+            case .noOpenFile:
+                return "No disassembly file is open."
             }
         }
     }
@@ -967,7 +1070,8 @@ final class DisassemblyViewModel {
                         "records_\(fileIdentifier).json",
                         "records_ver_\(version).json",
                         "types_\(fileIdentifier).pas",
-                        "types_ver_\(version).pas"
+                        "types_ver_\(version).pas",
+                        "comments_\(fileIdentifier).json"
                     ]
 
                     // Build sidebar items

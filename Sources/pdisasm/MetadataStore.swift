@@ -83,6 +83,17 @@ struct MetadataStore {
         }
     }
 
+    func importDisassemblyComments(
+        fromJson file: String,
+        to comments: inout [InstructionReference: String]
+    ) {
+        if let loadedComments: [DisassemblyComment] = try? readJSON(file) {
+            comments = Dictionary(uniqueKeysWithValues: loadedComments.map {
+                ($0.reference, $0.comment)
+            })
+        }
+    }
+
     func exportKnownRecords(
         toJson file: String,
         from knownRecords: Set<PascalRecord>,
