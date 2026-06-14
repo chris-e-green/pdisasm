@@ -1,68 +1,44 @@
 // swift-tools-version: 6.1
-// The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
+var products: [Product] = []
+var targets: [Target] = [
+    .target(name: "pdisasm", dependencies: []),
+    .executableTarget(
+        name: "pdisasm-cli",
+        dependencies: ["pdisasm"],
+        swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
+    .testTarget(
+        name: "pdisasmTests",
+        dependencies: ["pdisasm"],
+        resources: [.copy("Fixtures")],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+]
+
+#if os(macOS)
+products.append(.library(name: "pdisasm-gui-lib", targets: ["pdisasm-gui-lib"]))
+targets.append(contentsOf: [
+    .target(
+        name: "pdisasm-gui-lib",
+        dependencies: ["pdisasm"],
+        swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
+    .executableTarget(
+        name: "pdisasm-gui",
+        dependencies: ["pdisasm-gui-lib"],
+        swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
+])
+#endif
+
 let package = Package(
     name: "pdisasm",
-    platforms: [
-        .macOS(.v14)
-    ],
-    products: [
-        .library(
-            name: "pdisasm-gui-lib",
-            targets: ["pdisasm-gui-lib"]
-        ),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
-        .package(url: "https://github.com/dehesa/CodableCSV.git", from: "0.6.7"),
-        .package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
-    ],
-    targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        // Expose the core code as a library target so other executables (run-sim, CLI) can import it.
-        .target(
-            name: "pdisasm",
-            dependencies: [
-                .product(name: "CodableCSV", package: "CodableCSV"),
-                .product(name: "Algorithms", package: "swift-algorithms"),
-            ],
-        ),
-        .executableTarget(
-            name: "pdisasm-cli",
-            dependencies: [
-                "pdisasm",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            swiftSettings: [
-                .swiftLanguageMode(.v6)
-            ]
-        ),
-        .target(
-            name: "pdisasm-gui-lib",
-            dependencies: [
-                "pdisasm",
-            ],
-            swiftSettings: [
-                .swiftLanguageMode(.v6)
-            ]
-        ),
-        .executableTarget(
-            name: "pdisasm-gui",
-            dependencies: [
-                "pdisasm-gui-lib",
-            ],
-            swiftSettings: [
-                .swiftLanguageMode(.v6)
-            ]
-        ),
-        .testTarget(
-            name: "pdisasmTests",
-            dependencies: ["pdisasm"],
-            resources: [.copy("Fixtures")],
-        ),
-    ],
+    platforms: [.macOS(.v14)],
+    products: products,
+    dependencies: [],
+    targets: targets,
     swiftLanguageModes: [.v6]
 )
