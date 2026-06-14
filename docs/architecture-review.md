@@ -1,459 +1,592 @@
-# pdisasm Architecture Review and Target Architecture
+# pdisasm Replacement Architecture Review
 
-## Executive summary
+## 1. Executive summary
 
-pdisasm is best understood as a disassembler workbench for Apple Pascal P-code binaries. The core product loop is: load a code file, decode segment and procedure structure, apply user/system metadata, infer stack/type/procedure information, render human-readable disassembly and pseudocode, and let users improve metadata through the GUI so subsequent runs become more intelligible.
+pdisasm is a reverse-engineering workbench for Apple Pascal P-code codefiles. The current codebase has the right top-level product split: a reusable disassembler library, a command-line adapter, a macOS GUI library, and a GUI executable. The implementation also has strong domain momentum: structured output lines, diagnostics, stack simulation, type inference, metadata files, and broad test coverage already exist.
 
-The project already has a useful separation between a core Swift package (`pdisasm`), a CLI (`pdisasm-cli`), and a macOS GUI (`pdisasm-gui-lib` / `pdisasm-gui`). Preserve that direction. The largest architectural risk is that the core analysis pipeline is still organized around mutable reference models, process-global filesystem conventions, repeated whole-program passes, and presentation-aware side effects. That makes correctness hard to reason about, limits scalability to larger binaries or batch workflows, and forces the GUI to duplicate persistence logic that should belong to the domain/application layer.
+The central architectural issue is that the core library is not yet shaped as a deterministic analysis product. It is organized as a long procedural run that performs file I/O, metadata discovery, mutable decoding, cross-reference normalization, analysis, rendering preparation, diagnostics, and metadata writeback through shared objects. The GUI then duplicates infrastructure concerns such as metadata filename selection, CSV/JSON persistence, rerun orchestration, and rendered-line search.
 
-The target architecture should make disassembly an explicit, deterministic pipeline over immutable snapshots, move metadata persistence behind repository interfaces, introduce stable domain identifiers and indexes, separate rendering from analysis, and expose both CLI and GUI through the same application-service API.
+The replacement architecture should not be a rewrite for its own sake. It should preserve the domain knowledge and test fixtures while replacing the seams around it. The target system is a staged pipeline that transforms bytes and metadata into immutable program snapshots, documents, indexes, and renderable views. CLI and GUI entry points should call the same application services. Metadata edits should be commands handled by a metadata service, returning explicit invalidation scopes instead of forcing every UI action to know how much of the pipeline to rerun.
 
-## Inferred product behavior
+## 2. Architectural audit
 
-### Primary users and workflow
-
-- A reverse engineer or maintainer opens an Apple Pascal code file (`.bin` or equivalent codefile image).
-- The app reads the segment dictionary, identifies code and data segments, decodes Pascal and assembler procedures, tracks call relationships, and resolves memory locations.
-- The app combines inferred facts with user/system metadata from Application Support files: labels, procedures, records, type definitions, globals, and comments.
-- The app emits several synchronized views of the same program:
-  - segment/procedure structure;
-  - raw P-code or 6502 assembly;
-  - inferred stack state;
-  - pseudocode;
-  - variables, globals, diagnostics, and type conflicts.
-- Users can search, filter sections, select/copy output, jump between procedures, and edit labels, procedure signatures, and comments.
-- Edits are written to metadata files and the disassembly is rerun so the output reflects the new knowledge.
-
-### Non-functional expectations implied by the app
-
-- Determinism: the same binary plus same metadata should produce the same result.
-- Recoverability: malformed or partially understood binaries should produce diagnostics rather than crashing.
-- Incremental enrichment: user metadata should be preserved and should override lower-confidence inferred metadata.
-- Responsiveness: the GUI should remain interactive while disassembling, rendering, and searching.
-- Inspectability: generated output should explain conflicts and uncertainty instead of silently choosing one interpretation.
-
-## Existing architecture snapshot
+### 2.1 Current module topology
 
 ```text
-pdisasm-cli / pdisasm-gui
-        |
-        v
-Application entry points
-- runPdisasm / disassemble(...)
-- DisassemblyViewModel.runDisassembly(...)
-        |
-        v
-Core pipeline in pdisasm
-1. read codefile and segment dictionary
-2. load metadata from Application Support
-3. decode code segments/procedures
-4. normalize calls and locations
-5. stack simulation, type inference, signature synchronization
-6. render structured output or text
-7. optionally write metadata
-        |
-        v
-Filesystem metadata
-- labels_*.csv
-- procedures_*.csv
-- records_*.json
-- types_*.pas
-- comments_*.json
+Package.swift
+├── pdisasm          Core library: codefile parsing, metadata, decoding, analysis, rendering models
+├── pdisasm-cli      CLI argument parsing and execution
+├── pdisasm-gui-lib  SwiftUI/AppKit-facing view models and views
+├── pdisasm-gui      GUI executable shell
+└── pdisasmTests     Unit, fixture, integration, and snapshot tests
 ```
 
-## Good parts to preserve
+This topology is directionally correct. The replacement design should first introduce new seams inside the existing targets, then optionally split physical package targets once the APIs stabilize.
 
-1. **Package-level separation exists.** The core disassembler is a library target and both CLI and GUI consume it. This is the right foundation for shared behavior and automated testing.
-2. **Structured output is already modeled.** `OutputLine`, `LineKind`, anchors, edit targets, and instruction/location references give the GUI a semantic model instead of forcing it to scrape plain text.
-3. **Diagnostics are part of the result.** Returning diagnostics and type conflicts is better than hiding uncertainty in logs or throwing on every unknown construct.
-4. **Metadata is externalized.** CSV/JSON/Pascal metadata files are easy to inspect, edit, back up, and version independently from the binary.
-5. **The GUI avoids blocking the main actor for disassembly.** Running disassembly and rendering in detached tasks is the correct direction for responsiveness.
-6. **There is broad regression coverage.** Snapshot, fixture, decoder, stack simulator, and edge-case tests indicate a culture of protecting reverse-engineering behavior.
-
-## Architectural flaws and scalability risks
-
-### 1. The core pipeline is procedural and mutation-heavy
-
-`disassemble(...)` coordinates reading files, metadata resolution, decoding, normalization, analysis, rendering inputs, diagnostics, and optional metadata writes. Many stages mutate shared collections (`allLocations`, `allProcedures`, `allCallers`) and reference-typed model objects in place.
-
-**Risk:** adding new analyses will increase pass-order coupling. A later pass can accidentally depend on mutation from an earlier pass without a type-level contract. Parallelization and caching are difficult because the pipeline does not expose stable intermediate snapshots.
-
-**Target direction:** represent each pipeline step as a pure or mostly-pure transformer with explicit inputs and outputs. Where mutation is needed for performance, keep it inside the stage and return an immutable `ProgramSnapshot`.
-
-### 2. Analysis and persistence are coupled
-
-The disassembly entry point constructs a metadata context from the source file and reads/writes directly under Application Support. The GUI also writes labels, procedure signatures, and comments directly to those same formats.
-
-**Risk:** CLI, GUI, tests, and future batch tools will diverge. It is hard to support alternate metadata stores, project-local metadata, dry runs, import/export, conflict resolution, or cloud sync.
-
-**Target direction:** define `MetadataRepository` and `MetadataWorkspace` protocols. The core pipeline receives metadata as values. Application services own repository selection, merge policy, and writeback.
-
-### 3. GUI view model contains application and infrastructure logic
-
-`DisassemblyViewModel` manages UI state, background tasks, output filtering, search, metadata filename selection, CSV parsing/escaping, JSON comment persistence, and rerun orchestration.
-
-**Risk:** this class will continue to grow as every product feature arrives. It is hard to test without AppKit/SwiftUI context, and metadata bugs may be fixed in one path but not another.
-
-**Target direction:** split into:
-
-- `DisassemblyDocumentController`: open/restore/rerun document use cases;
-- `MetadataEditingService`: edit label/signature/comment commands;
-- `OutputFilterModel` and `SearchIndex`: pure UI-support models;
-- thin `DisassemblyViewModel`: observable state and command forwarding only.
-
-### 4. Whole-program reruns are the only consistency mechanism
-
-After metadata edits, the GUI writes the file and reruns the full disassembly. Search and filtering are already optimized, but semantic edits invalidate the entire pipeline.
-
-**Risk:** this is acceptable for small fixtures but will not scale to larger libraries, many open documents, or live editing. It also obscures whether an edit only changes rendering or changes inference.
-
-**Target direction:** introduce invalidation scopes:
-
-- comment-only edit: patch rendered line/comment overlay, no analysis rerun;
-- label rename/type edit: rerun affected procedure/segment analyses where possible;
-- signature edit: rerun call graph/type propagation for dependent callers/callees;
-- metadata schema import: full rerun.
-
-Full rerun can remain the correctness fallback while incremental paths are added.
-
-### 5. Domain identity is not centralized
-
-The code uses several ad hoc identity shapes: segment/procedure pairs, optional lexical levels, addresses, strings like `"2.3"`, and CSV rows. Matching logic is repeated in GUI helpers and core functions.
-
-**Risk:** collisions and stale references become likely as support expands to multiple files, overlaid segments, assembler entry points, or procedure aliases.
-
-**Target direction:** define canonical identity types:
-
-- `ProgramID` or `CodeFileID`;
-- `SegmentID`;
-- `ProcedureID`;
-- `InstructionID`;
-- `LocationID`;
-- `MetadataScope` (`system(version)`, `file(fileID)`, `project(path)`).
-
-Every rendered line and metadata row should carry these IDs rather than requiring textual reconstruction.
-
-### 6. Output rendering is too close to analysis data structures
-
-Rendering currently consumes mutable domain objects and encodes GUI affordances (line kinds, edit ranges, anchors) directly in the core output model.
-
-**Risk:** plain text output, structured GUI output, future JSON export, and HTML/Markdown reports will constrain each other. Rendering can accidentally rely on mutable analysis state rather than a stable output contract.
-
-**Target direction:** introduce an intermediate `DisassemblyDocument` model: segments, procedures, instructions, pseudocode blocks, declarations, diagnostics, and cross references. Renderers convert the document into CLI text, GUI lines, JSON, DOT, or Markdown.
-
-### 7. Search is line-scan based and tied to filtered output
-
-The GUI has an asynchronous chunked regex scan over visible lines, which is a pragmatic improvement. However, search currently treats rendered lines as the source of truth.
-
-**Risk:** searching large outputs remains O(rendered lines) per query and cannot easily support structured searches such as `procedure:`, `segment:`, `type:`, `calls:`, `addr:`, or symbol-only matches.
-
-**Target direction:** build a lightweight `SearchIndex` when a document is rendered. Index text tokens plus structured fields and update it incrementally for comment/label edits.
-
-### 8. Metadata merge semantics are implicit
-
-There is clear intent around source precedence (`unknown`, `inferred`, `procedureSignature`, `metadata`, `user`), but repository-level merge behavior is scattered. Some loads replace collections; others union or append.
-
-**Risk:** user edits can be shadowed, duplicate procedures can accumulate, and system metadata can override file metadata in surprising ways.
-
-**Target direction:** make merge policy explicit and testable:
+### 2.2 Existing execution flow
 
 ```text
-system defaults < version metadata < file metadata < project metadata < user edits
+CLI / GUI
+  │
+  ├─ read selected file URL and presentation options
+  │
+  ▼
+runPdisasm / disassemble
+  │
+  ├─ read codefile and segment dictionary
+  ├─ derive Application Support metadata filenames from file name and system version
+  ├─ load labels, procedures, records, types, globals, comments
+  ├─ decode code/data segments and procedures
+  ├─ mutate procedure, location, and caller collections during normalization
+  ├─ run stack, type, call, and signature analysis passes
+  ├─ collect diagnostics and type conflicts
+  └─ return DisassemblyResult plus renderable line data
+  │
+  ▼
+CLI text / GUI structured lines
 ```
 
-Every merged fact should keep provenance and confidence.
+### 2.3 Strengths to preserve
 
-### 9. Error handling mixes recoverable diagnostics with thrown failures
+- **Reusable library boundary.** The core implementation is already in a library target consumed by both the CLI and GUI.
+- **Typed domain concepts.** The codebase contains explicit models for segments, procedures, locations, calls, instructions, diagnostics, stack simulation, pseudocode, and metadata.
+- **Structured output.** GUI-facing output lines have kinds, anchors, references, and edit targets rather than only plain strings.
+- **Recoverability mindset.** Diagnostics and edge-case tests show the system is expected to continue when a binary is partially understood.
+- **Human-editable metadata.** CSV, JSON, and Pascal-like metadata are inspectable and can be versioned outside the binary.
+- **Substantial regression suite.** Snapshot and fixture tests provide safety rails for refactoring the analysis pipeline.
 
-The decoder often records diagnostics and continues, while file and parsing errors may throw or be swallowed depending on the path.
+### 2.4 Principal risks
 
-**Risk:** callers cannot consistently tell whether output is complete, degraded, or invalid. Silent metadata parse failures can produce misleading disassembly.
+#### Risk 1: the core pipeline has implicit stage contracts
 
-**Target direction:** return a `RunReport` with:
+The disassembly entry point currently owns too many responsibilities. File loading, metadata context construction, decode orchestration, normalization, analysis, rendering support, and persistence concerns are co-located. Shared mutable collections and reference-typed model objects encode stage ordering implicitly.
 
-- fatal error, if the codefile cannot be read or minimally parsed;
-- warnings for skipped segments/procedures and metadata failures;
-- completeness flags by segment/procedure;
-- metadata load/write status.
+**Impact:** future analyses become harder to add safely because they may depend on side effects from previous passes. Caching, parallelization, deterministic replay, and scoped reruns are difficult.
 
-### 10. Memory and CPU costs grow with repeated rendered snapshots
+**Replacement:** define explicit pipeline stages with typed inputs and outputs. Internally mutable algorithms are acceptable, but every public stage boundary should return immutable value snapshots.
 
-The GUI stores all rendered lines, filtered lines, indexes, editable maps, search matches, and the full disassembly result. The pipeline also repeats analysis passes to converge signatures.
+#### Risk 2: metadata persistence leaks into analysis and GUI code
 
-**Risk:** larger binaries will multiply memory use, and repeated stack/type passes may become quadratic if call graph and symbol lookup remain linear scans.
+The current metadata context derives Application Support filenames from the source file and segment version. The GUI also performs metadata edits and persistence-oriented behavior.
 
-**Target direction:** maintain indexed snapshots:
+**Impact:** CLI, GUI, tests, and future automation can diverge. Project-local metadata, dry runs, import/export, backups, sync, and conflict handling all become harder.
 
-- `proceduresByID`;
-- `instructionsByID` or per-procedure instruction arrays;
-- `locationsByID` and `locationsByName`;
-- `callsByOrigin` and `callsByTarget`;
-- lazy rendered sections for GUI virtualization.
+**Replacement:** introduce `MetadataRepository`, `MetadataWorkspace`, `MetadataMerger`, and `MetadataEditingService`. The pipeline receives a `MetadataSnapshot`; application services choose where metadata comes from and how edits are persisted.
 
-## Target architecture
+#### Risk 3: domain identity is fragmented
 
-### Architectural principles
+The system uses several identity forms: segment/procedure pairs, lexical levels, addresses, instruction references, anchor strings, metadata row keys, and GUI sidebar strings.
 
-1. **Deterministic core.** Core analysis should not depend on process-global paths, UI state, or current time except where explicitly injected.
-2. **Explicit stages.** Each stage declares input and output models.
-3. **Immutable snapshots at boundaries.** Mutable internals are allowed only within a stage.
-4. **One application API.** CLI and GUI should use the same use cases.
-5. **Metadata as data, not side effect.** Load, merge, edit, and persist metadata through repositories and commands.
-6. **Progressive scalability.** Keep full rerun as fallback, but design APIs that can support incremental invalidation.
+**Impact:** aliases, assembler entry points, multiple codefiles, overlaid segments, stale rendered-line references, and metadata conflicts will become increasingly risky.
 
-### Proposed module boundaries
+**Replacement:** define canonical IDs for codefiles, segments, procedures, instructions, locations, calls, metadata facts, and rendered document nodes. String anchors become a UI serialization detail.
+
+#### Risk 4: rendering and analysis are too coupled
+
+The output layer exposes useful structured lines, but it also mixes rendering concerns with analysis objects. Rendered text is treated as a search corpus and sometimes as an editing/navigation substrate.
+
+**Impact:** CLI text, GUI lines, JSON export, Markdown reports, graph output, and search behavior can constrain one another.
+
+**Replacement:** introduce a `DisassemblyDocument` intermediate representation. Renderers consume documents; search indexes consume documents; edit commands target canonical IDs.
+
+#### Risk 5: full rerun is the only consistency strategy
+
+The GUI reruns disassembly after metadata edits. This is correct as a conservative fallback, but it is not a scalable invalidation model.
+
+**Impact:** comments, labels, and display-only edits pay the same cost as type/signature edits. Larger binaries and interactive metadata editing will feel slower.
+
+**Replacement:** metadata commands return invalidation scopes: no analysis, document patch, procedure rerun, segment rerun, call-graph propagation, or full rerun.
+
+#### Risk 6: analysis status is under-specified
+
+Diagnostics exist, but the run result does not yet distinguish clearly among fatal failure, degraded success, incomplete procedure analysis, metadata load/write warnings, and fixed-point non-convergence.
+
+**Impact:** CLI exit behavior, GUI status, tests, and automated batch processing cannot reliably reason about completeness.
+
+**Replacement:** return a `RunReport` that contains fatal errors, warnings, per-stage metrics, completeness flags, metadata status, and convergence status.
+
+## 3. Replacement architecture
+
+### 3.1 Design principles
+
+1. **Deterministic by default.** The same bytes, metadata snapshot, options, and tool version produce the same snapshot and document.
+2. **Side effects at the edges.** File I/O, Application Support paths, user defaults, and UI state live outside the analysis pipeline.
+3. **Immutable stage boundaries.** Pipeline stages may use mutation internally but publish immutable results.
+4. **Stable identity everywhere.** All facts, references, rendered nodes, and edit commands carry typed IDs.
+5. **One application API.** CLI, GUI, tests, and future batch tools use the same services.
+6. **Diagnostics are product output.** Partial understanding is represented explicitly, not hidden in logs.
+7. **Full rerun remains a fallback.** Incremental paths are introduced only when their invalidation rules are testable.
+
+### 3.2 Logical components
 
 ```text
-pdisasm-core
-  Domain IDs and value models
-  Codefile reader
-  Segment/procedure/instruction decoders
-  Analysis passes
-  Diagnostics
+pdisasm-domain
+  Canonical IDs, value models, diagnostics, run options, stage reports
+
+pdisasm-codefile
+  Byte source abstraction, codefile reader, segment dictionary decoder, raw segment slicing
 
 pdisasm-metadata
-  Metadata schemas
-  MetadataRepository protocol
-  CSV/JSON/Pascal repository implementation
-  Merge policies and provenance
+  Metadata schemas, repositories, workspace resolution, provenance, merge policy, edit commands
 
-pdisasm-application
-  DisassemblyService
-  MetadataEditingService
-  Project/session orchestration
-  Incremental invalidation policy
+pdisasm-analysis
+  P-code and 6502 decoding, procedure discovery, control flow, stack simulation,
+  type inference, signature propagation, call graph construction
+
+pdisasm-document
+  ProgramSnapshot, DisassemblyDocument, cross-reference indexes, search index
 
 pdisasm-rendering
-  DisassemblyDocument
-  Text/CLI renderer
-  Structured GUI renderer
-  JSON/Markdown/DOT renderers
+  CLI text renderer, GUI line renderer, JSON renderer, graph renderer
+
+pdisasm-application
+  DisassemblyService, MetadataEditingService, DocumentSessionController,
+  incremental invalidation policy, progress/cancellation hooks
 
 pdisasm-cli
-  Argument parsing only
-  Calls application services and renderers
+  Argument parsing, service invocation, renderer selection, process exit mapping
 
 pdisasm-gui-lib
-  Observable view models
-  Document state
-  Search/filter/navigation models
+  Observable state, view-specific presentation models, commands forwarded to services
 ```
 
-This can be implemented inside the existing package targets first; physical target splits can follow once seams are stable.
+These can initially be Swift namespaces/files within existing package targets. Physical target extraction should wait until dependency direction is clean.
 
-### Target data flow
+### 3.3 Target dependency rule
 
 ```text
-OpenDocumentCommand
-        |
-        v
-MetadataWorkspaceResolver
-        |
-        +--> MetadataRepository.load(scope list)
-        |
-        v
-DisassemblyService.run(request)
-        |
-        +--> CodeFileReader.read
-        +--> SegmentDictionaryDecoder.decode
-        +--> MetadataMerger.merge
-        +--> ProgramDecoder.decodeSegments
-        +--> AnalysisPipeline.run(stages)
-        +--> ProgramSnapshot + RunReport
-        |
-        v
-DocumentBuilder.build(snapshot)
-        |
-        +--> Renderer.render(document, options)
-        +--> SearchIndex.build(document)
-        |
-        v
-CLI / GUI presentation
+GUI / CLI
+  → application
+    → rendering / document
+      → analysis / metadata / codefile
+        → domain
 ```
 
-### Core domain model
+Forbidden dependencies:
 
-Recommended primary types:
+- domain must not depend on Foundation filesystem APIs except where unavoidable for value formatting;
+- analysis must not read or write Application Support;
+- rendering must not mutate analysis objects;
+- GUI must not parse metadata files directly;
+- CLI must not duplicate pipeline orchestration.
+
+### 3.4 Canonical identity model
+
+Recommended IDs:
 
 ```swift
-struct CodeFileID: Hashable, Codable { let value: String }
-struct SegmentID: Hashable, Codable { let file: CodeFileID; let number: Int }
-struct ProcedureID: Hashable, Codable { let segment: SegmentID; let number: Int }
-struct InstructionID: Hashable, Codable { let procedure: ProcedureID; let address: Int }
-struct LocationID: Hashable, Codable {
+struct CodeFileID: Hashable, Codable, Sendable { let value: String }
+struct SegmentID: Hashable, Codable, Sendable { let file: CodeFileID; let number: Int }
+struct ProcedureID: Hashable, Codable, Sendable { let segment: SegmentID; let number: Int }
+struct InstructionID: Hashable, Codable, Sendable { let procedure: ProcedureID; let offset: Int }
+struct LocationID: Hashable, Codable, Sendable {
     let segment: SegmentID
-    let procedure: Int?
+    let procedure: ProcedureID?
     let lexicalLevel: Int?
     let address: Int?
 }
+struct CallEdgeID: Hashable, Codable, Sendable { let origin: InstructionID; let target: ProcedureID }
 ```
 
-Recommended snapshot shape:
+Identity rules:
+
+- IDs are created during codefile ingestion and preserved throughout analysis, document building, rendering, search, and metadata edits.
+- String forms such as `"2.3"` are display/serialization forms, not domain identity.
+- Metadata rows store typed IDs or canonical serialized IDs.
+- If legacy CSV formats cannot store full IDs immediately, adapters translate between legacy keys and typed IDs at repository boundaries.
+
+### 3.5 Core request/result contracts
+
+```swift
+struct DisassemblyRunRequest: Sendable {
+    let source: CodeFileSource
+    let metadata: MetadataSnapshot
+    let options: DisassemblyOptions
+    let cancellation: CancellationToken?
+}
+
+struct DisassemblyRunResult: Sendable {
+    let snapshot: ProgramSnapshot
+    let document: DisassemblyDocument
+    let indexes: DocumentIndexes
+    let report: RunReport
+}
+```
+
+`CodeFileSource` can represent bytes, a file URL, or a test fixture. The service layer resolves URLs into bytes before invoking deterministic analysis.
+
+### 3.6 Program snapshot
 
 ```swift
 struct ProgramSnapshot: Sendable {
     let file: CodeFileSummary
+    let segmentDictionary: SegmentDictionarySnapshot
     let segments: [SegmentID: SegmentSnapshot]
     let procedures: [ProcedureID: ProcedureSnapshot]
+    let instructions: [InstructionID: InstructionSnapshot]
     let callsByOrigin: [ProcedureID: [CallEdge]]
     let callsByTarget: [ProcedureID: [CallEdge]]
     let locations: [LocationID: LocationFact]
-    let types: TypeEnvironment
+    let typeEnvironment: TypeEnvironmentSnapshot
     let diagnostics: [Diagnostic]
 }
 ```
 
-### Analysis pipeline stages
+Snapshot rules:
 
-1. **Codefile structure stage**
-   - Input: bytes.
-   - Output: segment dictionary and raw segment slices.
-   - Failure mode: fatal if no valid codefile structure exists.
+- snapshots are immutable and safe to share between background tasks and the main actor;
+- every fact keeps provenance where useful: decoded, inferred, system metadata, file metadata, user edit;
+- all lookup-heavy relationships have indexes built once, not repeated linear scans in UI code;
+- snapshots do not contain presentation-only state such as selected line, current search match, or filtered visibility.
 
-2. **Metadata merge stage**
-   - Input: repository facts and segment version/file ID.
-   - Output: `MetadataSnapshot` with provenance.
-   - Failure mode: degraded run with metadata diagnostics.
+### 3.7 Pipeline stages
 
-3. **Decode stage**
-   - Input: segment slices and metadata hints.
-   - Output: procedures, instructions, initial call edges, raw locations.
-   - Failure mode: skip invalid procedures with procedure-level diagnostics.
+```text
+1. CodefileLoadStage
+   Input: bytes and source identity
+   Output: raw codefile, segment dictionary, raw segment slices
+   Fatal: unreadable or structurally invalid codefile
 
-4. **Resolution stage**
-   - Input: decoded program.
-   - Output: normalized locations, caller lexical levels, assembler targets.
+2. MetadataMergeStage
+   Input: repository facts, file/version context, merge policy
+   Output: MetadataSnapshot with provenance and diagnostics
+   Fatal: never, unless configured as strict
 
-5. **Stack/type analysis stage**
-   - Input: resolved program and type environment.
-   - Output: stack states, inferred variables, type conflicts, pseudocode IR.
+3. SegmentDecodeStage
+   Input: raw segments and metadata hints
+   Output: decoded segment/procedure/instruction facts
+   Fatal: no; invalid procedures become diagnostics and incomplete procedure flags
 
-6. **Signature synchronization stage**
-   - Input: inferred calls/locations/procedure signatures.
-   - Output: updated signature facts and conflict diagnostics.
-   - Note: iterate to a bounded fixed point and report non-convergence instead of duplicating hard-coded passes.
+4. ReferenceResolutionStage
+   Input: decoded facts and call/location hints
+   Output: normalized locations, call graph, cross references
+   Fatal: no
 
-7. **Document build stage**
-   - Input: final snapshot.
-   - Output: immutable `DisassemblyDocument` for rendering/search.
+5. AnalysisStage
+   Input: resolved program and metadata type environment
+   Output: stack states, inferred variables, type facts, pseudocode IR
+   Fatal: no; unknowns become diagnostics
 
-### Metadata architecture
+6. SignatureConvergenceStage
+   Input: call graph, inferred signatures, metadata signatures
+   Output: final signature facts and convergence report
+   Fatal: no; non-convergence is a warning with bounded iteration count
 
-Define commands instead of ad hoc file edits:
+7. SnapshotBuildStage
+   Input: final mutable analysis workspace
+   Output: immutable ProgramSnapshot and indexes
+   Fatal: no if previous stages produced at least a degraded program
+
+8. DocumentBuildStage
+   Input: ProgramSnapshot and document options
+   Output: DisassemblyDocument
+   Fatal: no
+```
+
+### 3.8 Metadata architecture
+
+Metadata is modeled as facts plus provenance:
 
 ```swift
-enum MetadataEditCommand {
+enum MetadataScope: Hashable, Codable, Sendable {
+    case bundledSystem(version: Int)
+    case applicationSupport(file: CodeFileID)
+    case projectDirectory(URL)
+    case transientUserSession(UUID)
+}
+
+struct MetadataFact<Value: Sendable>: Sendable {
+    let id: MetadataFactID
+    let scope: MetadataScope
+    let provenance: MetadataProvenance
+    let value: Value
+}
+```
+
+Default precedence:
+
+```text
+bundled defaults
+  < system version metadata
+  < project metadata
+  < file metadata
+  < current user edits
+```
+
+Repository API:
+
+```swift
+protocol MetadataRepository: Sendable {
+    func load(_ scopes: [MetadataScope]) async throws -> [MetadataBundle]
+    func save(_ bundle: MetadataBundle, to scope: MetadataScope) async throws
+}
+```
+
+Editing API:
+
+```swift
+enum MetadataEditCommand: Sendable {
     case upsertLabel(LocationID, name: String, type: String?)
-    case upsertProcedureName(ProcedureID, name: String)
+    case renameProcedure(ProcedureID, name: String)
     case upsertParameter(ProcedureID, index: Int, name: String, type: String?)
     case upsertReturnType(ProcedureID, type: String?)
     case upsertComment(InstructionID, text: String?)
 }
+
+enum InvalidationScope: Sendable {
+    case none
+    case patchDocument([DocumentNodeID])
+    case rerunProcedure(ProcedureID)
+    case rerunSegment(SegmentID)
+    case propagateCallGraph(Set<ProcedureID>)
+    case fullRerun
+}
 ```
 
-`MetadataEditingService` should:
+`MetadataEditingService` responsibilities:
 
-1. validate command against the current snapshot;
-2. load the appropriate metadata scope;
-3. apply the edit in memory;
-4. write atomically with backup;
-5. return an invalidation scope.
+1. validate edit target against the current snapshot;
+2. apply merge/precedence rules;
+3. write atomically with backup when persistence is requested;
+4. return diagnostics and invalidation scope;
+5. never require the GUI to know metadata filenames or CSV escaping rules.
 
-### GUI architecture
+### 3.9 Document and rendering architecture
 
-Keep the GUI state machine simple:
+`DisassemblyDocument` is the rendering-neutral representation:
+
+```swift
+struct DisassemblyDocument: Sendable {
+    let id: DocumentID
+    let title: String
+    let sections: [DocumentSection]
+    let nodesByID: [DocumentNodeID: DocumentNode]
+    let sourceMap: [DocumentNodeID: SourceReference]
+}
+```
+
+Renderers:
+
+- `PlainTextRenderer`: CLI and snapshot fixtures;
+- `StructuredLineRenderer`: GUI table/list rows with kinds, anchors, edit ranges, and references;
+- `JSONRenderer`: machine-readable exports;
+- `GraphRenderer`: call graph/control-flow graph exports.
+
+Rendering rules:
+
+- renderers consume `DisassemblyDocument`, not mutable procedures;
+- renderers may be cached by document ID and options;
+- display filters hide/show rendered nodes without changing the underlying document;
+- search indexes are built from document nodes plus structured fields, not only from rendered text.
+
+### 3.10 Application services
+
+```swift
+actor DisassemblyService {
+    func run(_ request: DisassemblyRunRequest) async -> DisassemblyRunResult
+}
+
+actor DocumentSessionController {
+    func open(url: URL, options: DisassemblyOptions) async -> DocumentSession
+    func apply(_ command: MetadataEditCommand, to session: DocumentSessionID) async -> EditResult
+    func rerun(_ session: DocumentSessionID, scope: InvalidationScope) async -> DocumentSession
+}
+```
+
+Service responsibilities:
+
+- resolve workspace and metadata scopes;
+- load and merge metadata;
+- run the deterministic pipeline;
+- build document/index/rendered-line artifacts;
+- expose progress and cancellation;
+- own rerun/invalidation policy;
+- present a single API to CLI and GUI.
+
+### 3.11 GUI replacement structure
 
 ```text
 DisassemblyViewModel
-  - selected file
+  - selected file/session
   - loading/error/status
-  - current rendered document
-  - current UI options
-  - delegates commands to services
+  - current presentation model
+  - forwards commands to DocumentSessionController
 
 DocumentPresentationModel
-  - segments/procedures sidebar data
-  - filtered output sections
-  - selection state
+  - sidebar sections
+  - filtered rendered lines
+  - selected output lines
+  - current scroll requests
 
 SearchController
-  - query
-  - index
-  - matches/current match
+  - query state
+  - async index lookup
+  - current match navigation
+
+MetadataEditCoordinator
+  - draft state only
+  - command construction
+  - validation messages returned from service
 ```
 
-The view model should not parse CSV, choose metadata filenames, or construct repository paths.
+The GUI should not:
 
-### CLI architecture
+- construct Application Support metadata paths;
+- parse or write CSV/JSON metadata;
+- infer whether an edit needs a full rerun;
+- use rendered anchor strings as domain identifiers.
 
-The CLI should be a thin adapter:
+### 3.12 CLI replacement structure
+
+CLI flow:
 
 1. parse arguments;
-2. build `DisassemblyRunRequest`;
-3. call `DisassemblyService`;
-4. choose renderer/options;
-5. print output and diagnostics;
-6. exit non-zero only for fatal run failures, not ordinary reverse-engineering warnings.
+2. create a `DisassemblyRunRequest` through `DisassemblyCommandFactory`;
+3. invoke `DisassemblyService`;
+4. render requested format;
+5. write diagnostics to stderr or structured output;
+6. exit `0` for successful/degraded disassembly, non-zero only for fatal errors or strict-mode violations.
 
-### Scalability roadmap
+## 4. Greenfield implementation plan
 
-#### Phase 1: Establish seams without behavior change
+### Phase 0: protect behavior before refactoring
 
-- Add `DisassemblyRunRequest` and `DisassemblyService` wrapper around existing `disassemble(...)`.
-- Add `MetadataRepository` protocol and move GUI metadata edits behind `MetadataEditingService` while preserving current file formats.
-- Add canonical ID wrappers and bridge them to existing models.
-- Add tests for metadata merge precedence and edit commands.
+- Identify golden fixtures for representative Pascal, assembler, malformed, system-library, metadata-rich, and GUI-edit workflows.
+- Add snapshot tests for structured document output, not just final text.
+- Add tests that assert diagnostics for malformed inputs and metadata parse failures.
+- Add performance baselines for large fixture disassembly and GUI search.
 
-#### Phase 2: Snapshot and indexing
+Exit criteria:
 
-- Build `ProgramSnapshot` after the current mutable pipeline completes.
-- Create indexes for procedures, locations, calls, and instructions.
-- Refactor renderers to consume the snapshot/document instead of mutable procedure objects.
-- Replace string anchors with typed IDs converted to strings only at the UI boundary.
+- existing behavior is captured well enough to refactor without relying on manual inspection;
+- CI can compare old text output and new document-derived text output.
 
-#### Phase 3: Pipeline stage isolation
+### Phase 1: introduce domain IDs and request/result wrappers
 
-- Extract decode, normalization, stack/type inference, and signature synchronization into stage types.
-- Make pass iteration bounded and report convergence status.
-- Add per-stage timing and count metrics to diagnostics.
+- Add canonical ID value types.
+- Add `DisassemblyRunRequest`, `DisassemblyRunResult`, `RunReport`, and `DisassemblyOptions`.
+- Wrap the existing `disassemble(...)` implementation behind `DisassemblyService` without changing behavior.
+- Create adapters from legacy segment/procedure/location references to new IDs.
 
-#### Phase 4: Incremental UI behavior
+Exit criteria:
 
-- Apply comment edits without rerunning analysis.
-- Apply label-only edits by patching document/rendered output where safe.
-- Use dependency indexes for scoped reruns after signature/type edits.
-- Add cancellation/progress for long-running runs.
+- CLI and GUI can call the service wrapper;
+- legacy tests still pass;
+- new IDs appear in structured output and edit targets.
 
-#### Phase 5: Project/workspace support
+### Phase 2: isolate metadata
 
-- Support project-local metadata directories in addition to Application Support.
-- Add import/export and metadata validation commands.
-- Add JSON output for external tooling.
+- Define `MetadataRepository`, `MetadataWorkspace`, `MetadataBundle`, and `MetadataSnapshot`.
+- Move file naming, Application Support resolution, CSV/JSON parsing, and atomic writes behind repository implementations.
+- Replace GUI metadata writes with `MetadataEditingService` commands.
+- Add merge precedence tests and edit-command tests.
 
-## Decision records to create next
+Exit criteria:
 
-1. **ADR: Metadata scope and precedence.** Decide whether Application Support remains the default, whether project-local metadata is supported, and how conflicts are resolved.
-2. **ADR: Stable identity model.** Specify exact ID fields and serialization for segments, procedures, instructions, and locations.
-3. **ADR: Snapshot vs mutable model.** Define which types are immutable API contracts and which remain mutable internals.
-4. **ADR: Renderer contract.** Decide whether `OutputLine` remains core API or moves to GUI rendering.
-5. **ADR: Incremental invalidation policy.** Document which edit commands require full, scoped, or no rerun.
+- GUI no longer parses or writes metadata formats directly;
+- CLI, GUI, and tests can use file-backed or in-memory metadata repositories;
+- every merged metadata fact has provenance.
 
-## Assumptions challenged
+### Phase 3: build immutable snapshots and indexes
 
-- **Assumption: disassembly must rerun after every edit.** Comments and many label changes are presentation overlays; rerunning is safe but unnecessarily expensive.
-- **Assumption: Application Support is the metadata source of truth.** This is convenient for an app, but poor for reproducible research, collaboration, and CI fixtures.
-- **Assumption: rendered lines are the search corpus.** Users will eventually need symbol-, address-, procedure-, and type-aware search.
-- **Assumption: two analysis passes are enough.** Signature/type propagation should be modeled as a fixed-point process with convergence diagnostics.
-- **Assumption: procedure number plus segment is always sufficient.** As assembler support and multiple files/projects grow, canonical IDs must include file/workspace scope and instruction/location identity.
+- Build `ProgramSnapshot` from the current mutable pipeline output.
+- Add procedure, instruction, location, call-origin, call-target, and symbol indexes.
+- Add a document builder that consumes `ProgramSnapshot`.
+- Make text output render from `DisassemblyDocument` and compare against existing snapshots.
 
-## Quality bar for future changes
+Exit criteria:
 
-Any substantial new feature should answer:
+- renderers no longer need direct access to mutable procedures;
+- GUI navigation and edits target typed IDs;
+- repeated linear scans in common UI paths are replaced by indexes.
 
-1. Which pipeline stage owns this behavior?
-2. Is the behavior deterministic for the same binary and metadata?
-3. What metadata scope and precedence apply?
-4. What is the invalidation scope after an edit?
-5. Can the CLI and GUI both use the same service?
-6. What diagnostics are emitted when the feature cannot fully understand the input?
-7. What index prevents repeated linear scans on large programs?
+### Phase 4: split pipeline stages
+
+- Extract codefile loading, metadata merge, decode, reference resolution, analysis, signature convergence, snapshot build, and document build into explicit stage types.
+- Replace hard-coded repeated signature/type passes with a bounded fixed-point loop.
+- Add per-stage metrics and completeness flags to `RunReport`.
+- Ensure each stage can be tested independently with in-memory inputs.
+
+Exit criteria:
+
+- pass ordering is expressed in stage composition, not incidental mutation;
+- non-convergence and skipped procedures are visible diagnostics;
+- stage-level tests cover malformed and partial inputs.
+
+### Phase 5: implement incremental invalidation
+
+Start conservatively:
+
+1. comment edits patch document nodes and rendered lines without rerun;
+2. display-only label edits patch document nodes when no analysis fact changes;
+3. signature edits rerun dependent call graph scopes;
+4. unknown or conflicting edits fall back to full rerun.
+
+Exit criteria:
+
+- every edit command has a tested invalidation scope;
+- full rerun remains available and produces the same result as incremental paths;
+- GUI remains responsive during reruns and supports cancellation.
+
+### Phase 6: add workspace and export capabilities
+
+- Support project-local metadata directories.
+- Add metadata validation and import/export commands.
+- Add JSON document output and call graph export.
+- Add batch-mode CLI for multiple codefiles sharing one workspace.
+
+Exit criteria:
+
+- analysis is reproducible in CI with checked-in metadata;
+- external tools can consume stable JSON;
+- multiple files can be analyzed without identity collisions.
+
+## 5. Greenfield vertical slice
+
+If starting from an empty repository while preserving current product requirements, build in this order:
+
+1. **Domain package:** IDs, diagnostics, run options, codefile summaries, metadata fact model.
+2. **Codefile reader:** load bytes, parse segment dictionary, expose raw segment slices.
+3. **Minimal decoder:** decode one procedure into instruction snapshots with diagnostics.
+4. **Snapshot builder:** produce `ProgramSnapshot` and indexes for decoded procedures.
+5. **Text renderer:** produce CLI-compatible text from `DisassemblyDocument`.
+6. **Metadata repository:** read labels/procedures/comments from in-memory and file-backed stores.
+7. **Application service:** deterministic run from bytes plus metadata to snapshot/document/report.
+8. **CLI:** thin adapter over the service and text renderer.
+9. **Analysis passes:** stack simulation, type inference, pseudocode, calls, signature convergence.
+10. **GUI:** session controller, presentation model, structured line renderer, search index, metadata commands.
+11. **Incremental editing:** command invalidation and scoped reruns.
+12. **Exports/workspaces:** project metadata, JSON, graph output, batch analysis.
+
+This order keeps every milestone runnable and testable.
+
+## 6. Migration strategy from current code
+
+- **Do not rewrite the decoder first.** Wrap it, snapshot its output, and preserve fixture behavior.
+- **Move side effects outward first.** Metadata and file access seams unlock deterministic tests.
+- **Introduce IDs before incremental behavior.** Invalidation is unsafe without stable identity.
+- **Build new renderers in parallel.** Compare new document-derived text against current snapshots until equivalent.
+- **Retire legacy paths only after parity.** Keep adapters until CLI, GUI, and tests use the new services.
+
+## 7. Architecture decision records to create
+
+1. **ADR-001: Metadata scopes and precedence.** Define system, project, file, and user-edit ordering.
+2. **ADR-002: Canonical ID serialization.** Define stable string forms for codefile, segment, procedure, instruction, and location IDs.
+3. **ADR-003: Snapshot boundary.** Define which models are immutable public contracts and which remain mutable internals.
+4. **ADR-004: Document/rendering contract.** Decide the lifetime of `OutputLine` and the shape of `DisassemblyDocument`.
+5. **ADR-005: Invalidation policy.** Define command-to-scope rules and fallback behavior.
+6. **ADR-006: Run status semantics.** Define fatal, degraded, incomplete, warning, and strict-mode exit behavior.
+
+## 8. Review checklist for future changes
+
+Every substantial change should answer:
+
+- Which pipeline stage owns the behavior?
+- What canonical IDs does it create or consume?
+- Is it deterministic for the same bytes, metadata, and options?
+- What diagnostics are emitted for partial or failed understanding?
+- Which metadata scope and precedence rules apply?
+- What invalidation scope follows a related edit?
+- Can CLI and GUI use the same service path?
+- Which index prevents repeated linear scans?
+- Which fixture or snapshot protects the behavior?
