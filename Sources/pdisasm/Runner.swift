@@ -675,12 +675,20 @@ public func runPdisasm(
     showPseudoCode: Bool = false,
     showDot: Bool = false
 ) throws {
-    let result = try disassemble(
-        filename: filename,
-        verbose: verbose,
-        writeMetadata: rewrite,
-        overwriteMetadata: rewrite
-    )
+    let runResult = try DisassemblyService().run(DisassemblyRunRequest(
+        source: .file(URL(fileURLWithPath: filename)),
+        options: DisassemblyOptions(
+            verbose: verbose,
+            writeMetadata: rewrite,
+            overwriteMetadata: rewrite,
+            showMarkup: showMarkup,
+            showPCode: showPCode,
+            showStackState: showStackState,
+            showPseudoCode: showPseudoCode,
+            showDot: showDot
+        )
+    ))
+    let result = runResult.legacyResult
 
     outputResults(
         sourceFilename: result.sourceFilename,
