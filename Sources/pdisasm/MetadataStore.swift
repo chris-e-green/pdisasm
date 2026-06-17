@@ -1,4 +1,3 @@
-import CodableCSV
 import Foundation
 
 struct MetadataStore {
@@ -29,14 +28,7 @@ struct MetadataStore {
         overwrite: Bool = false
     ) {
         do {
-            let encoder = CSVEncoder {
-                $0.headers = [
-                    "segment", "procedure", "lexLevel", "addr", "name", "type",
-                    "typeSource",
-                ]
-                $0.bufferingStrategy = .sequential
-            }
-            try writeCSV(labels, to: file, overwrite: overwrite, encoder: encoder)
+            try writeLabelsCSV(labels, to: file, overwrite: overwrite)
         } catch {
             diagnostics?.error("Error writing \(file): \(error)")
         }
@@ -61,14 +53,7 @@ struct MetadataStore {
         overwrite: Bool = false
     ) {
         do {
-            let encoder = CSVEncoder { configuration in
-                configuration.headers = [
-                    "segmentNumber", "segmentName", "procNumber", "procName",
-                    "isFunction",
-                    "isAssembly", "parameters", "returnType", "returnTypeSource",
-                ]
-            }
-            try writeCSV(procedures, to: file, overwrite: overwrite, encoder: encoder)
+            try writeProceduresCSV(procedures, to: file, overwrite: overwrite)
         } catch {
             diagnostics?.error("Error writing \(file): \(error)")
         }
@@ -146,37 +131,66 @@ struct MetadataStore {
             .appendingPathExtension(fileExtension)
     }
 
-    private func readCSV<Value: Decodable>(_ file: String) throws -> Value? {
-        let url = fileURL(file, extension: "csv")
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let decoder = CSVDecoder()
-        decoder.headerStrategy = .firstLine
-        let data = try Data(contentsOf: url)
-        return try decoder.decode(Value.self, from: data)
+    private func existingReadURL(_ file: String, extension fileExtension: String) -> URL? {
+        let primary = fileURL(file, extension: fileExtension)
+        if FileManager.default.fileExists(atPath: primary.path) { return primary }
+        let bundledMetadata = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("metadata", isDirectory: true)
+            .appendingPathComponent(file)
+            .appendingPathExtension(fileExtension)
+        if FileManager.default.fileExists(atPath: bundledMetadata.path) { return bundledMetadata }
+        return nil
     }
 
-    private func writeCSV<Value: Encodable>(
-        _ value: Value,
+    private func readCSV<Value>(_ file: String) throws -> Value? {
+        guard let url = existingReadURL(file, extension: "csv") else { return nil }
+        let rows = try CSVTable(contentsOf: url)
+        if Value.self == Set<Location>.self {
+            return Set(rows.records.map(Location.init(csv:))) as? Value
+        }
+        if Value.self == [ProcedureIdentifier].self {
+            return rows.records.map(ProcedureIdentifier.init(csv:)) as? Value
+        }
+        throw MetadataCSVError.unsupportedType(String(describing: Value.self))
+    }
+
+    private func writeLabelsCSV(
+        _ labels: [Location],
         to file: String,
-        overwrite: Bool,
-        encoder: CSVEncoder
+        overwrite: Bool
     ) throws {
         let url = fileURL(file, extension: "csv")
         guard try prepareWrite(to: url, overwrite: overwrite) else { return }
-        try encoder.encode(value, into: url)
+        let headers = ["segment", "procedure", "lexLevel", "addr", "name", "type", "typeSource"]
+        let rows = labels.map { label in
+            [String(label.segment), label.procedure.csvString, label.lexLevel.csvString, label.addr.csvString, label.name, label.type, label.typeSource.rawValue]
+        }
+        try CSVTable.write(headers: headers, rows: rows, to: url)
+    }
+
+    private func writeProceduresCSV(
+        _ procedures: [ProcedureIdentifier],
+        to file: String,
+        overwrite: Bool
+    ) throws {
+        let url = fileURL(file, extension: "csv")
+        guard try prepareWrite(to: url, overwrite: overwrite) else { return }
+        let headers = ["segmentNumber", "segmentName", "procNumber", "procName", "isFunction", "isAssembly", "parameters", "returnType", "returnTypeSource"]
+        let rows = procedures.map { proc in
+            [String(proc.segment), proc.segmentName ?? "", String(proc.procedure), proc.procName ?? "", String(proc.isFunction), String(proc.isAssembly), proc.parameters.map(\.description).joined(separator: ";"), proc.returnType ?? "", proc.returnTypeSource.rawValue]
+        }
+        try CSVTable.write(headers: headers, rows: rows, to: url)
     }
 
     private func readJSON<Value: Decodable>(_ file: String) throws -> Value? {
-        let url = fileURL(file, extension: "json")
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let url = existingReadURL(file, extension: "json") else { return nil }
         let decoder = JSONDecoder()
         let data = try Data(contentsOf: url)
         return try decoder.decode(Value.self, from: data)
     }
 
     private func readText(_ file: String, extension fileExtension: String) throws -> String? {
-        let url = fileURL(file, extension: fileExtension)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let url = existingReadURL(file, extension: fileExtension) else { return nil }
         return try String(contentsOf: url, encoding: .utf8)
     }
 
@@ -207,5 +221,106 @@ struct MetadataStore {
             try FileManager.default.copyItem(at: url, to: backupURL)
         }
         return true
+    }
+}
+
+private enum MetadataCSVError: Error, CustomStringConvertible {
+    case unsupportedType(String)
+    var description: String {
+        switch self { case .unsupportedType(let type): return "Unsupported CSV metadata type: \(type)" }
+    }
+}
+
+private struct CSVTable {
+    let records: [[String: String]]
+
+    init(contentsOf url: URL) throws {
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let rows = Self.parse(text)
+        guard let headers = rows.first else { records = []; return }
+        records = rows.dropFirst().filter { !$0.allSatisfy(\.isEmpty) }.map { row in
+            Dictionary(uniqueKeysWithValues: headers.enumerated().map { index, header in
+                (header, index < row.count ? row[index] : "")
+            })
+        }
+    }
+
+    static func write(headers: [String], rows: [[String]], to url: URL) throws {
+        let lines = ([headers] + rows).map { $0.map(escape).joined(separator: ",") }
+        try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func escape(_ field: String) -> String {
+        if field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r") {
+            return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        return field
+    }
+
+    private static func parse(_ text: String) -> [[String]] {
+        var rows: [[String]] = []
+        var row: [String] = []
+        var field = ""
+        var inQuotes = false
+        var iterator = text.makeIterator()
+        while let char = iterator.next() {
+            if inQuotes {
+                if char == "\"" {
+                    if let next = iterator.next() {
+                        if next == "\"" { field.append(next) } else {
+                            inQuotes = false
+                            if next == "," { row.append(field); field = "" }
+                            else if next == "\n" { row.append(field); rows.append(row); row = []; field = "" }
+                            else if next != "\r" { field.append(next) }
+                        }
+                    } else { inQuotes = false }
+                } else { field.append(char) }
+            } else {
+                if char == "\"" { inQuotes = true }
+                else if char == "," { row.append(field); field = "" }
+                else if char == "\n" { row.append(field); rows.append(row); row = []; field = "" }
+                else if char != "\r" { field.append(char) }
+            }
+        }
+        if !field.isEmpty || !row.isEmpty { row.append(field); rows.append(row) }
+        return rows
+    }
+}
+
+private extension Optional where Wrapped == Int {
+    var csvString: String { map(String.init) ?? "" }
+}
+
+private extension Location {
+    convenience init(csv record: [String: String]) {
+        self.init(
+            segment: Int(record["segment"] ?? "") ?? 0,
+            procedure: Int(record["procedure"] ?? ""),
+            lexLevel: Int(record["lexLevel"] ?? ""),
+            addr: Int(record["addr"] ?? ""),
+            name: record["name"] ?? "",
+            type: record["type"] ?? "",
+            typeSource: TypeSource(rawValue: record["typeSource"] ?? "")
+        )
+    }
+}
+
+private extension ProcedureIdentifier {
+    convenience init(csv record: [String: String]) {
+        let parameters = (record["parameters"] ?? "").split(separator: ";").map { raw in
+            let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+            return Identifier(name: parts.first ?? "", type: parts.count > 1 ? parts[1] : "")
+        }
+        self.init(
+            isFunction: Bool(record["isFunction"] ?? "false") ?? false,
+            isAssembly: Bool(record["isAssembly"] ?? "false") ?? false,
+            segment: Int(record["segmentNumber"] ?? "") ?? 0,
+            segmentName: record["segmentName"].flatMap { $0.isEmpty ? nil : $0 },
+            procedure: Int(record["procNumber"] ?? "") ?? 0,
+            procName: record["procName"].flatMap { $0.isEmpty ? nil : $0 },
+            parameters: parameters,
+            returnType: record["returnType"].flatMap { $0.isEmpty ? nil : $0 },
+            returnTypeSource: TypeSource(rawValue: record["returnTypeSource"] ?? "")
+        )
     }
 }
