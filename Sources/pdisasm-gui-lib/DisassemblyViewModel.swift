@@ -1098,10 +1098,10 @@ final class DisassemblyViewModel {
         Task {
             do {
                 let (result, lines, items, relevantFiles) = try await Task.detached {
-                    let result = try disassemble(
-                        filename: path,
-                        verbose: verb
-                    )
+                    let result = try DisassemblyService().run(DisassemblyRunRequest(
+                        source: .file(URL(fileURLWithPath: path)),
+                        options: DisassemblyOptions(verbose: verb)
+                    )).legacyResult
                     let lines = renderStructuredLines(
                         from: result,
                         showStackState: stackState,

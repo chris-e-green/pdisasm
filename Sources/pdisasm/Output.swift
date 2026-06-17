@@ -636,7 +636,7 @@ public func renderStructuredLines(
                     }
                 )
                 if !callerNames.isEmpty {
-                    addLine(.header, "Callers: \(callerNames.joined(separator: ", "))")
+                    addLine(.header, "Callers: \(callerNames.sorted().joined(separator: ", "))")
                 }
 
                 addLine(.markup, "```")
