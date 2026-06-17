@@ -1,6 +1,6 @@
 # pdisasm
 
-![CI](https://github.com/chris-e-green/pdisasm/actions/workflows/ci.yml/badge.svg?branch=master)
+![CI](https://github.com/chris-e-green/pdisasm/actions/workflows/ci.yml/badge.svg?branch=main)
 
 pdisasm is a Swift command-line Pascal P-code disassembler. It parses Apple Pascal P-code binaries and emits a human-readable disassembly. The project includes a small test suite and a GitHub Actions workflow that runs `swift build` and `swift test` on macOS-latest.
 
