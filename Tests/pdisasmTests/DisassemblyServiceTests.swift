@@ -44,7 +44,20 @@ final class DisassemblyServiceTests: XCTestCase {
             renderDisassembly(legacy, showMarkup: true, showPCode: true, showPseudoCode: true)
         )
         XCTAssertEqual(wrapped.snapshot.codeFileID, CodeFileID(legacy.sourceFilename))
-        XCTAssertEqual(wrapped.report.stages.first?.name, "legacyDisassembly")
+        XCTAssertEqual(wrapped.report.stages.first?.name, "codefileLoading")
+        let stageNames = wrapped.report.stages.map(\.name)
+        XCTAssertEqual(stageNames, [
+            "codefileLoading",
+            "metadataMerge",
+            "decode",
+            "referenceResolution",
+            "analysis",
+            "snapshotBuild",
+            "documentBuild",
+        ])
+        let analysisReport = try XCTUnwrap(wrapped.report.stages.first { $0.name == "analysis" })
+        XCTAssertGreaterThanOrEqual(analysisReport.metrics["iterations"] ?? 0, 1)
+        XCTAssertEqual(analysisReport.metrics["maxIterations"], 4)
     }
 
     func testServiceBuildsImmutableSnapshotDocumentAndIndexes() throws {

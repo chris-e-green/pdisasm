@@ -846,7 +846,8 @@ private func makeDisassemblyResult(
         constants: constants,
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        runReport: RunReport()
     )
 }
 

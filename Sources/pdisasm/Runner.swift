@@ -92,6 +92,41 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let subrangeTypes: [String: PascalSubrangeType]
     public let typeConflicts: [TypeConflict]
     public let diagnostics: [Diagnostic]
+    public let runReport: RunReport
+
+    public init(
+        sourceFilename: String,
+        segDictionary: SegDictionary,
+        codeSegments: [Int: CodeSegment],
+        dataSegments: [Int],
+        allLocations: Set<Location>,
+        allProcedures: [ProcedureIdentifier],
+        allCallers: Set<Call>,
+        knownRecords: Set<PascalRecord>,
+        typeAliases: [String: String],
+        scalarTypes: [String: PascalScalarType],
+        constants: [String: Int],
+        subrangeTypes: [String: PascalSubrangeType],
+        typeConflicts: [TypeConflict],
+        diagnostics: [Diagnostic],
+        runReport: RunReport = RunReport()
+    ) {
+        self.sourceFilename = sourceFilename
+        self.segDictionary = segDictionary
+        self.codeSegments = codeSegments
+        self.dataSegments = dataSegments
+        self.allLocations = allLocations
+        self.allProcedures = allProcedures
+        self.allCallers = allCallers
+        self.knownRecords = knownRecords
+        self.typeAliases = typeAliases
+        self.scalarTypes = scalarTypes
+        self.constants = constants
+        self.subrangeTypes = subrangeTypes
+        self.typeConflicts = typeConflicts
+        self.diagnostics = diagnostics
+        self.runReport = runReport
+    }
 }
 
 private func defaultKnownRecords() -> Set<PascalRecord> {
@@ -557,30 +592,61 @@ public func disassemble(
         allLocations: &allLocations
     ))
 
-    // Do stack simulation and pseudocode generation
-    // once we have all procedures decoded.
-    // As the stack plays a role in control flow, we need to handle them at the same time.
-    typeConflicts.append(contentsOf: runPascalAnalysisPass(
-        codeSegments: allCodeSegs,
-        knownRecords: knownRecords,
-        typeAliases: typeAliases,
-        scalarTypes: scalarTypes,
-        allProcedures: &allProcedures,
-        allLocations: &allLocations,
-        diagnostics: diagnostics
-    ))
+    // Do stack simulation and pseudocode generation once we have all procedures decoded.
+    // Signatures and inferred location types can improve after a pass, so keep running
+    // the pass until the signature/location facts stop changing or a bounded limit is hit.
+    let maxSignatureIterations = 4
+    var analysisIterations = 0
+    var previousAnalysisFingerprint: String?
+    var analysisConverged = false
+    while analysisIterations < maxSignatureIterations {
+        analysisIterations += 1
+        typeConflicts.append(contentsOf: runPascalAnalysisPass(
+            codeSegments: allCodeSegs,
+            knownRecords: knownRecords,
+            typeAliases: typeAliases,
+            scalarTypes: scalarTypes,
+            allProcedures: &allProcedures,
+            allLocations: &allLocations,
+            diagnostics: diagnostics
+        ))
+        let fingerprint = analysisFingerprint(allProcedures: allProcedures, allLocations: allLocations)
+        if fingerprint == previousAnalysisFingerprint {
+            analysisConverged = true
+            break
+        }
+        previousAnalysisFingerprint = fingerprint
+    }
+    if !analysisConverged {
+        diagnostics.warning("Signature/type analysis did not converge after \(maxSignatureIterations) iterations")
+    }
 
-    // Regenerate pseudocode with the inferred signatures and corrected parameter labels.
-    typeConflicts.append(contentsOf: runPascalAnalysisPass(
-        codeSegments: allCodeSegs,
-        knownRecords: knownRecords,
-        typeAliases: typeAliases,
-        scalarTypes: scalarTypes,
-        allProcedures: &allProcedures,
-        allLocations: &allLocations,
-        diagnostics: diagnostics
-    ))
-
+    let baseStages = [
+        StageReport(name: "codefileLoading", metrics: ["bytes": binaryData.data.count]),
+        StageReport(name: "metadataMerge", metrics: [
+            "labels": allLocations.count,
+            "procedures": allProcedures.count,
+            "comments": lineComments.count,
+            "records": knownRecords.count,
+            "typeAliases": typeAliases.count,
+            "scalarTypes": scalarTypes.count,
+        ]),
+        StageReport(name: "decode", metrics: [
+            "segments": allCodeSegs.count,
+            "procedures": allCodeSegs.values.reduce(0) { $0 + $1.procedures.count },
+            "dataSegments": dataSegments.count,
+        ]),
+        StageReport(name: "referenceResolution", metrics: [
+            "callers": allCallers.count,
+            "locations": allLocations.count,
+        ]),
+        StageReport(name: "analysis", isComplete: analysisConverged, metrics: [
+            "iterations": analysisIterations,
+            "maxIterations": maxSignatureIterations,
+            "typeConflicts": typeConflicts.count,
+            "diagnostics": diagnostics.diagnostics.count,
+        ], diagnostics: analysisConverged ? [] : ["Signature/type analysis did not converge after \(maxSignatureIterations) iterations"]),
+    ]
     let result = DisassemblyResult(
         sourceFilename: metadata.fileIdentifier,
         segDictionary: segDict,
@@ -595,7 +661,8 @@ public func disassemble(
         constants: constants,
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
-        diagnostics: diagnostics.diagnostics
+        diagnostics: diagnostics.diagnostics,
+        runReport: RunReport(stages: baseStages, isComplete: analysisConverged)
     )
 
     if writeMetadata {
@@ -712,4 +779,40 @@ public func runPdisasm(
         showPseudoCode: showPseudoCode,
         showDot: showDot
     )
+}
+
+private func analysisFingerprint(
+    allProcedures: [ProcedureIdentifier],
+    allLocations: Set<Location>
+) -> String {
+    let procedureFacts = allProcedures
+        .sorted { lhs, rhs in
+            if lhs.segment != rhs.segment { return lhs.segment < rhs.segment }
+            return lhs.procedure < rhs.procedure
+        }
+        .map { procedure in
+            [
+                String(procedure.segment),
+                String(procedure.procedure),
+                procedure.procName ?? "",
+                procedure.returnType ?? "",
+                procedure.parameters.map { "\($0.name):\($0.type):\($0.typeSource.rawValue)" }.joined(separator: ","),
+                procedure.parameterLocations.map { "\($0.name):\($0.type):\($0.typeSource.rawValue)" }.joined(separator: ","),
+            ].joined(separator: "|")
+        }
+    let locationFacts = allLocations
+        .sorted()
+        .map { location in
+            [
+                String(location.segment),
+                location.procedure.map(String.init) ?? "",
+                location.lexLevel.map(String.init) ?? "",
+                location.addr.map(String.init) ?? "",
+                location.name,
+                location.type,
+                location.typeSource.rawValue,
+                String(location.isParam),
+            ].joined(separator: "|")
+        }
+    return (procedureFacts + locationFacts).joined(separator: "\n")
 }

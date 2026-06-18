@@ -223,15 +223,19 @@ public struct DisassemblyService: Sendable {
         )
         let document = DisassemblyDocument.build(from: structuredLines, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
         let indexes = DocumentIndexes.build(document: document, codeFileID: codeFileID)
-        let report = RunReport(stages: [
-            StageReport(name: "legacyDisassembly", metrics: [
-                "segments": legacyResult.codeSegments.count,
-                "procedures": legacyResult.allProcedures.count,
-                "diagnostics": legacyResult.diagnostics.count,
-                "snapshotInstructions": snapshot.instructions.count,
+        let report = RunReport(stages: legacyResult.runReport.stages + [
+            StageReport(name: "snapshotBuild", metrics: [
+                "segments": snapshot.segments.count,
+                "procedures": snapshot.procedures.count,
+                "instructions": snapshot.instructions.count,
+                "locations": snapshot.locations.count,
+            ]),
+            StageReport(name: "documentBuild", metrics: [
                 "documentNodes": document.nodes.count,
-            ])
-        ])
+                "procedureNodes": indexes.procedureNodes.count,
+                "instructionNodes": indexes.instructionNodes.count,
+            ]),
+        ], warnings: legacyResult.runReport.warnings, isComplete: legacyResult.runReport.isComplete)
         return DisassemblyRunResult(
             legacyResult: legacyResult,
             snapshot: snapshot,
