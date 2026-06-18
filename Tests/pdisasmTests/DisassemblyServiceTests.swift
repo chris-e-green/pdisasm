@@ -261,3 +261,38 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(Set(batch.results.map(\.snapshot.codeFileID)), [CodeFileID("SYSTEM.LIBRARY-02-00")])
     }
 }
+
+extension DisassemblyServiceTests {
+    func testSnapshotExposesArchitectureSummaries() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(source: .file(fixture)))
+
+        XCTAssertEqual(wrapped.snapshot.file.id, wrapped.snapshot.codeFileID)
+        XCTAssertEqual(wrapped.snapshot.file.sourceFilename, "SYSTEM.LIBRARY-02-00")
+        XCTAssertEqual(wrapped.snapshot.file.segmentCount, wrapped.legacyResult.codeSegments.count)
+        XCTAssertEqual(wrapped.snapshot.segmentDictionary.entries.count, wrapped.legacyResult.segDictionary.segTable.count)
+        XCTAssertFalse(wrapped.snapshot.typeEnvironment.recordNames.isEmpty)
+        XCTAssertFalse(wrapped.document.sections.isEmpty)
+        XCTAssertFalse(wrapped.indexes.search("SEGMENT").isEmpty)
+    }
+
+    func testCancellationTokenStopsRunBeforeLegacyWork() throws {
+        struct CancelledToken: CancellationToken { let isCancellationRequested = true }
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+
+        XCTAssertThrowsError(try DisassemblyService().run(DisassemblyRunRequest(
+            source: .file(fixture),
+            cancellation: CancelledToken()
+        ))) { error in
+            XCTAssertTrue(error is DisassemblyCancelledError)
+        }
+    }
+}
