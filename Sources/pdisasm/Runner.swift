@@ -237,9 +237,10 @@ private struct MetadataContext {
     let commentsFile: String
     let globalsFile: String
     let appSupportDirectory: URL
+    let workspace: MetadataWorkspace?
     let store: MetadataStore
 
-    init(fileURL: URL, segDict: SegDictionary, diagnostics: DiagnosticCollector? = nil) {
+    init(fileURL: URL, segDict: SegDictionary, workspace: MetadataWorkspace? = nil, diagnostics: DiagnosticCollector? = nil) {
         let version = segDict.segTable[1]?.version ?? segDict.segTable[0]?.version ?? 0
         let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
         self.fileIdentifier = fileIdentifier
@@ -253,10 +254,12 @@ private struct MetadataContext {
         allTypesFile = "types_\(fileIdentifier)"
         commentsFile = "comments_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
-        appSupportDirectory = URL.applicationSupportDirectory
+        self.workspace = workspace
+        appSupportDirectory = workspace?.writableDirectory ?? URL.applicationSupportDirectory
             .appendingPathComponent("pdisasm")
         store = MetadataStore(
             appSupportDirectory: appSupportDirectory,
+            bundledDirectory: workspace?.bundledDirectory,
             diagnostics: diagnostics
         )
     }
@@ -531,7 +534,8 @@ public func disassemble(
     filename: String,
     verbose: Bool = false,
     writeMetadata: Bool = false,
-    overwriteMetadata: Bool = false
+    overwriteMetadata: Bool = false,
+    metadataWorkspace: MetadataWorkspace? = nil
 ) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
@@ -544,7 +548,7 @@ public func disassemble(
 
     let segDict = try readCodeFileStructure(codeData: binaryData)
     let diagnostics = DiagnosticCollector()
-    let metadata = MetadataContext(fileURL: fileURL, segDict: segDict, diagnostics: diagnostics)
+    let metadata = MetadataContext(fileURL: fileURL, segDict: segDict, workspace: metadataWorkspace, diagnostics: diagnostics)
 
     var allLocations: Set<Location> = []
     var allProcedures: [ProcedureIdentifier] = []

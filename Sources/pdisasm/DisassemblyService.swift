@@ -47,11 +47,13 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
 public struct DisassemblyRunRequest: Sendable {
     public let source: CodeFileSource
     public let metadata: MetadataSnapshot
+    public let metadataWorkspace: MetadataWorkspace?
     public let options: DisassemblyOptions
 
-    public init(source: CodeFileSource, metadata: MetadataSnapshot = MetadataSnapshot(), options: DisassemblyOptions = DisassemblyOptions()) {
+    public init(source: CodeFileSource, metadata: MetadataSnapshot = MetadataSnapshot(), metadataWorkspace: MetadataWorkspace? = nil, options: DisassemblyOptions = DisassemblyOptions()) {
         self.source = source
         self.metadata = metadata
+        self.metadataWorkspace = metadataWorkspace
         self.options = options
     }
 }
@@ -230,7 +232,8 @@ public struct DisassemblyService: Sendable {
             filename: filename,
             verbose: request.options.verbose,
             writeMetadata: request.options.writeMetadata,
-            overwriteMetadata: request.options.overwriteMetadata
+            overwriteMetadata: request.options.overwriteMetadata,
+            metadataWorkspace: request.metadataWorkspace
         )
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
         let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
