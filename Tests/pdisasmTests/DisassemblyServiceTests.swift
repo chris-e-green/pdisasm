@@ -129,4 +129,76 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(loaded.comments.map(\.value.comment), ["hello"])
         XCTAssertEqual(loaded.comments.first?.provenance.source, "comments_fixture.json")
     }
+
+    func testCommentInvalidationCanPatchDocumentWithoutRerun() throws {
+        let document = DisassemblyDocument(
+            id: DocumentID("fixture"),
+            nodes: [
+                DocumentNode(
+                    id: DocumentNodeID(document: DocumentID("fixture"), value: "line-1"),
+                    line: OutputLine(
+                        id: 1,
+                        kind: .pcode,
+                        text: "0003: NOP ; old",
+                        commentReference: InstructionReference(segment: 1, procedure: 2, addr: 3)
+                    )
+                ),
+                DocumentNode(
+                    id: DocumentNodeID(document: DocumentID("fixture"), value: "line-2"),
+                    line: OutputLine(id: 2, kind: .pcode, text: "0004: RTS")
+                ),
+            ]
+        )
+
+        let patched = document.patchingComment(
+            DisassemblyComment(reference: InstructionReference(segment: 1, procedure: 2, addr: 3), comment: "new")
+        )
+
+        XCTAssertEqual(patched.patchedNodes, [DocumentNodeID(document: DocumentID("fixture"), value: "line-1")])
+        XCTAssertEqual(patched.document.nodes.map(\.line.text), ["0003: NOP ; new", "0004: RTS"])
+    }
+
+    func testLabelInvalidationIsDocumentOnlyWhenTypeDoesNotAffectAnalysis() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-metadata-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let service = MetadataEditingService(repository: FileBackedMetadataRepository(workspace: MetadataWorkspace(writableDirectory: directory)))
+
+        let scope = try service.upsertLabel(
+            Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, name: "DISPLAY_ONLY", type: "", typeSource: .unknown),
+            fileIdentifier: "fixture"
+        )
+
+        XCTAssertEqual(scope, .documentOnly)
+    }
+
+    func testProcedureSignatureInvalidationCanPropagateToCallers() throws {
+        let codeFileID = CodeFileID("fixture")
+        let callee = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 2)
+        let caller = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 1)
+        let callSite = InstructionID(procedure: caller, offset: 10)
+        let snapshot = ProgramSnapshot(
+            codeFileID: codeFileID,
+            callsByTarget: [
+                callee: [CallEdge(id: CallEdgeID(origin: callSite, target: callee), origin: callSite, target: callee)]
+            ]
+        )
+
+        let procedure = ProcedureIdentifier(isFunction: false, isAssembly: false, segment: 1, segmentName: nil, procedure: 2)
+        let scope = MetadataEditingService(repository: InMemoryMetadataRepository())
+            .invalidationForProcedureEdit(procedure, in: snapshot)
+
+        XCTAssertEqual(scope, .propagateCallGraph([callee, caller]))
+    }
+}
+
+private struct InMemoryMetadataRepository: MetadataRepository {
+    func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
+        MetadataBundle()
+    }
+
+    func saveLabels(_ labels: [Location], named name: String) throws {}
+    func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {}
+    func saveComments(_ comments: [DisassemblyComment], named name: String) throws {}
 }

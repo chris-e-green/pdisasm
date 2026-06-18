@@ -110,7 +110,14 @@ public protocol MetadataRepository: Sendable {
 
 public enum MetadataFileKind: Sendable { case labelsCSV, proceduresCSV, commentsJSON }
 
-public enum MetadataInvalidationScope: Hashable, Sendable { case documentOnly, procedureSignature(segment: Int, procedure: Int), fullDisassembly }
+public enum MetadataInvalidationScope: Hashable, Sendable {
+    case none
+    case documentOnly
+    case patchDocument([DocumentNodeID])
+    case procedureSignature(segment: Int, procedure: Int)
+    case propagateCallGraph(Set<ProcedureID>)
+    case fullDisassembly
+}
 
 public enum ProcedureSignatureEditField: Hashable, Sendable { case procedureName, parameter(Int), returnType }
 
@@ -124,7 +131,9 @@ public struct MetadataEditingService: Sendable {
         var labels = try repository.loadBundle(named: name, kind: .labelsCSV, provenance: MetadataProvenance(source: name, precedence: 0)).labels.map(\.value)
         if let index = labels.firstIndex(where: { LocationReference($0) == LocationReference(location) }) { labels[index] = location } else { labels.append(location) }
         try repository.saveLabels(labels.sorted { $0 < $1 }, named: name)
-        return .fullDisassembly
+        return location.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || location.typeSource == .unknown
+            ? .documentOnly
+            : .fullDisassembly
     }
 
     @discardableResult
@@ -143,6 +152,16 @@ public struct MetadataEditingService: Sendable {
         if let index = procedures.firstIndex(where: { $0.segment == procedure.segment && $0.procedure == procedure.procedure }) { procedures[index] = procedure } else { procedures.append(procedure) }
         try repository.saveProcedures(procedures, named: metadataFileName)
         return .procedureSignature(segment: procedure.segment, procedure: procedure.procedure)
+    }
+
+    public func invalidationForProcedureEdit(_ procedure: ProcedureIdentifier, in snapshot: ProgramSnapshot?) -> MetadataInvalidationScope {
+        let changedProcedure = ProcedureID(
+            segment: SegmentID(codeFile: snapshot?.codeFileID ?? CodeFileID("metadata"), number: procedure.segment),
+            number: procedure.procedure
+        )
+        guard let snapshot else { return .procedureSignature(segment: procedure.segment, procedure: procedure.procedure) }
+        let dependents = snapshot.dependentProcedureScope(for: changedProcedure)
+        return dependents.isEmpty ? .procedureSignature(segment: procedure.segment, procedure: procedure.procedure) : .propagateCallGraph(dependents)
     }
 }
 
