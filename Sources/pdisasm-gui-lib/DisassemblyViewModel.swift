@@ -449,41 +449,19 @@ final class DisassemblyViewModel {
 
     private func upsertUserLabel(_ draft: LocationEditDraft) throws {
         guard let fileURL else { throw LocationEditError.noOpenFile }
-        let metadataURL = URL.applicationSupportDirectory
-            .appendingPathComponent("pdisasm")
-        try FileManager.default.createDirectory(
-            at: metadataURL,
-            withIntermediateDirectories: true
-        )
-
-        let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
-        let labelsURL = metadataURL
-            .appendingPathComponent("labels_\(fileIdentifier)")
-            .appendingPathExtension("csv")
-        let columns = ["segment", "procedure", "lexLevel", "addr", "name", "type", "typeSource"]
-        var rows = try readLabelRows(from: labelsURL, columns: columns)
         let reference = draft.reference
         let type = draft.type.trimmingCharacters(in: .whitespacesAndNewlines)
-        let updatedRow: [String: String] = [
-            "segment": "\(reference.segment)",
-            "procedure": reference.procedure.map(String.init) ?? "",
-            "lexLevel": reference.lexLevel.map(String.init) ?? "",
-            "addr": reference.addr.map(String.init) ?? "",
-            "name": draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            "type": type,
-            "typeSource": type.isEmpty ? "unknown" : "user"
-        ]
-
-        if let rowIndex = rows.firstIndex(where: { labelRow($0, matches: reference) }) {
-            rows[rowIndex] = updatedRow
-        } else {
-            rows.append(updatedRow)
-        }
-
-        let content = ([columns.joined(separator: ",")] + rows.map { row in
-            columns.map { escapeCSVField(row[$0] ?? "") }.joined(separator: ",")
-        }).joined(separator: "\n") + "\n"
-        try content.write(to: labelsURL, atomically: true, encoding: .utf8)
+        let location = Location(
+            segment: reference.segment,
+            procedure: reference.procedure,
+            lexLevel: reference.lexLevel,
+            addr: reference.addr,
+            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            type: type,
+            typeSource: type.isEmpty ? .unknown : .user
+        )
+        let service = MetadataEditingService(repository: FileBackedMetadataRepository())
+        try service.upsertLabel(location, fileIdentifier: fileURL.deletingPathExtension().lastPathComponent)
     }
 
     private func upsertProcedureSignature(_ draft: ProcedureSignatureEditDraft) throws {
@@ -495,235 +473,79 @@ final class DisassemblyViewModel {
             throw SignatureEditError.procedureNotFound
         }
 
-        let metadataURL = URL.applicationSupportDirectory
-            .appendingPathComponent("pdisasm")
-        try FileManager.default.createDirectory(
-            at: metadataURL,
-            withIntermediateDirectories: true
+        let edited = ProcedureIdentifier(
+            isFunction: procedure.isFunction,
+            isAssembly: procedure.isAssembly,
+            segment: procedure.segment,
+            segmentName: procedure.segmentName,
+            procedure: procedure.procedure,
+            procName: procedure.procName,
+            parameters: procedure.parameters,
+            returnType: procedure.returnType,
+            returnTypeSource: procedure.returnTypeSource
         )
-
-        let proceduresURL = procedureMetadataURL(
-            forSegment: draft.segment,
-            fileURL: fileURL,
-            disassemblyResult: disassemblyResult,
-            metadataURL: metadataURL
-        )
-        let columns = [
-            "segmentNumber", "segmentName", "procNumber", "procName",
-            "isFunction", "isAssembly", "parameters", "returnType", "returnTypeSource"
-        ]
-        var rows = try readProcedureRows(from: proceduresURL, columns: columns)
-        var row = rows.first(where: { procedureRow($0, matchesSegment: draft.segment, procedure: draft.procedure) })
-            ?? procedureRow(from: procedure, columns: columns)
 
         switch draft.field {
         case .procedureName:
-            row["procName"] = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            edited.procName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         case let .parameter(index):
-            var parameters = procedure.parameters
+            var parameters = edited.parameters
             guard parameters.indices.contains(index) else { throw SignatureEditError.parameterNotFound }
             parameters[index].name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
             let editedType = draft.type.trimmingCharacters(in: .whitespacesAndNewlines)
             let type = editedType == "POINTER" ? "" : editedType
             parameters[index].type = type
             parameters[index].typeSource = type.isEmpty ? .unknown : .user
-            row["parameters"] = parameters.map(\.description).joined(separator: ";")
+            edited.parameters = parameters
         case .returnType:
-            guard procedure.isFunction else { throw SignatureEditError.notFunction }
+            guard edited.isFunction else { throw SignatureEditError.notFunction }
             let type = draft.type.trimmingCharacters(in: .whitespacesAndNewlines)
-            row["returnType"] = type
-            row["returnTypeSource"] = type.isEmpty ? "unknown" : "user"
+            edited.returnType = type
+            edited.returnTypeSource = type.isEmpty ? .unknown : .user
         }
 
-        if let rowIndex = rows.firstIndex(where: { procedureRow($0, matchesSegment: draft.segment, procedure: draft.procedure) }) {
-            rows[rowIndex] = row
-        } else {
-            rows.append(row)
-        }
-
-        let content = ([columns.joined(separator: ",")] + rows.map { row in
-            columns.map { escapeCSVField(row[$0] ?? "") }.joined(separator: ",")
-        }).joined(separator: "\n") + "\n"
-        try content.write(to: proceduresURL, atomically: true, encoding: .utf8)
+        let service = MetadataEditingService(repository: FileBackedMetadataRepository())
+        try service.upsertProcedure(
+            edited,
+            metadataFileName: procedureMetadataName(
+                forSegment: draft.segment,
+                fileURL: fileURL,
+                disassemblyResult: disassemblyResult
+            )
+        )
     }
 
     private func upsertUserComment(_ draft: CommentEditDraft) throws {
         guard let fileURL else { throw CommentEditError.noOpenFile }
-        let metadataURL = URL.applicationSupportDirectory
-            .appendingPathComponent("pdisasm")
-        try FileManager.default.createDirectory(
-            at: metadataURL,
-            withIntermediateDirectories: true
+        let comment = DisassemblyComment(
+            reference: draft.reference,
+            comment: draft.comment.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-
-        let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
-        let commentsURL = metadataURL
-            .appendingPathComponent("comments_\(fileIdentifier)")
-            .appendingPathExtension("json")
-
-        let decoder = JSONDecoder()
-        let comments: [DisassemblyComment]
-        if FileManager.default.fileExists(atPath: commentsURL.path) {
-            let data = try Data(contentsOf: commentsURL)
-            comments = try decoder.decode([DisassemblyComment].self, from: data)
-        } else {
-            comments = []
-        }
-
-        let trimmed = draft.comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        var byReference = Dictionary(uniqueKeysWithValues: comments.map {
-            ($0.reference, $0.comment)
-        })
-        if trimmed.isEmpty {
-            byReference.removeValue(forKey: draft.reference)
-        } else {
-            byReference[draft.reference] = trimmed
-        }
-
-        let updatedComments = byReference.map {
-            DisassemblyComment(reference: $0.key, comment: $0.value)
-        }.sorted {
-            if $0.segment != $1.segment { return $0.segment < $1.segment }
-            if $0.procedure != $1.procedure { return ($0.procedure ?? -1) < ($1.procedure ?? -1) }
-            return $0.addr < $1.addr
-        }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(updatedComments)
-        try data.write(to: commentsURL, options: .atomic)
+        let service = MetadataEditingService(repository: FileBackedMetadataRepository())
+        try service.upsertComment(comment, fileIdentifier: fileURL.deletingPathExtension().lastPathComponent)
     }
 
-    private func procedureMetadataURL(
+    private func procedureMetadataName(
         forSegment segment: Int,
         fileURL: URL,
-        disassemblyResult: DisassemblyResult,
-        metadataURL: URL
-    ) -> URL {
+        disassemblyResult: DisassemblyResult
+    ) -> String {
         if Self.systemSegments.contains(segment),
            let systemProcedures = relevantMetadataFiles.first(where: {
                $0.hasPrefix("procedures_ver_") && $0.hasSuffix(".csv")
            }) {
-            return metadataURL.appendingPathComponent(systemProcedures)
+            return String(systemProcedures.dropLast(4))
         }
 
         if Self.systemSegments.contains(segment) {
             let version = disassemblyResult.segDictionary.segTable[1]?.version
                 ?? disassemblyResult.segDictionary.segTable[0]?.version
                 ?? 0
-            return metadataURL
-                .appendingPathComponent("procedures_ver_\(version)")
-                .appendingPathExtension("csv")
+            return "procedures_ver_\(version)"
         }
 
         let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
-        return metadataURL
-            .appendingPathComponent("procedures_\(fileIdentifier)")
-            .appendingPathExtension("csv")
-    }
-
-    private func readProcedureRows(from url: URL, columns: [String]) throws -> [[String: String]] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let content = try String(contentsOf: url, encoding: .utf8)
-        let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        guard let header = lines.first else { return [] }
-        let loadedColumns = parseCSVLine(header)
-        return lines.dropFirst().map { line in
-            let fields = parseCSVLine(line)
-            var row = Dictionary(uniqueKeysWithValues: columns.map { ($0, "") })
-            for (index, column) in loadedColumns.enumerated() {
-                row[column] = index < fields.count ? fields[index] : ""
-            }
-            return row
-        }
-    }
-
-    private func procedureRow(_ row: [String: String], matchesSegment segment: Int, procedure: Int) -> Bool {
-        Int(row["segmentNumber"] ?? "") == segment &&
-            Int(row["procNumber"] ?? "") == procedure
-    }
-
-    private func procedureRow(from procedure: ProcedureIdentifier, columns: [String]) -> [String: String] {
-        var row = Dictionary(uniqueKeysWithValues: columns.map { ($0, "") })
-        row["segmentNumber"] = "\(procedure.segment)"
-        row["segmentName"] = procedure.segmentName ?? ""
-        row["procNumber"] = "\(procedure.procedure)"
-        row["procName"] = procedure.procName ?? ""
-        row["isFunction"] = "\(procedure.isFunction)"
-        row["isAssembly"] = "\(procedure.isAssembly)"
-        row["parameters"] = procedure.parameters.map(\.description).joined(separator: ";")
-        row["returnType"] = procedure.returnType ?? ""
-        row["returnTypeSource"] = procedure.returnTypeSource.rawValue
-        return row
-    }
-
-    private func readLabelRows(from url: URL, columns: [String]) throws -> [[String: String]] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let content = try String(contentsOf: url, encoding: .utf8)
-        let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        guard let header = lines.first else { return [] }
-        let loadedColumns = parseCSVLine(header)
-        return lines.dropFirst().map { line in
-            let fields = parseCSVLine(line)
-            var row = Dictionary(uniqueKeysWithValues: columns.map { ($0, "") })
-            for (index, column) in loadedColumns.enumerated() {
-                row[column] = index < fields.count ? fields[index] : ""
-            }
-            return row
-        }
-    }
-
-    private func labelRow(_ row: [String: String], matches reference: LocationReference) -> Bool {
-        Int(row["segment"] ?? "") == reference.segment &&
-            optionalInt(row["procedure"]) == reference.procedure &&
-            optionalInt(row["lexLevel"]) == reference.lexLevel &&
-            optionalInt(row["addr"]) == reference.addr
-    }
-
-    private func optionalInt(_ value: String?) -> Int? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return Int(trimmed)
-    }
-
-    private func parseCSVLine(_ line: String) -> [String] {
-        var fields: [String] = []
-        var current = ""
-        var inQuotes = false
-        var index = line.startIndex
-        while index < line.endIndex {
-            let ch = line[index]
-            if ch == "\"" {
-                if inQuotes {
-                    let nextIndex = line.index(after: index)
-                    if nextIndex < line.endIndex && line[nextIndex] == "\"" {
-                        current.append("\"")
-                        index = line.index(after: nextIndex)
-                        continue
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    inQuotes = true
-                }
-            } else if ch == "," && !inQuotes {
-                fields.append(current)
-                current = ""
-            } else {
-                current.append(ch)
-            }
-            index = line.index(after: index)
-        }
-        fields.append(current)
-        return fields
-    }
-
-    private func escapeCSVField(_ field: String) -> String {
-        if field.contains(",") || field.contains("\"") || field.contains("\n") {
-            return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        }
-        return field
+        return "procedures_\(fileIdentifier)"
     }
 
     func commitSearch() {

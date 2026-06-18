@@ -154,7 +154,7 @@ struct MetadataStore {
         throw MetadataCSVError.unsupportedType(String(describing: Value.self))
     }
 
-    private func writeLabelsCSV(
+    func writeLabelsCSV(
         _ labels: [Location],
         to file: String,
         overwrite: Bool
@@ -168,7 +168,7 @@ struct MetadataStore {
         try CSVTable.write(headers: headers, rows: rows, to: url)
     }
 
-    private func writeProceduresCSV(
+    func writeProceduresCSV(
         _ procedures: [ProcedureIdentifier],
         to file: String,
         overwrite: Bool
@@ -194,7 +194,7 @@ struct MetadataStore {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
-    private func writeJSON<Value: Encodable>(
+    func writeJSON<Value: Encodable>(
         _ value: Value,
         to file: String,
         overwrite: Bool
@@ -231,7 +231,7 @@ private enum MetadataCSVError: Error, CustomStringConvertible {
     }
 }
 
-private struct CSVTable {
+struct CSVTable {
     let records: [[String: String]]
 
     init(contentsOf url: URL) throws {
@@ -291,7 +291,7 @@ private extension Optional where Wrapped == Int {
     var csvString: String { map(String.init) ?? "" }
 }
 
-private extension Location {
+extension Location {
     convenience init(csv record: [String: String]) {
         self.init(
             segment: Int(record["segment"] ?? "") ?? 0,
@@ -305,7 +305,7 @@ private extension Location {
     }
 }
 
-private extension ProcedureIdentifier {
+extension ProcedureIdentifier {
     convenience init(csv record: [String: String]) {
         let parameters = (record["parameters"] ?? "").split(separator: ";").map { raw in
             let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
