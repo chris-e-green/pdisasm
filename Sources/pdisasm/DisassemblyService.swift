@@ -44,17 +44,40 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     }
 }
 
+public protocol CancellationToken: Sendable {
+    var isCancellationRequested: Bool { get }
+}
+
+public struct DisassemblyCancelledError: Error, Sendable, CustomStringConvertible {
+    public init() {}
+    public var description: String { "Disassembly was cancelled" }
+}
+
 public struct DisassemblyRunRequest: Sendable {
     public let source: CodeFileSource
     public let metadata: MetadataSnapshot
     public let metadataWorkspace: MetadataWorkspace?
     public let options: DisassemblyOptions
+    public let cancellation: CancellationToken?
 
-    public init(source: CodeFileSource, metadata: MetadataSnapshot = MetadataSnapshot(), metadataWorkspace: MetadataWorkspace? = nil, options: DisassemblyOptions = DisassemblyOptions()) {
+    public init(
+        source: CodeFileSource,
+        metadata: MetadataSnapshot = MetadataSnapshot(),
+        metadataWorkspace: MetadataWorkspace? = nil,
+        options: DisassemblyOptions = DisassemblyOptions(),
+        cancellation: CancellationToken? = nil
+    ) {
         self.source = source
         self.metadata = metadata
         self.metadataWorkspace = metadataWorkspace
         self.options = options
+        self.cancellation = cancellation
+    }
+
+    public func checkCancellation() throws {
+        if cancellation?.isCancellationRequested == true {
+            throw DisassemblyCancelledError()
+        }
     }
 }
 
@@ -83,6 +106,72 @@ public struct RunReport: Hashable, Codable, Sendable {
         self.fatalErrors = fatalErrors
         self.warnings = warnings
         self.isComplete = isComplete
+    }
+}
+
+public struct CodeFileSummary: Sendable {
+    public let id: CodeFileID
+    public let sourceFilename: String
+    public let segmentCount: Int
+    public let dataSegmentNumbers: [Int]
+
+    public init(id: CodeFileID, sourceFilename: String, segmentCount: Int, dataSegmentNumbers: [Int]) {
+        self.id = id
+        self.sourceFilename = sourceFilename
+        self.segmentCount = segmentCount
+        self.dataSegmentNumbers = dataSegmentNumbers
+    }
+}
+
+public struct SegmentDictionaryEntrySnapshot: Sendable {
+    public let slot: Int
+    public let segmentID: SegmentID
+    public let name: String
+    public let codeAddress: Int
+    public let codeLength: Int
+    public let kind: String
+    public let textAddress: Int
+    public let machineType: Int
+    public let version: Int
+
+    public init(slot: Int, segmentID: SegmentID, name: String, codeAddress: Int, codeLength: Int, kind: String, textAddress: Int, machineType: Int, version: Int) {
+        self.slot = slot
+        self.segmentID = segmentID
+        self.name = name
+        self.codeAddress = codeAddress
+        self.codeLength = codeLength
+        self.kind = kind
+        self.textAddress = textAddress
+        self.machineType = machineType
+        self.version = version
+    }
+}
+
+public struct SegmentDictionarySnapshot: Sendable {
+    public let entries: [SegmentDictionaryEntrySnapshot]
+    public let intrinsicSegmentNumbers: [UInt8]
+    public let comment: String
+
+    public init(entries: [SegmentDictionaryEntrySnapshot], intrinsicSegmentNumbers: [UInt8], comment: String) {
+        self.entries = entries
+        self.intrinsicSegmentNumbers = intrinsicSegmentNumbers
+        self.comment = comment
+    }
+}
+
+public struct TypeEnvironmentSnapshot: Sendable {
+    public let recordNames: [String]
+    public let typeAliases: [String: String]
+    public let scalarTypeNames: [String]
+    public let constants: [String: Int]
+    public let subrangeTypeNames: [String]
+
+    public init(recordNames: [String], typeAliases: [String: String], scalarTypeNames: [String], constants: [String: Int], subrangeTypeNames: [String]) {
+        self.recordNames = recordNames
+        self.typeAliases = typeAliases
+        self.scalarTypeNames = scalarTypeNames
+        self.constants = constants
+        self.subrangeTypeNames = subrangeTypeNames
     }
 }
 
@@ -130,6 +219,9 @@ public struct CallEdge: Sendable {
 
 public struct ProgramSnapshot: Sendable {
     public let codeFileID: CodeFileID
+    public let file: CodeFileSummary
+    public let segmentDictionary: SegmentDictionarySnapshot
+    public let typeEnvironment: TypeEnvironmentSnapshot
     public let segments: [SegmentID: SegmentSnapshot]
     public let procedures: [ProcedureID: ProcedureSnapshot]
     public let instructions: [InstructionID: InstructionSnapshot]
@@ -140,6 +232,9 @@ public struct ProgramSnapshot: Sendable {
 
     public init(
         codeFileID: CodeFileID,
+        file: CodeFileSummary? = nil,
+        segmentDictionary: SegmentDictionarySnapshot = SegmentDictionarySnapshot(entries: [], intrinsicSegmentNumbers: [], comment: ""),
+        typeEnvironment: TypeEnvironmentSnapshot = TypeEnvironmentSnapshot(recordNames: [], typeAliases: [:], scalarTypeNames: [], constants: [:], subrangeTypeNames: []),
         segments: [SegmentID: SegmentSnapshot] = [:],
         procedures: [ProcedureID: ProcedureSnapshot] = [:],
         instructions: [InstructionID: InstructionSnapshot] = [:],
@@ -149,6 +244,9 @@ public struct ProgramSnapshot: Sendable {
         diagnostics: [Diagnostic] = []
     ) {
         self.codeFileID = codeFileID
+        self.file = file ?? CodeFileSummary(id: codeFileID, sourceFilename: codeFileID.value, segmentCount: segments.count, dataSegmentNumbers: [])
+        self.segmentDictionary = segmentDictionary
+        self.typeEnvironment = typeEnvironment
         self.segments = segments
         self.procedures = procedures
         self.instructions = instructions
@@ -156,6 +254,30 @@ public struct ProgramSnapshot: Sendable {
         self.callsByOrigin = callsByOrigin
         self.callsByTarget = callsByTarget
         self.diagnostics = diagnostics
+    }
+}
+
+public struct SourceReference: Hashable, Sendable {
+    public let procedureID: ProcedureID?
+    public let instructionID: InstructionID?
+    public let locationID: LocationID?
+
+    public init(procedureID: ProcedureID? = nil, instructionID: InstructionID? = nil, locationID: LocationID? = nil) {
+        self.procedureID = procedureID
+        self.instructionID = instructionID
+        self.locationID = locationID
+    }
+}
+
+public struct DocumentSection: Sendable {
+    public let id: String
+    public let title: String
+    public let nodeIDs: [DocumentNodeID]
+
+    public init(id: String, title: String, nodeIDs: [DocumentNodeID]) {
+        self.id = id
+        self.title = title
+        self.nodeIDs = nodeIDs
     }
 }
 
@@ -167,14 +289,24 @@ public struct DocumentNode: Sendable {
 public struct DisassemblyDocument: Sendable {
     public let id: DocumentID
     public let title: String
+    public let sections: [DocumentSection]
     public let nodes: [DocumentNode]
     public let nodesByID: [DocumentNodeID: DocumentNode]
+    public let sourceMap: [DocumentNodeID: SourceReference]
 
-    public init(id: DocumentID, title: String = "", nodes: [DocumentNode] = []) {
+    public init(
+        id: DocumentID,
+        title: String = "",
+        nodes: [DocumentNode] = [],
+        sections: [DocumentSection]? = nil,
+        sourceMap: [DocumentNodeID: SourceReference] = [:]
+    ) {
         self.id = id
         self.title = title
         self.nodes = nodes
+        self.sections = sections ?? [DocumentSection(id: "main", title: title.isEmpty ? "Disassembly" : title, nodeIDs: nodes.map(\.id))]
         self.nodesByID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+        self.sourceMap = sourceMap
     }
 
     public func patchingComment(_ comment: DisassemblyComment) -> (document: DisassemblyDocument, patchedNodes: [DocumentNodeID]) {
@@ -192,7 +324,7 @@ public struct DisassemblyDocument: Sendable {
             patchedNodeIDs.append(node.id)
         }
 
-        return (DisassemblyDocument(id: id, title: title, nodes: patchedNodes), patchedNodeIDs)
+        return (DisassemblyDocument(id: id, title: title, nodes: patchedNodes, sections: sections, sourceMap: sourceMap), patchedNodeIDs)
     }
 }
 
@@ -201,17 +333,26 @@ public struct DocumentIndexes: Sendable {
     public let locationNodes: [LocationID: [DocumentNodeID]]
     public let instructionNodes: [InstructionID: DocumentNodeID]
     public let symbolNodes: [String: [DocumentNodeID]]
+    public let searchIndex: [String: [DocumentNodeID]]
 
     public init(
         procedureNodes: [ProcedureID: DocumentNodeID] = [:],
         locationNodes: [LocationID: [DocumentNodeID]] = [:],
         instructionNodes: [InstructionID: DocumentNodeID] = [:],
-        symbolNodes: [String: [DocumentNodeID]] = [:]
+        symbolNodes: [String: [DocumentNodeID]] = [:],
+        searchIndex: [String: [DocumentNodeID]]? = nil
     ) {
         self.procedureNodes = procedureNodes
         self.locationNodes = locationNodes
         self.instructionNodes = instructionNodes
         self.symbolNodes = symbolNodes
+        self.searchIndex = searchIndex ?? symbolNodes
+    }
+
+    public func search(_ query: String) -> [DocumentNodeID] {
+        let key = query.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return [] }
+        return searchIndex[key] ?? []
     }
 }
 
@@ -227,7 +368,9 @@ public struct DisassemblyService: Sendable {
     public init() {}
 
     public func run(_ request: DisassemblyRunRequest) throws -> DisassemblyRunResult {
+        try request.checkCancellation()
         let filename = try request.source.filenameForLegacyRunner
+        try request.checkCancellation()
         let legacyResult = try disassemble(
             filename: filename,
             verbose: request.options.verbose,
@@ -235,6 +378,7 @@ public struct DisassemblyService: Sendable {
             overwriteMetadata: request.options.overwriteMetadata,
             metadataWorkspace: request.metadataWorkspace
         )
+        try request.checkCancellation()
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
         let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
         let structuredLines = renderStructuredLines(
@@ -242,8 +386,9 @@ public struct DisassemblyService: Sendable {
             showStackState: request.options.showStackState,
             verbose: request.options.verbose
         )
-        let document = DisassemblyDocument.build(from: structuredLines, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
+        let document = DisassemblyDocument.build(from: structuredLines, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename, codeFileID: codeFileID)
         let indexes = DocumentIndexes.build(document: document, codeFileID: codeFileID)
+        try request.checkCancellation()
         let report = RunReport(stages: legacyResult.runReport.stages + [
             StageReport(name: "snapshotBuild", metrics: [
                 "segments": snapshot.segments.count,
@@ -384,8 +529,42 @@ private extension ProgramSnapshot {
             callsByTarget[targetProcedure, default: []].append(edge)
         }
 
+        let file = CodeFileSummary(
+            id: codeFileID,
+            sourceFilename: result.sourceFilename,
+            segmentCount: result.codeSegments.count,
+            dataSegmentNumbers: result.dataSegments.sorted()
+        )
+        let segmentDictionary = SegmentDictionarySnapshot(
+            entries: result.segDictionary.segTable.map { slot, segment in
+                SegmentDictionaryEntrySnapshot(
+                    slot: slot,
+                    segmentID: SegmentID(codeFile: codeFileID, number: segment.segNum),
+                    name: segment.name,
+                    codeAddress: segment.codeAddress,
+                    codeLength: segment.codeLength,
+                    kind: String(describing: segment.segmentKind),
+                    textAddress: segment.textAddress,
+                    machineType: segment.machineType,
+                    version: segment.version
+                )
+            }.sorted { $0.slot < $1.slot },
+            intrinsicSegmentNumbers: result.segDictionary.intrinsics.sorted(),
+            comment: result.segDictionary.comment
+        )
+        let typeEnvironment = TypeEnvironmentSnapshot(
+            recordNames: result.knownRecords.map(\.name).sorted(),
+            typeAliases: result.typeAliases,
+            scalarTypeNames: result.scalarTypes.keys.sorted(),
+            constants: result.constants,
+            subrangeTypeNames: result.subrangeTypes.keys.sorted()
+        )
+
         return ProgramSnapshot(
             codeFileID: codeFileID,
+            file: file,
+            segmentDictionary: segmentDictionary,
+            typeEnvironment: typeEnvironment,
             segments: segments,
             procedures: procedures,
             instructions: instructions,
@@ -398,12 +577,47 @@ private extension ProgramSnapshot {
 }
 
 private extension DisassemblyDocument {
-    static func build(from lines: [OutputLine], id: DocumentID, title: String) -> DisassemblyDocument {
+    static func build(from lines: [OutputLine], id: DocumentID, title: String, codeFileID: CodeFileID) -> DisassemblyDocument {
         let nodes = lines.map { line in
             DocumentNode(id: DocumentNodeID(document: id, value: "line-\(line.id)"), line: line)
         }
-        return DisassemblyDocument(id: id, title: title, nodes: nodes)
+        let sections = buildSections(nodes: nodes, title: title)
+        var sourceMap: [DocumentNodeID: SourceReference] = [:]
+        for node in nodes {
+            let locationID = node.line.locationReference.map { LocationID(codeFile: codeFileID, legacy: $0) }
+            let instructionID = node.line.commentReference.flatMap { InstructionID(codeFile: codeFileID, legacy: $0) }
+            let procedureID = instructionID?.procedure ?? locationID?.procedure
+            if procedureID != nil || instructionID != nil || locationID != nil {
+                sourceMap[node.id] = SourceReference(procedureID: procedureID, instructionID: instructionID, locationID: locationID)
+            }
+        }
+        return DisassemblyDocument(id: id, title: title, nodes: nodes, sections: sections, sourceMap: sourceMap)
     }
+}
+
+private func buildSections(nodes: [DocumentNode], title: String) -> [DocumentSection] {
+    var sections: [DocumentSection] = []
+    var currentTitle = title.isEmpty ? "Preamble" : title
+    var currentIDs: [DocumentNodeID] = []
+    var currentID = "section-0"
+
+    func flush() {
+        if !currentIDs.isEmpty {
+            sections.append(DocumentSection(id: currentID, title: currentTitle, nodeIDs: currentIDs))
+        }
+    }
+
+    for node in nodes {
+        if let anchor = node.line.anchor {
+            flush()
+            currentID = "procedure-\(anchor.replacingOccurrences(of: ".", with: "-"))"
+            currentTitle = node.line.text
+            currentIDs = []
+        }
+        currentIDs.append(node.id)
+    }
+    flush()
+    return sections.isEmpty ? [DocumentSection(id: "main", title: title.isEmpty ? "Disassembly" : title, nodeIDs: nodes.map(\.id))] : sections
 }
 
 private extension DocumentIndexes {
@@ -412,6 +626,7 @@ private extension DocumentIndexes {
         var locationNodes: [LocationID: [DocumentNodeID]] = [:]
         var instructionNodes: [InstructionID: DocumentNodeID] = [:]
         var symbolNodes: [String: [DocumentNodeID]] = [:]
+        var searchIndex: [String: [DocumentNodeID]] = [:]
 
         for node in document.nodes {
             let line = node.line
@@ -431,7 +646,12 @@ private extension DocumentIndexes {
                 instructionNodes[id] = node.id
             }
             for token in line.text.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }) {
-                symbolNodes[String(token).uppercased(), default: []].append(node.id)
+                let key = String(token).uppercased()
+                symbolNodes[key, default: []].append(node.id)
+                searchIndex[key, default: []].append(node.id)
+            }
+            for word in line.text.split(whereSeparator: { $0.isWhitespace }) {
+                searchIndex[String(word).uppercased(), default: []].append(node.id)
             }
         }
 
@@ -439,7 +659,8 @@ private extension DocumentIndexes {
             procedureNodes: procedureNodes,
             locationNodes: locationNodes,
             instructionNodes: instructionNodes,
-            symbolNodes: symbolNodes
+            symbolNodes: symbolNodes,
+            searchIndex: searchIndex.mapValues { Array(Set($0)).sorted { $0.description < $1.description } }
         )
     }
 }
