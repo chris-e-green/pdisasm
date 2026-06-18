@@ -44,10 +44,6 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     }
 }
 
-public struct MetadataSnapshot: Hashable, Codable, Sendable {
-    public init() {}
-}
-
 public struct DisassemblyRunRequest: Sendable {
     public let source: CodeFileSource
     public let metadata: MetadataSnapshot
