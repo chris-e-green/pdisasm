@@ -850,7 +850,7 @@ private func makeDisassemblyResult(
     )
 }
 
-private func shouldEmitLine(
+func shouldEmitLine(
     _ line: OutputLine,
     showMarkup: Bool,
     showPCode: Bool,

@@ -46,6 +46,30 @@ final class DisassemblyServiceTests: XCTestCase {
         XCTAssertEqual(wrapped.snapshot.codeFileID, CodeFileID(legacy.sourceFilename))
         XCTAssertEqual(wrapped.report.stages.first?.name, "legacyDisassembly")
     }
+
+    func testServiceBuildsImmutableSnapshotDocumentAndIndexes() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(
+            source: .file(fixture),
+            options: DisassemblyOptions(verbose: false)
+        ))
+
+        XCTAssertEqual(wrapped.snapshot.segments.count, wrapped.legacyResult.codeSegments.count)
+        XCTAssertFalse(wrapped.snapshot.procedures.isEmpty)
+        XCTAssertFalse(wrapped.snapshot.instructions.isEmpty)
+        XCTAssertFalse(wrapped.document.nodes.isEmpty)
+        XCTAssertEqual(wrapped.document.nodes.count, wrapped.document.nodesByID.count)
+        XCTAssertFalse(wrapped.indexes.procedureNodes.isEmpty)
+        XCTAssertFalse(wrapped.indexes.symbolNodes.isEmpty)
+        XCTAssertEqual(
+            renderDisassemblyDocument(wrapped.document, showMarkup: true, showPCode: true, showPseudoCode: true),
+            renderDisassembly(wrapped.legacyResult, showMarkup: true, showPCode: true, showPseudoCode: true)
+        )
+    }
 }
 
 extension DisassemblyServiceTests {
