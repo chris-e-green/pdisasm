@@ -2,6 +2,7 @@ import Foundation
 
 struct MetadataStore {
     let appSupportDirectory: URL
+    var bundledDirectory: URL? = nil
     var diagnostics: DiagnosticCollector? = nil
 
     func createDirectory() throws {
@@ -134,8 +135,8 @@ struct MetadataStore {
     private func existingReadURL(_ file: String, extension fileExtension: String) -> URL? {
         let primary = fileURL(file, extension: fileExtension)
         if FileManager.default.fileExists(atPath: primary.path) { return primary }
-        let bundledMetadata = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-            .appendingPathComponent("metadata", isDirectory: true)
+        let bundledMetadata = (bundledDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("metadata", isDirectory: true))
             .appendingPathComponent(file)
             .appendingPathExtension(fileExtension)
         if FileManager.default.fileExists(atPath: bundledMetadata.path) { return bundledMetadata }

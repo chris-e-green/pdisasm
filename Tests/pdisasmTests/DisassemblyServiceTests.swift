@@ -202,3 +202,62 @@ private struct InMemoryMetadataRepository: MetadataRepository {
     func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {}
     func saveComments(_ comments: [DisassemblyComment], named name: String) throws {}
 }
+
+
+extension DisassemblyServiceTests {
+    func testJSONDocumentExporterProducesStableExternalShape() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(source: .file(fixture)))
+        let json = try JSONDocumentExporter().string(for: wrapped)
+
+        XCTAssertTrue(json.contains("\"codeFileID\" : \"SYSTEM.LIBRARY-02-00\""))
+        XCTAssertTrue(json.contains("\"document\" : ["))
+        XCTAssertTrue(json.contains("\"procedures\" : ["))
+    }
+
+    func testCallGraphExporterProducesDotGraph() throws {
+        let codeFileID = CodeFileID("fixture")
+        let caller = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 1)
+        let callee = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 2)
+        let callSite = InstructionID(procedure: caller, offset: 10)
+        let snapshot = ProgramSnapshot(
+            codeFileID: codeFileID,
+            procedures: [
+                caller: ProcedureSnapshot(id: caller, name: "CALLER", isFunction: false, isAssembly: false, lexicalLevel: 0, dataSize: 0, parameterSize: 0, instructionIDs: []),
+                callee: ProcedureSnapshot(id: callee, name: "CALLEE", isFunction: false, isAssembly: false, lexicalLevel: 0, dataSize: 0, parameterSize: 0, instructionIDs: []),
+            ],
+            callsByOrigin: [
+                caller: [CallEdge(id: CallEdgeID(origin: callSite, target: callee), origin: callSite, target: callee)]
+            ]
+        )
+
+        let dot = CallGraphExporter().dot(for: snapshot)
+
+        XCTAssertTrue(dot.contains("digraph pdisasm_call_graph"))
+        XCTAssertTrue(dot.contains("\"fixture:1.1\" -> \"fixture:1.2\""))
+    }
+
+    func testBatchDisassemblyRunsMultipleFilesWithSharedWorkspace() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let workspaceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-workspace-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: workspaceURL, withIntermediateDirectories: true)
+
+        let batch = try BatchDisassemblyService().run(
+            files: [fixture, fixture],
+            workspace: MetadataWorkspace(writableDirectory: workspaceURL, bundledDirectory: workspaceURL)
+        )
+
+        XCTAssertEqual(batch.results.count, 2)
+        XCTAssertEqual(Set(batch.results.map(\.snapshot.codeFileID)), [CodeFileID("SYSTEM.LIBRARY-02-00")])
+    }
+}
