@@ -174,6 +174,24 @@ public struct DisassemblyDocument: Sendable {
         self.nodes = nodes
         self.nodesByID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
     }
+
+    public func patchingComment(_ comment: DisassemblyComment) -> (document: DisassemblyDocument, patchedNodes: [DocumentNodeID]) {
+        var patchedNodes: [DocumentNode] = []
+        var patchedNodeIDs: [DocumentNodeID] = []
+
+        for node in nodes {
+            guard node.line.commentReference == comment.reference else {
+                patchedNodes.append(node)
+                continue
+            }
+
+            let patchedLine = node.line.patchingCommentText(comment.comment)
+            patchedNodes.append(DocumentNode(id: node.id, line: patchedLine))
+            patchedNodeIDs.append(node.id)
+        }
+
+        return (DisassemblyDocument(id: id, title: title, nodes: patchedNodes), patchedNodeIDs)
+    }
 }
 
 public struct DocumentIndexes: Sendable {
@@ -242,6 +260,48 @@ public struct DisassemblyService: Sendable {
             document: document,
             indexes: indexes,
             report: report
+        )
+    }
+}
+
+public extension ProgramSnapshot {
+    func dependentProcedureScope(for procedureID: ProcedureID) -> Set<ProcedureID> {
+        var scope: Set<ProcedureID> = [procedureID]
+        var pending: [ProcedureID] = [procedureID]
+
+        while let target = pending.popLast() {
+            for edge in callsByTarget[target] ?? [] {
+                let caller = edge.origin.procedure
+                if scope.insert(caller).inserted {
+                    pending.append(caller)
+                }
+            }
+        }
+
+        return scope
+    }
+}
+
+public extension OutputLine {
+    func patchingCommentText(_ comment: String) -> OutputLine {
+        let trimmed = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let patchedText: String
+
+        if let semicolon = text.range(of: " ; ") {
+            let prefix = String(text[..<semicolon.lowerBound])
+            patchedText = trimmed.isEmpty ? prefix : "\(prefix) ; \(trimmed)"
+        } else {
+            patchedText = trimmed.isEmpty ? text : "\(text) ; \(trimmed)"
+        }
+
+        return OutputLine(
+            id: id,
+            kind: kind,
+            text: patchedText,
+            anchor: anchor,
+            locationReference: locationReference,
+            commentReference: commentReference,
+            headerEditTargets: headerEditTargets
         )
     }
 }
