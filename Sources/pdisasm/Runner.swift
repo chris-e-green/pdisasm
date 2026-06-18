@@ -535,7 +535,8 @@ public func disassemble(
     verbose: Bool = false,
     writeMetadata: Bool = false,
     overwriteMetadata: Bool = false,
-    metadataWorkspace: MetadataWorkspace? = nil
+    metadataWorkspace: MetadataWorkspace? = nil,
+    metadataSnapshot: MetadataSnapshot? = nil
 ) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
@@ -562,20 +563,28 @@ public func disassemble(
     var subrangeTypes: [String: PascalSubrangeType] = [:]
     var lineComments: [InstructionReference: String] = [:]
 
-    // Try loading name maps from Application Support. Missing metadata is fine;
-    // writeback is controlled separately by the caller.
+    // Try loading name maps from the resolved metadata snapshot or workspace.
+    // Missing metadata is fine; writeback is controlled separately by the caller.
     var globalNames: [Int: Identifier] = [:]
-    metadata.load(
-        knownRecords: &knownRecords,
-        typeAliases: &typeAliases,
-        scalarTypes: &scalarTypes,
-        constants: &constants,
-        subrangeTypes: &subrangeTypes,
-        allLocations: &allLocations,
-        allProcedures: &allProcedures,
-        lineComments: &lineComments,
-        globalNames: &globalNames
-    )
+    if let metadataSnapshot {
+        allLocations.formUnion(metadataSnapshot.labels.map(\.value))
+        allProcedures.append(contentsOf: metadataSnapshot.procedures.map(\.value))
+        for comment in metadataSnapshot.comments {
+            lineComments[comment.value.reference] = comment.value.comment
+        }
+    } else {
+        metadata.load(
+            knownRecords: &knownRecords,
+            typeAliases: &typeAliases,
+            scalarTypes: &scalarTypes,
+            constants: &constants,
+            subrangeTypes: &subrangeTypes,
+            allLocations: &allLocations,
+            allProcedures: &allProcedures,
+            lineComments: &lineComments,
+            globalNames: &globalNames
+        )
+    }
 
     let allCodeSegs = try decodeCodeSegments(
         segDict: segDict,

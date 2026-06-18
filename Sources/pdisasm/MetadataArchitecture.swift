@@ -108,7 +108,7 @@ public protocol MetadataRepository: Sendable {
     func saveComments(_ comments: [DisassemblyComment], named name: String) throws
 }
 
-public enum MetadataFileKind: Sendable { case labelsCSV, proceduresCSV, commentsJSON }
+public enum MetadataFileKind: Hashable, Sendable { case labelsCSV, proceduresCSV, commentsJSON }
 
 public enum MetadataInvalidationScope: Hashable, Sendable {
     case none
@@ -195,5 +195,48 @@ public struct FileBackedMetadataRepository: MetadataRepository {
         if FileManager.default.fileExists(atPath: writable.path) { return writable }
         if let bundled = workspace.bundledDirectory?.appendingPathComponent(name).appendingPathExtension(ext), FileManager.default.fileExists(atPath: bundled.path) { return bundled }
         return nil
+    }
+}
+
+public struct InMemoryMetadataRepository: MetadataRepository, @unchecked Sendable {
+    public var bundles: [MetadataRepositoryKey: MetadataBundle]
+    public init(bundles: [MetadataRepositoryKey: MetadataBundle] = [:]) {
+        self.bundles = bundles
+    }
+
+    public func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
+        bundles[MetadataRepositoryKey(name: name, kind: kind)] ?? MetadataBundle()
+    }
+
+    public func saveLabels(_ labels: [Location], named name: String) throws {}
+    public func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {}
+    public func saveComments(_ comments: [DisassemblyComment], named name: String) throws {}
+}
+
+public struct MetadataRepositoryKey: Hashable, Sendable {
+    public let name: String
+    public let kind: MetadataFileKind
+    public init(name: String, kind: MetadataFileKind) {
+        self.name = name
+        self.kind = kind
+    }
+}
+
+public struct MetadataScopeResolver: Sendable {
+    public let repository: MetadataRepository
+    public init(repository: MetadataRepository) { self.repository = repository }
+
+    public func resolve(fileIdentifier: String, version: Int) throws -> MetadataSnapshot {
+        let scopes: [(String, MetadataFileKind, Int)] = [
+            ("labels_ver_\(version)", .labelsCSV, 0),
+            ("procedures_ver_\(version)", .proceduresCSV, 0),
+            ("labels_\(fileIdentifier)", .labelsCSV, 10),
+            ("procedures_\(fileIdentifier)", .proceduresCSV, 10),
+            ("comments_\(fileIdentifier)", .commentsJSON, 10),
+        ]
+        let bundles = try scopes.map { name, kind, precedence in
+            try repository.loadBundle(named: name, kind: kind, provenance: MetadataProvenance(source: name, precedence: precedence))
+        }
+        return MetadataSnapshot(merging: bundles)
     }
 }
