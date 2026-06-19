@@ -112,10 +112,20 @@ private struct JSONDisassemblyExport: Encodable {
 }
 
 private struct JSONRunReport: Encodable {
+  let status: RunStatus
   let isComplete: Bool
+  let didConverge: Bool
+  let fatalErrors: [String]
+  let warnings: [String]
+  let metadataWarnings: [String]
   let stages: [StageReport]
   init(report: RunReport) {
+    status = report.status
     isComplete = report.isComplete
+    didConverge = report.didConverge
+    fatalErrors = report.fatalErrors
+    warnings = report.warnings
+    metadataWarnings = report.metadataWarnings
     stages = report.stages
   }
 }

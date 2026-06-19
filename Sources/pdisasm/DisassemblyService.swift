@@ -81,31 +81,98 @@ public struct DisassemblyRunRequest: Sendable {
     }
 }
 
+public enum StageStatus: String, Hashable, Codable, Sendable {
+    case complete
+    case degraded
+    case cancelled
+    case fatal
+
+    public var isComplete: Bool { self == .complete }
+}
+
+public enum RunStatus: String, Hashable, Codable, Sendable {
+    case success
+    case degradedSuccess
+    case cancelled
+    case fatalError
+
+    public var isSuccess: Bool { self == .success || self == .degradedSuccess }
+    public var processExitCode: Int32 {
+        switch self {
+        case .success: return 0
+        case .degradedSuccess: return 2
+        case .cancelled: return 130
+        case .fatalError: return 1
+        }
+    }
+}
+
 public struct StageReport: Hashable, Codable, Sendable {
     public let name: String
-    public let isComplete: Bool
+    public let status: StageStatus
     public let metrics: [String: Int]
     public let diagnostics: [String]
 
-    public init(name: String, isComplete: Bool = true, metrics: [String: Int] = [:], diagnostics: [String] = []) {
+    public var isComplete: Bool { status.isComplete }
+
+    public init(name: String, status: StageStatus? = nil, isComplete: Bool = true, metrics: [String: Int] = [:], diagnostics: [String] = []) {
         self.name = name
-        self.isComplete = isComplete
+        self.status = status ?? (isComplete ? .complete : .degraded)
         self.metrics = metrics
         self.diagnostics = diagnostics
     }
 }
 
 public struct RunReport: Hashable, Codable, Sendable {
+    public let status: RunStatus
     public let stages: [StageReport]
     public let fatalErrors: [String]
     public let warnings: [String]
+    public let metadataWarnings: [String]
     public let isComplete: Bool
+    public let didConverge: Bool
 
-    public init(stages: [StageReport] = [], fatalErrors: [String] = [], warnings: [String] = [], isComplete: Bool = true) {
+    public init(
+        status: RunStatus? = nil,
+        stages: [StageReport] = [],
+        fatalErrors: [String] = [],
+        warnings: [String] = [],
+        metadataWarnings: [String] = [],
+        isComplete: Bool? = nil,
+        didConverge: Bool? = nil
+    ) {
         self.stages = stages
         self.fatalErrors = fatalErrors
         self.warnings = warnings
-        self.isComplete = isComplete
+        self.metadataWarnings = metadataWarnings
+        self.didConverge = didConverge ?? (stages.first { $0.name == "analysis" }?.isComplete ?? true)
+        let complete = isComplete ?? (fatalErrors.isEmpty && stages.allSatisfy(\.isComplete))
+        self.isComplete = complete
+        self.status = status ?? RunReport.deriveStatus(stages: stages, fatalErrors: fatalErrors, warnings: warnings + metadataWarnings, isComplete: complete)
+    }
+
+    private static func deriveStatus(stages: [StageReport], fatalErrors: [String], warnings: [String], isComplete: Bool) -> RunStatus {
+        if !fatalErrors.isEmpty || stages.contains(where: { $0.status == .fatal }) { return .fatalError }
+        if stages.contains(where: { $0.status == .cancelled }) { return .cancelled }
+        if !isComplete || !warnings.isEmpty || stages.contains(where: { $0.status == .degraded }) { return .degradedSuccess }
+        return .success
+    }
+}
+
+public struct FactProvenance: Hashable, Codable, Sendable {
+    public let source: String
+    public let detail: String
+
+    public init(source: String, detail: String = "") {
+        self.source = source
+        self.detail = detail
+    }
+
+    public static let decoded = FactProvenance(source: "decoded")
+    public static let inferred = FactProvenance(source: "inferred")
+    public static let rendered = FactProvenance(source: "rendered")
+    public static func metadata(_ provenance: MetadataProvenance) -> FactProvenance {
+        FactProvenance(source: provenance.source, detail: "metadata precedence \(provenance.precedence)")
     }
 }
 
@@ -179,6 +246,14 @@ public struct SegmentSnapshot: Sendable {
     public let id: SegmentID
     public let name: String
     public let procedureIDs: [ProcedureID]
+    public let provenance: FactProvenance
+
+    public init(id: SegmentID, name: String, procedureIDs: [ProcedureID], provenance: FactProvenance = .decoded) {
+        self.id = id
+        self.name = name
+        self.procedureIDs = procedureIDs
+        self.provenance = provenance
+    }
 }
 
 public struct ProcedureSnapshot: Sendable {
@@ -190,6 +265,19 @@ public struct ProcedureSnapshot: Sendable {
     public let dataSize: Int
     public let parameterSize: Int
     public let instructionIDs: [InstructionID]
+    public let provenance: FactProvenance
+
+    public init(id: ProcedureID, name: String, isFunction: Bool, isAssembly: Bool, lexicalLevel: Int, dataSize: Int, parameterSize: Int, instructionIDs: [InstructionID], provenance: FactProvenance = .decoded) {
+        self.id = id
+        self.name = name
+        self.isFunction = isFunction
+        self.isAssembly = isAssembly
+        self.lexicalLevel = lexicalLevel
+        self.dataSize = dataSize
+        self.parameterSize = parameterSize
+        self.instructionIDs = instructionIDs
+        self.provenance = provenance
+    }
 }
 
 public struct InstructionSnapshot: Sendable {
@@ -201,6 +289,21 @@ public struct InstructionSnapshot: Sendable {
     public let destinationID: LocationID?
     public let comment: String?
     public let userComment: String?
+    public let provenance: FactProvenance
+    public let commentProvenance: FactProvenance?
+
+    public init(id: InstructionID, opcode: UInt8, mnemonic: String, parameters: [Int], locationID: LocationID?, destinationID: LocationID?, comment: String?, userComment: String?, provenance: FactProvenance = .decoded, commentProvenance: FactProvenance? = nil) {
+        self.id = id
+        self.opcode = opcode
+        self.mnemonic = mnemonic
+        self.parameters = parameters
+        self.locationID = locationID
+        self.destinationID = destinationID
+        self.comment = comment
+        self.userComment = userComment
+        self.provenance = provenance
+        self.commentProvenance = commentProvenance
+    }
 }
 
 public struct LocationFact: Sendable {
@@ -209,6 +312,16 @@ public struct LocationFact: Sendable {
     public let type: String
     public let typeSource: TypeSource
     public let isParameter: Bool
+    public let provenance: FactProvenance
+
+    public init(id: LocationID, name: String, type: String, typeSource: TypeSource, isParameter: Bool, provenance: FactProvenance = .decoded) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.typeSource = typeSource
+        self.isParameter = isParameter
+        self.provenance = provenance
+    }
 }
 
 public struct CallEdge: Sendable {
@@ -284,6 +397,13 @@ public struct DocumentSection: Sendable {
 public struct DocumentNode: Sendable {
     public let id: DocumentNodeID
     public let line: OutputLine
+    public let provenance: FactProvenance
+
+    public init(id: DocumentNodeID, line: OutputLine, provenance: FactProvenance = .rendered) {
+        self.id = id
+        self.line = line
+        self.provenance = provenance
+    }
 }
 
 public struct DisassemblyDocument: Sendable {
@@ -423,10 +543,14 @@ public struct DisassemblyService: Sendable {
             "locationNodes": indexes.locationNodes.count,
         ])
         let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotReport, documentReport]
+        let metadataWarnings = metadataMerge.report.diagnostics
         let report = RunReport(
             stages: stageReports,
+            fatalErrors: legacyResult.runReport.fatalErrors,
             warnings: legacyResult.runReport.warnings,
-            isComplete: stageReports.allSatisfy(\.isComplete)
+            metadataWarnings: metadataWarnings,
+            isComplete: stageReports.allSatisfy(\.isComplete),
+            didConverge: stageReports.first { $0.name == "analysis" }?.isComplete ?? true
         )
         return DisassemblyRunResult(
             legacyResult: legacyResult,
@@ -489,7 +613,7 @@ private extension ProgramSnapshot {
 
         for location in result.allLocations {
             let id = LocationID(codeFile: codeFileID, legacy: location)
-            locations[id] = LocationFact(id: id, name: location.name, type: location.type, typeSource: location.typeSource, isParameter: location.isParam)
+            locations[id] = LocationFact(id: id, name: location.name, type: location.type, typeSource: location.typeSource, isParameter: location.isParam, provenance: provenance(for: location))
         }
 
         for (segmentNumber, codeSegment) in result.codeSegments {
@@ -512,7 +636,8 @@ private extension ProgramSnapshot {
                     lexicalLevel: procedure.lexicalLevel,
                     dataSize: procedure.dataSize,
                     parameterSize: procedure.parameterSize,
-                    instructionIDs: instructionIDs
+                    instructionIDs: instructionIDs,
+                    provenance: provenance(for: legacyID)
                 )
 
                 for offset in procedure.instructions.keys.sorted() {
@@ -526,12 +651,13 @@ private extension ProgramSnapshot {
                         locationID: instruction.memLocation.map { LocationID(codeFile: codeFileID, legacy: $0) },
                         destinationID: instruction.destination.map { LocationID(codeFile: codeFileID, legacy: $0) },
                         comment: instruction.comment,
-                        userComment: instruction.userComment
+                        userComment: instruction.userComment,
+                        commentProvenance: instruction.userComment == nil ? nil : .metadata(MetadataProvenance(source: "metadata-comment", precedence: 0))
                     )
                 }
             }
 
-            segments[segmentID] = SegmentSnapshot(id: segmentID, name: segmentName, procedureIDs: procedureIDs)
+            segments[segmentID] = SegmentSnapshot(id: segmentID, name: segmentName, procedureIDs: procedureIDs, provenance: .decoded)
         }
 
         var callsByOrigin: [ProcedureID: [CallEdge]] = [:]
@@ -599,6 +725,19 @@ private extension ProgramSnapshot {
             callsByTarget: callsByTarget.mapValues { $0.sorted { $0.id.description < $1.id.description } },
             diagnostics: result.diagnostics
         )
+    }
+
+    static func provenance(for location: Location) -> FactProvenance {
+        switch location.typeSource {
+        case .user: return FactProvenance(source: "user-metadata")
+        case .metadata: return FactProvenance(source: "metadata")
+        case .inferred: return .inferred
+        default: return .decoded
+        }
+    }
+
+    static func provenance(for procedure: ProcedureIdentifier) -> FactProvenance {
+        procedure.procName == nil ? .decoded : FactProvenance(source: "procedure-metadata")
     }
 }
 

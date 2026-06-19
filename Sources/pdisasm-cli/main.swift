@@ -73,12 +73,13 @@ struct PdisasmCLI {
     if batchMode {
       print(
         "pdisasm-cli: running batch decompiler on \(filenames.count) files (verbose=\(verbose))")
-      _ = try BatchDisassemblyService().run(
+      let batch = try BatchDisassemblyService().run(
         files: filenames.map { URL(fileURLWithPath: $0) },
         options: options,
         workspace: workspace
       )
-      return
+      let status = batch.results.map(\.report.status).reduce(RunStatus.success, Self.moreSevereStatus)
+      Foundation.exit(status.processExitCode)
     }
 
     let filename = filenames[0]
@@ -103,6 +104,12 @@ struct PdisasmCLI {
           showPseudoCode: showPseudocode
         ), terminator: "")
     }
+    Foundation.exit(result.report.status.processExitCode)
+  }
+
+  private static func moreSevereStatus(_ lhs: RunStatus, _ rhs: RunStatus) -> RunStatus {
+    let rank: [RunStatus: Int] = [.success: 0, .degradedSuccess: 1, .cancelled: 2, .fatalError: 3]
+    return (rank[lhs] ?? 0) >= (rank[rhs] ?? 0) ? lhs : rhs
   }
 
   private static func requireValue(

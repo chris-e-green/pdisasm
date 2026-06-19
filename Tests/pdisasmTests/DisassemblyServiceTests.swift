@@ -2,6 +2,40 @@ import XCTest
 @testable import pdisasm
 
 final class DisassemblyServiceTests: XCTestCase {
+
+    func testRunReportStatusSemanticsAndExitCodes() {
+        let success = RunReport(stages: [StageReport(name: "analysis")])
+        XCTAssertEqual(success.status, .success)
+        XCTAssertEqual(success.status.processExitCode, 0)
+
+        let degraded = RunReport(stages: [StageReport(name: "analysis", isComplete: false)], warnings: ["partial"])
+        XCTAssertEqual(degraded.status, .degradedSuccess)
+        XCTAssertEqual(degraded.status.processExitCode, 2)
+        XCTAssertFalse(degraded.didConverge)
+
+        let cancelled = RunReport(stages: [StageReport(name: "decode", status: .cancelled)])
+        XCTAssertEqual(cancelled.status, .cancelled)
+        XCTAssertEqual(cancelled.status.processExitCode, 130)
+
+        let fatal = RunReport(fatalErrors: ["unreadable"])
+        XCTAssertEqual(fatal.status, .fatalError)
+        XCTAssertEqual(fatal.status.processExitCode, 1)
+    }
+
+    func testSnapshotAndDocumentExposeUserVisibleProvenance() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(source: .file(fixture)))
+
+        XCTAssertFalse(wrapped.snapshot.procedures.values.filter { !$0.provenance.source.isEmpty }.isEmpty)
+        XCTAssertFalse(wrapped.snapshot.instructions.values.filter { $0.provenance == .decoded }.isEmpty)
+        XCTAssertFalse(wrapped.snapshot.locations.values.filter { !$0.provenance.source.isEmpty }.isEmpty)
+        XCTAssertFalse(wrapped.document.nodes.filter { $0.provenance == .rendered }.isEmpty)
+    }
+
     func testCanonicalIDAdaptersPreserveLegacyIdentityParts() {
         let codeFileID = CodeFileID("fixture")
         let legacyProcedure = ProcedureIdentifier(isFunction: false, segment: 2, procedure: 3)
