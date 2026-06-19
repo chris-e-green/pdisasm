@@ -538,14 +538,30 @@ public func disassemble(
     metadataWorkspace: MetadataWorkspace? = nil,
     metadataSnapshot: MetadataSnapshot? = nil
 ) throws -> DisassemblyResult {
-    var fileURL: URL
-    var binaryData: CodeData
-    do {
-        fileURL = URL(fileURLWithPath: filename)
-        binaryData = try CodeData(data: Data(contentsOf: fileURL))
-    } catch {
-        throw error
-    }
+    let data = try Data(contentsOf: URL(fileURLWithPath: filename))
+    return try disassemble(
+        data: data,
+        sourceFilename: filename,
+        verbose: verbose,
+        writeMetadata: writeMetadata,
+        overwriteMetadata: overwriteMetadata,
+        metadataWorkspace: metadataWorkspace,
+        metadataSnapshot: metadataSnapshot
+    )
+}
+
+/// Disassemble in-memory binary data and return structured results without printing.
+public func disassemble(
+    data: Data,
+    sourceFilename: String,
+    verbose: Bool = false,
+    writeMetadata: Bool = false,
+    overwriteMetadata: Bool = false,
+    metadataWorkspace: MetadataWorkspace? = nil,
+    metadataSnapshot: MetadataSnapshot? = nil
+) throws -> DisassemblyResult {
+    let fileURL = URL(fileURLWithPath: sourceFilename)
+    let binaryData = CodeData(data: data)
 
     let segDict = try readCodeFileStructure(codeData: binaryData)
     let diagnostics = DiagnosticCollector()

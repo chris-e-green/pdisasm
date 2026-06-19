@@ -4,19 +4,22 @@ public enum CodeFileSource: Sendable {
     case file(URL)
     case bytes(Data, suggestedFilename: String)
 
-    var filenameForLegacyRunner: String {
+    var sourceIdentity: String {
+        switch self {
+        case .file(let url):
+            return url.path
+        case .bytes(_, let suggestedFilename):
+            return suggestedFilename
+        }
+    }
+
+    var data: Data {
         get throws {
             switch self {
             case .file(let url):
-                return url.path
-            case .bytes(let data, let suggestedFilename):
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("pdisasm-")
-                    .appendingPathComponent(UUID().uuidString)
-                    .appendingPathComponent(suggestedFilename)
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: url)
-                return url.path
+                return try Data(contentsOf: url)
+            case .bytes(let data, _):
+                return data
             }
         }
     }
@@ -894,8 +897,8 @@ public struct CodefileLoadStage: Sendable {
 
     public func run(_ input: CodefileLoadStageInput) throws -> CodefileLoadStageOutput {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
-        let filename = try input.source.filenameForLegacyRunner
-        let data = try Data(contentsOf: URL(fileURLWithPath: filename))
+        let filename = input.source.sourceIdentity
+        let data = try input.source.data
         let codeData = CodeData(data: data)
         let fileIdentifier = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
         var version = 0
@@ -1003,7 +1006,8 @@ public struct LegacyPipelineStages: Sendable {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         let metadata = input.metadata.isEmpty ? nil : input.metadata
         let result = try disassemble(
-            filename: input.codefile.filename,
+            data: input.codefile.data,
+            sourceFilename: input.codefile.filename,
             verbose: input.options.verbose,
             writeMetadata: input.options.writeMetadata,
             overwriteMetadata: input.options.overwriteMetadata,
