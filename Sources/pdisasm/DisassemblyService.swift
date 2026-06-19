@@ -326,6 +326,11 @@ public struct DisassemblyDocument: Sendable {
 
         return (DisassemblyDocument(id: id, title: title, nodes: patchedNodes, sections: sections, sourceMap: sourceMap), patchedNodeIDs)
     }
+
+    public var sourceMapCoveragePercent: Int {
+        guard !nodes.isEmpty else { return 100 }
+        return (sourceMap.count * 100) / nodes.count
+    }
 }
 
 public struct DocumentIndexes: Sendable {
@@ -400,8 +405,8 @@ public struct DisassemblyService: Sendable {
             showStackState: request.options.showStackState,
             verbose: request.options.verbose
         )
-        let document = DisassemblyDocument.build(from: structuredLines, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename, codeFileID: codeFileID)
-        let indexes = DocumentIndexes.build(document: document, codeFileID: codeFileID)
+        let document = DisassemblyDocument.build(from: structuredLines, snapshot: snapshot, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
+        let indexes = DocumentIndexes.build(document: document)
         try request.checkCancellation()
         let snapshotReport = StageReport(name: "snapshotBuild", metrics: [
             "segments": snapshot.segments.count,
@@ -411,8 +416,11 @@ public struct DisassemblyService: Sendable {
         ])
         let documentReport = StageReport(name: "documentBuild", metrics: [
             "documentNodes": document.nodes.count,
+            "sourceMappedNodes": document.sourceMap.count,
+            "sourceMapCoveragePercent": document.sourceMapCoveragePercent,
             "procedureNodes": indexes.procedureNodes.count,
             "instructionNodes": indexes.instructionNodes.count,
+            "locationNodes": indexes.locationNodes.count,
         ])
         let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotReport, documentReport]
         let report = RunReport(
@@ -595,21 +603,54 @@ private extension ProgramSnapshot {
 }
 
 private extension DisassemblyDocument {
-    static func build(from lines: [OutputLine], id: DocumentID, title: String, codeFileID: CodeFileID) -> DisassemblyDocument {
+    static func build(from lines: [OutputLine], snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
         let nodes = lines.map { line in
-            DocumentNode(id: DocumentNodeID(document: id, value: "line-\(line.id)"), line: line)
+            DocumentNode(id: nodeID(for: line, in: id, snapshot: snapshot), line: line)
         }
         let sections = buildSections(nodes: nodes, title: title)
         var sourceMap: [DocumentNodeID: SourceReference] = [:]
         for node in nodes {
-            let locationID = node.line.locationReference.map { LocationID(codeFile: codeFileID, legacy: $0) }
-            let instructionID = node.line.commentReference.flatMap { InstructionID(codeFile: codeFileID, legacy: $0) }
-            let procedureID = instructionID?.procedure ?? locationID?.procedure
+            let reference = sourceReference(for: node.line, snapshot: snapshot)
+            let procedureID = reference.procedureID
+            let instructionID = reference.instructionID
+            let locationID = reference.locationID
             if procedureID != nil || instructionID != nil || locationID != nil {
-                sourceMap[node.id] = SourceReference(procedureID: procedureID, instructionID: instructionID, locationID: locationID)
+                sourceMap[node.id] = reference
             }
         }
         return DisassemblyDocument(id: id, title: title, nodes: nodes, sections: sections, sourceMap: sourceMap)
+    }
+
+    private static func sourceReference(for line: OutputLine, snapshot: ProgramSnapshot) -> SourceReference {
+        let locationID = line.locationReference.map { LocationID(codeFile: snapshot.codeFileID, legacy: $0) }
+        let instructionID = line.commentReference.flatMap { InstructionID(codeFile: snapshot.codeFileID, legacy: $0) }
+        let procedureID = instructionID?.procedure ?? locationID?.procedure ?? procedureID(for: line.anchor, snapshot: snapshot)
+        return SourceReference(procedureID: procedureID, instructionID: instructionID, locationID: locationID)
+    }
+
+    private static func nodeID(for line: OutputLine, in documentID: DocumentID, snapshot: ProgramSnapshot) -> DocumentNodeID {
+        let reference = sourceReference(for: line, snapshot: snapshot)
+        if let instructionID = reference.instructionID {
+            return DocumentNodeID(document: documentID, value: "instruction-\(instructionID.procedure.segment.number)-\(instructionID.procedure.number)-\(instructionID.offset)-line-\(line.id)")
+        }
+        if let locationID = reference.locationID {
+            let procedure = locationID.procedure.map { "\($0.number)" } ?? "global"
+            let lexicalLevel = locationID.lexicalLevel.map(String.init) ?? "none"
+            let address = locationID.address.map(String.init) ?? "none"
+            return DocumentNodeID(document: documentID, value: "location-\(locationID.segment.number)-\(procedure)-\(lexicalLevel)-\(address)-line-\(line.id)")
+        }
+        if let procedureID = reference.procedureID {
+            return DocumentNodeID(document: documentID, value: "procedure-\(procedureID.segment.number)-\(procedureID.number)")
+        }
+        return DocumentNodeID(document: documentID, value: "line-\(line.id)")
+    }
+
+    private static func procedureID(for anchor: String?, snapshot: ProgramSnapshot) -> ProcedureID? {
+        guard let anchor else { return nil }
+        let parts = anchor.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        let procedureID = ProcedureID(segment: SegmentID(codeFile: snapshot.codeFileID, number: parts[0]), number: parts[1])
+        return snapshot.procedures[procedureID] == nil ? nil : procedureID
     }
 }
 
@@ -639,7 +680,7 @@ private func buildSections(nodes: [DocumentNode], title: String) -> [DocumentSec
 }
 
 private extension DocumentIndexes {
-    static func build(document: DisassemblyDocument, codeFileID: CodeFileID) -> DocumentIndexes {
+    static func build(document: DisassemblyDocument) -> DocumentIndexes {
         var procedureNodes: [ProcedureID: DocumentNodeID] = [:]
         var locationNodes: [LocationID: [DocumentNodeID]] = [:]
         var instructionNodes: [InstructionID: DocumentNodeID] = [:]
@@ -648,20 +689,16 @@ private extension DocumentIndexes {
 
         for node in document.nodes {
             let line = node.line
-            if let anchor = line.anchor {
-                let parts = anchor.split(separator: ".").compactMap { Int($0) }
-                if parts.count == 2 {
-                    let procedureID = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: parts[0]), number: parts[1])
+            if let reference = document.sourceMap[node.id] {
+                if let procedureID = reference.procedureID, line.anchor != nil {
                     procedureNodes[procedureID] = node.id
                 }
-            }
-            if let location = line.locationReference {
-                let id = LocationID(codeFile: codeFileID, legacy: location)
-                locationNodes[id, default: []].append(node.id)
-            }
-            if let reference = line.commentReference,
-               let id = InstructionID(codeFile: codeFileID, legacy: reference) {
-                instructionNodes[id] = node.id
+                if let locationID = reference.locationID {
+                    locationNodes[locationID, default: []].append(node.id)
+                }
+                if let instructionID = reference.instructionID {
+                    instructionNodes[instructionID] = instructionNodes[instructionID] ?? node.id
+                }
             }
             for token in line.text.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }) {
                 let key = String(token).uppercased()

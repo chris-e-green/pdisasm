@@ -78,6 +78,16 @@ final class DisassemblyServiceTests: XCTestCase {
         XCTAssertEqual(wrapped.document.nodes.count, wrapped.document.nodesByID.count)
         XCTAssertFalse(wrapped.indexes.procedureNodes.isEmpty)
         XCTAssertFalse(wrapped.indexes.symbolNodes.isEmpty)
+        XCTAssertGreaterThan(wrapped.document.sourceMapCoveragePercent, 0)
+        XCTAssertGreaterThan(wrapped.document.sourceMap.count, wrapped.indexes.procedureNodes.count)
+        XCTAssertEqual(
+            Set(wrapped.indexes.procedureNodes.keys).subtracting(wrapped.snapshot.procedures.keys),
+            []
+        )
+        XCTAssertEqual(
+            Set(wrapped.indexes.instructionNodes.keys).subtracting(wrapped.snapshot.instructions.keys),
+            []
+        )
         XCTAssertEqual(
             renderDisassemblyDocument(wrapped.document, showMarkup: true, showPCode: true, showPseudoCode: true),
             renderDisassembly(wrapped.legacyResult, showMarkup: true, showPCode: true, showPseudoCode: true)
@@ -278,6 +288,9 @@ extension DisassemblyServiceTests {
         XCTAssertFalse(wrapped.snapshot.typeEnvironment.recordNames.isEmpty)
         XCTAssertFalse(wrapped.document.sections.isEmpty)
         XCTAssertFalse(wrapped.indexes.search("SEGMENT").isEmpty)
+        let documentBuild = try XCTUnwrap(wrapped.report.stages.first { $0.name == "documentBuild" })
+        XCTAssertEqual(documentBuild.metrics["sourceMappedNodes"], wrapped.document.sourceMap.count)
+        XCTAssertEqual(documentBuild.metrics["sourceMapCoveragePercent"], wrapped.document.sourceMapCoveragePercent)
     }
 
     func testCancellationTokenStopsRunBeforeLegacyWork() throws {
