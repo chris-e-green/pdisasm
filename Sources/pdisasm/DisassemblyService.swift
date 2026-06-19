@@ -342,6 +342,7 @@ public struct ProgramSnapshot: Sendable {
     public let callsByOrigin: [ProcedureID: [CallEdge]]
     public let callsByTarget: [ProcedureID: [CallEdge]]
     public let diagnostics: [Diagnostic]
+    public let documentLines: [OutputLine]
 
     public init(
         codeFileID: CodeFileID,
@@ -354,7 +355,8 @@ public struct ProgramSnapshot: Sendable {
         locations: [LocationID: LocationFact] = [:],
         callsByOrigin: [ProcedureID: [CallEdge]] = [:],
         callsByTarget: [ProcedureID: [CallEdge]] = [:],
-        diagnostics: [Diagnostic] = []
+        diagnostics: [Diagnostic] = [],
+        documentLines: [OutputLine] = []
     ) {
         self.codeFileID = codeFileID
         self.file = file ?? CodeFileSummary(id: codeFileID, sourceFilename: codeFileID.value, segmentCount: segments.count, dataSegmentNumbers: [])
@@ -367,6 +369,7 @@ public struct ProgramSnapshot: Sendable {
         self.callsByOrigin = callsByOrigin
         self.callsByTarget = callsByTarget
         self.diagnostics = diagnostics
+        self.documentLines = documentLines
     }
 }
 
@@ -519,13 +522,13 @@ public struct DisassemblyService: Sendable {
         let legacyResult = legacy.result
         try request.checkCancellation()
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
-        let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
-        let structuredLines = renderStructuredLines(
+        let snapshot = ProgramSnapshot.build(
             from: legacyResult,
+            codeFileID: codeFileID,
             showStackState: request.options.showStackState,
             verbose: request.options.verbose
         )
-        let document = DisassemblyDocument.build(from: structuredLines, snapshot: snapshot, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
+        let document = DisassemblyDocument.build(from: snapshot, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
         let indexes = DocumentIndexes.build(document: document)
         try request.checkCancellation()
         let snapshotReport = StageReport(name: "snapshotBuild", metrics: [
@@ -605,7 +608,12 @@ public extension OutputLine {
 }
 
 private extension ProgramSnapshot {
-    static func build(from result: DisassemblyResult, codeFileID: CodeFileID) -> ProgramSnapshot {
+    static func build(
+        from result: DisassemblyResult,
+        codeFileID: CodeFileID,
+        showStackState: Bool = false,
+        verbose: Bool = false
+    ) -> ProgramSnapshot {
         var segments: [SegmentID: SegmentSnapshot] = [:]
         var procedures: [ProcedureID: ProcedureSnapshot] = [:]
         var instructions: [InstructionID: InstructionSnapshot] = [:]
@@ -723,7 +731,12 @@ private extension ProgramSnapshot {
             locations: locations,
             callsByOrigin: callsByOrigin.mapValues { $0.sorted { $0.id.description < $1.id.description } },
             callsByTarget: callsByTarget.mapValues { $0.sorted { $0.id.description < $1.id.description } },
-            diagnostics: result.diagnostics
+            diagnostics: result.diagnostics,
+            documentLines: renderStructuredLines(
+                from: result,
+                showStackState: showStackState,
+                verbose: verbose
+            )
         )
     }
 
@@ -742,8 +755,8 @@ private extension ProgramSnapshot {
 }
 
 private extension DisassemblyDocument {
-    static func build(from lines: [OutputLine], snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
-        let nodes = lines.map { line in
+    static func build(from snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
+        let nodes = snapshot.documentLines.map { line in
             DocumentNode(id: nodeID(for: line, in: id, snapshot: snapshot), line: line)
         }
         let sections = buildSections(nodes: nodes, title: title)

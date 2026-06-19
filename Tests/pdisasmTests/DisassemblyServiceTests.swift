@@ -109,6 +109,7 @@ final class DisassemblyServiceTests: XCTestCase {
         XCTAssertFalse(wrapped.snapshot.procedures.isEmpty)
         XCTAssertFalse(wrapped.snapshot.instructions.isEmpty)
         XCTAssertFalse(wrapped.document.nodes.isEmpty)
+        XCTAssertEqual(wrapped.document.nodes.map(\.line.id), wrapped.snapshot.documentLines.map(\.id))
         XCTAssertEqual(wrapped.document.nodes.count, wrapped.document.nodesByID.count)
         XCTAssertFalse(wrapped.indexes.procedureNodes.isEmpty)
         XCTAssertFalse(wrapped.indexes.symbolNodes.isEmpty)
@@ -126,6 +127,26 @@ final class DisassemblyServiceTests: XCTestCase {
             renderDisassemblyDocument(wrapped.document, showMarkup: true, showPCode: true, showPseudoCode: true),
             renderDisassembly(wrapped.legacyResult, showMarkup: true, showPCode: true, showPseudoCode: true)
         )
+    }
+
+    func testDocumentSourceMapCoversSnapshotProcedureAndInstructionNodes() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(
+            source: .file(fixture),
+            options: DisassemblyOptions(verbose: false)
+        ))
+
+        let mappedProcedures = Set(wrapped.document.sourceMap.values.compactMap(\.procedureID))
+        let mappedInstructions = Set(wrapped.document.sourceMap.values.compactMap(\.instructionID))
+
+        XCTAssertEqual(Set(wrapped.snapshot.procedures.keys).subtracting(mappedProcedures), [])
+        XCTAssertEqual(Set(wrapped.snapshot.instructions.keys).subtracting(mappedInstructions), [])
+        XCTAssertEqual(wrapped.indexes.instructionNodes.count, wrapped.snapshot.instructions.count)
+        XCTAssertGreaterThanOrEqual(wrapped.document.sourceMapCoveragePercent, 50)
     }
 }
 
