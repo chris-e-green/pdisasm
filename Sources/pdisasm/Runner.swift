@@ -449,13 +449,15 @@ private func decodeCodeSegments(
     allProcedures: inout [ProcedureIdentifier],
     allCallers: inout Set<Call>,
     dataSegments: inout [Int],
-    diagnostics: DiagnosticCollector
+    diagnostics: DiagnosticCollector,
+    cancellation: CancellationToken? = nil
 ) throws -> [Int: CodeSegment] {
     try CodeSegmentDecoder(
         segDict: segDict,
         binaryData: binaryData,
         verbose: verbose,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        cancellation: cancellation
     ).decode(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
@@ -544,7 +546,8 @@ private struct SegmentDecodeStageFacade {
         allLocations: inout Set<Location>,
         allProcedures: inout [ProcedureIdentifier],
         allCallers: inout Set<Call>,
-        diagnostics: DiagnosticCollector
+        diagnostics: DiagnosticCollector,
+        cancellation: CancellationToken? = nil
     ) throws -> SegmentDecodeStageOutput {
         let diagnosticsBefore = diagnostics.diagnostics.count
         let locationsBefore = allLocations.count
@@ -559,7 +562,8 @@ private struct SegmentDecodeStageFacade {
             allProcedures: &allProcedures,
             allCallers: &allCallers,
             dataSegments: &dataSegments,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            cancellation: cancellation
         )
         let procedureCount = codeSegments.values.reduce(0) { $0 + $1.procedures.count }
         let instructionCount = codeSegments.values.reduce(0) { total, segment in
@@ -636,14 +640,16 @@ private struct AnalysisSignatureStageFacade {
         scalarTypes: [String: PascalScalarType],
         allProcedures: inout [ProcedureIdentifier],
         allLocations: inout Set<Location>,
-        diagnostics: DiagnosticCollector
-    ) -> AnalysisSignatureStageOutput {
+        diagnostics: DiagnosticCollector,
+        cancellation: CancellationToken? = nil
+    ) throws -> AnalysisSignatureStageOutput {
         let diagnosticsBefore = diagnostics.diagnostics.count
         var typeConflicts: [TypeConflict] = []
         var iterations = 0
         var previousFingerprint: String?
         var converged = false
         while iterations < maxSignatureIterations {
+            try cancellation?.checkCancellation()
             iterations += 1
             typeConflicts.append(contentsOf: runPascalAnalysisPass(
                 codeSegments: codeSegments,
@@ -689,7 +695,8 @@ public func disassemble(
     writeMetadata: Bool = false,
     overwriteMetadata: Bool = false,
     metadataWorkspace: MetadataWorkspace? = nil,
-    metadataSnapshot: MetadataSnapshot? = nil
+    metadataSnapshot: MetadataSnapshot? = nil,
+    cancellation: CancellationToken? = nil
 ) throws -> DisassemblyResult {
     let data = try Data(contentsOf: URL(fileURLWithPath: filename))
     return try disassemble(
@@ -711,8 +718,10 @@ public func disassemble(
     writeMetadata: Bool = false,
     overwriteMetadata: Bool = false,
     metadataWorkspace: MetadataWorkspace? = nil,
-    metadataSnapshot: MetadataSnapshot? = nil
+    metadataSnapshot: MetadataSnapshot? = nil,
+    cancellation: CancellationToken? = nil
 ) throws -> DisassemblyResult {
+    try cancellation?.checkCancellation()
     let fileURL = URL(fileURLWithPath: sourceFilename)
     let binaryData = CodeData(data: data)
 
@@ -768,7 +777,8 @@ public func disassemble(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
         allCallers: &allCallers,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        cancellation: cancellation
     )
     let allCodeSegs = decode.codeSegments
     dataSegments = decode.dataSegments
@@ -782,14 +792,15 @@ public func disassemble(
     )
     typeConflicts.append(contentsOf: references.typeConflicts)
 
-    let analysis = AnalysisSignatureStageFacade().run(
+    let analysis = try AnalysisSignatureStageFacade().run(
         codeSegments: allCodeSegs,
         knownRecords: knownRecords,
         typeAliases: typeAliases,
         scalarTypes: scalarTypes,
         allProcedures: &allProcedures,
         allLocations: &allLocations,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        cancellation: cancellation
     )
     typeConflicts.append(contentsOf: analysis.typeConflicts)
     let analysisConverged = analysis.converged
