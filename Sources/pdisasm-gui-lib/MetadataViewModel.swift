@@ -99,7 +99,7 @@ final class MetadataViewModel {
     var selectedCSVRowID: UUID?
     var selectedRecordID: UUID?
 
-    /// Metadata filenames that are relevant to the current disassembly.
+    /// Raw metadata filenames that are relevant to the current disassembly.
     var relevantFilenames: [String] = [] {
         didSet { discoverFiles() }
     }

@@ -241,7 +241,7 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(first.invalidation, .documentOnly)
         XCTAssertEqual(second.diagnostics, [])
         XCTAssertEqual(second.invalidation, .documentOnly)
-        let loaded = try repository.loadBundle(named: "comments_fixture", kind: .commentsJSON, provenance: MetadataProvenance(source: "test", precedence: 0))
+        let loaded = try repository.loadBundle(in: .fileComments(fileIdentifier: "fixture"), provenance: MetadataProvenance(source: "test", precedence: 0))
         XCTAssertEqual(loaded.comments.map(\.value.comment), ["new"])
         let backups = try FileManager.default.contentsOfDirectory(atPath: directory.path)
             .filter { $0.hasPrefix("comments_fixture.json.bak.") }
@@ -264,7 +264,7 @@ extension DisassemblyServiceTests {
         )
 
         XCTAssertEqual(result.invalidation, .procedureSignature(segment: 2, procedure: 7))
-        let loaded = try repository.loadBundle(named: "procedures_ver_42", kind: .proceduresCSV, provenance: MetadataProvenance(source: "test", precedence: 0))
+        let loaded = try repository.loadBundle(in: .systemProcedures(version: 42), provenance: MetadataProvenance(source: "test", precedence: 0))
         XCTAssertEqual(loaded.procedures.first?.value.procName, "RENAMED")
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("procedures_fixture.csv").path))
     }
@@ -290,13 +290,29 @@ extension DisassemblyServiceTests {
 }
 
 private struct InMemoryMetadataRepository: MetadataRepository {
-    func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
+    func loadBundle(in scope: MetadataScope, provenance: MetadataProvenance?) throws -> MetadataBundle {
         MetadataBundle()
     }
 
-    func saveLabels(_ labels: [Location], named name: String) throws {}
-    func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {}
-    func saveComments(_ comments: [DisassemblyComment], named name: String) throws {}
+    func saveLabels(_ labels: [Location], in scope: MetadataScope) throws {}
+    func saveProcedures(_ procedures: [ProcedureIdentifier], in scope: MetadataScope) throws {}
+    func saveComments(_ comments: [DisassemblyComment], in scope: MetadataScope) throws {}
+}
+
+private final class RecordingMetadataRepository: MetadataRepository, @unchecked Sendable {
+    var loadedScopes: [MetadataScope] = []
+    var savedProcedureScopes: [MetadataScope] = []
+
+    func loadBundle(in scope: MetadataScope, provenance: MetadataProvenance?) throws -> MetadataBundle {
+        loadedScopes.append(scope)
+        return MetadataBundle()
+    }
+
+    func saveLabels(_ labels: [Location], in scope: MetadataScope) throws {}
+    func saveProcedures(_ procedures: [ProcedureIdentifier], in scope: MetadataScope) throws {
+        savedProcedureScopes.append(scope)
+    }
+    func saveComments(_ comments: [DisassemblyComment], in scope: MetadataScope) throws {}
 }
 
 
@@ -397,6 +413,22 @@ extension DisassemblyServiceTests {
 }
 
 extension DisassemblyServiceTests {
+
+    func testMetadataEditingUsesTypedMetadataScopes() throws {
+        let repository = RecordingMetadataRepository()
+        let service = MetadataEditingService(repository: repository)
+        let codeFileID = CodeFileID("fixture")
+        let procedureID = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 2), number: 7)
+
+        _ = try service.apply(
+            .renameProcedure(procedureID, name: "RENAMED"),
+            context: MetadataEditContext(codeFileID: codeFileID, systemMetadataVersion: 42, systemSegments: [2])
+        )
+
+        XCTAssertEqual(Set(repository.loadedScopes), [.systemProcedures(version: 42)])
+        XCTAssertEqual(repository.savedProcedureScopes, [.systemProcedures(version: 42)])
+    }
+
     func testMetadataScopeResolverMergesInMemoryScopesByPrecedence() throws {
         let systemLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "SYSTEM", type: "INTEGER", typeSource: .metadata)
         let fileLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "FILE", type: "BOOLEAN", typeSource: .user)
