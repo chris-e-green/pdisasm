@@ -4,7 +4,7 @@ import pdisasm
 /// Owns the GUI document session lifecycle and keeps rerun/cancellation policy out of the view model.
 @MainActor
 final class DocumentSessionController {
-    struct PresentationModel {
+    struct PresentationModel: @unchecked Sendable {
         let result: DisassemblyResult
         let runResult: DisassemblyRunResult
         let lines: [OutputLine]
@@ -12,13 +12,13 @@ final class DocumentSessionController {
         let relevantMetadataFiles: [String]
     }
 
-    struct SegmentItem: Identifiable {
+    struct SegmentItem: Identifiable, Sendable {
         let id: Int
         let name: String
         let procedures: [ProcedureItem]
     }
 
-    struct ProcedureItem: Identifiable {
+    struct ProcedureItem: Identifiable, Sendable {
         var id: String { "\(segmentNumber).\(number)" }
         let segmentNumber: Int
         let number: Int

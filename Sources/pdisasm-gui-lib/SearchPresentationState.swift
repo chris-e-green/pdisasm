@@ -1,6 +1,6 @@
 import Foundation
 
-enum SearchStatusWidthPreset: String, CaseIterable, Identifiable {
+enum SearchStatusWidthPreset: String, CaseIterable, Identifiable, Sendable {
     case compact
     case medium
     case wide
