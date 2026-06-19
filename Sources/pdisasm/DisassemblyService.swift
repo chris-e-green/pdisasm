@@ -490,6 +490,14 @@ public struct DisassemblyRunResult: @unchecked Sendable {
     public let document: DisassemblyDocument
     public let indexes: DocumentIndexes
     public let report: RunReport
+
+    public init(legacyResult: DisassemblyResult, snapshot: ProgramSnapshot, document: DisassemblyDocument, indexes: DocumentIndexes, report: RunReport) {
+        self.legacyResult = legacyResult
+        self.snapshot = snapshot
+        self.document = document
+        self.indexes = indexes
+        self.report = report
+    }
 }
 
 public struct DisassemblyService: Sendable {
@@ -906,7 +914,7 @@ private func buildSections(nodes: [DocumentNode], title: String) -> [DocumentSec
     return sections.isEmpty ? [DocumentSection(id: "main", title: title.isEmpty ? "Disassembly" : title, nodeIDs: nodes.map(\.id))] : sections
 }
 
-private extension DocumentIndexes {
+public extension DocumentIndexes {
     static func build(document: DisassemblyDocument) -> DocumentIndexes {
         var procedureNodes: [ProcedureID: DocumentNodeID] = [:]
         var locationNodes: [LocationID: [DocumentNodeID]] = [:]

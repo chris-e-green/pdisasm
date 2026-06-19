@@ -8,7 +8,7 @@ final class DocumentSessionController {
         let result: DisassemblyResult
         let runResult: DisassemblyRunResult
         let lines: [OutputLine]
-        let segments: [DisassemblyViewModel.SegmentItem]
+        let segments: [SegmentPresentationItem]
         let relevantMetadataFiles: [String]
     }
 
@@ -72,11 +72,7 @@ final class DocumentSessionController {
             ))
             try Task.checkCancellation()
             let result = runResult.legacyResult
-            let lines = renderStructuredLines(
-                from: result,
-                showStackState: showStackState,
-                verbose: verbose
-            )
+            let lines = runResult.document.nodes.map(\.line)
             let items = Self.buildSegmentItems(from: result)
             let relevantFiles = Self.relevantMetadataFiles(for: URL(fileURLWithPath: path), result: result)
             return PresentationModel(
@@ -106,13 +102,14 @@ final class DocumentSessionController {
         }
     }
 
-    func applyEdit(invalidation: MetadataInvalidationScope, verbose: Bool, showStackState: Bool) async throws -> PresentationModel? {
+    func applyEdit(invalidation: MetadataInvalidationScope, comment: DisassemblyComment? = nil, verbose: Bool, showStackState: Bool) async throws -> PresentationModel? {
         switch invalidation {
         case .none:
             return nil
         case .documentOnly, .patchDocument:
-            // Existing renderers still derive location/signature/comment display from the legacy result.
-            // Keep the policy centralized here and conservatively rerun until document patches cover all edit types.
+            if let comment, let patched = patchComment(comment) {
+                return patched
+            }
             return try await rerun(verbose: verbose, showStackState: showStackState)
         case .procedureSignature, .propagateCallGraph, .fullDisassembly:
             return try await rerun(verbose: verbose, showStackState: showStackState)
@@ -124,19 +121,41 @@ final class DocumentSessionController {
         return runResult?.indexes.search(query) ?? []
     }
 
-    nonisolated private static func buildSegmentItems(from result: DisassemblyResult) -> [DisassemblyViewModel.SegmentItem] {
-        var items: [DisassemblyViewModel.SegmentItem] = []
+    private func patchComment(_ comment: DisassemblyComment) -> PresentationModel? {
+        guard let runResult else { return nil }
+        let patched = runResult.document.patchingComment(comment)
+        guard !patched.patchedNodes.isEmpty else { return nil }
+        let indexes = DocumentIndexes.build(document: patched.document)
+        let patchedRunResult = DisassemblyRunResult(
+            legacyResult: runResult.legacyResult,
+            snapshot: runResult.snapshot,
+            document: patched.document,
+            indexes: indexes,
+            report: runResult.report
+        )
+        self.runResult = patchedRunResult
+        return PresentationModel(
+            result: patchedRunResult.legacyResult,
+            runResult: patchedRunResult,
+            lines: patched.document.nodes.map(\.line),
+            segments: Self.buildSegmentItems(from: patchedRunResult.legacyResult),
+            relevantMetadataFiles: Self.relevantMetadataFiles(for: sourceURL ?? URL(fileURLWithPath: ""), result: patchedRunResult.legacyResult)
+        )
+    }
+
+    nonisolated private static func buildSegmentItems(from result: DisassemblyResult) -> [SegmentPresentationItem] {
+        var items: [SegmentPresentationItem] = []
         for (segIdx, codeSeg) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
             let segName = result.segDictionary.segTable
                 .first(where: { $0.value.segNum == segIdx })?.value.name ?? "Segment \(segIdx)"
-            let procs = codeSeg.procedures.compactMap { proc -> DisassemblyViewModel.ProcedureItem? in
+            let procs = codeSeg.procedures.compactMap { proc -> ProcedurePresentationItem? in
                 guard let ident = proc.identifier else { return nil }
                 let name = result.allProcedures
                     .first(where: { $0.segment == ident.segment && $0.procedure == ident.procedure })?
                     .shortDescription ?? ident.shortDescription
-                return DisassemblyViewModel.ProcedureItem(segmentNumber: segIdx, number: ident.procedure, name: name)
+                return ProcedurePresentationItem(segmentNumber: segIdx, number: ident.procedure, name: name)
             }
-            items.append(DisassemblyViewModel.SegmentItem(id: segIdx, name: segName, procedures: procs))
+            items.append(SegmentPresentationItem(id: segIdx, name: segName, procedures: procs))
         }
         return items
     }

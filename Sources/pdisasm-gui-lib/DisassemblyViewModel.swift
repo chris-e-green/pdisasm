@@ -69,13 +69,7 @@ final class DisassemblyViewModel {
     var fileURL: URL?
     var showFileImporter: Bool = false
 
-    // Display toggles; structural rendering options rerun through the session controller.
-    var showMarkup: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
-    var showPCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
-    var showStackState: Bool = false { didSet { runDisassembly() } }
-    var showPseudoCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
-    var showVariables: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
-    var verbose: Bool = false
+    let display = DisassemblyDisplayPresentation()
 
     /// The anchor ID of the procedure to scroll to (e.g. "2.3"). Set by sidebar selection.
     var selectedProcedure: String?
@@ -103,30 +97,6 @@ final class DisassemblyViewModel {
 
     /// Indices into `filteredLines` that match the committed search query.
     var searchMatchIndices: [Int] = []
-
-    enum SearchStatusWidthPreset: String, CaseIterable, Identifiable {
-        case compact
-        case medium
-        case wide
-
-        var id: String { rawValue }
-
-        var width: Double {
-            switch self {
-            case .compact: return 200
-            case .medium:  return 280
-            case .wide:    return 360
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .compact: return "Status Width: Compact"
-            case .medium:  return "Status Width: Medium"
-            case .wide:    return "Status Width: Wide"
-            }
-        }
-    }
 
     var searchStatusWidthPreset: SearchStatusWidthPreset = .medium {
         didSet {
@@ -193,16 +163,7 @@ final class DisassemblyViewModel {
         return parts.joined(separator: "   ")
     }
 
-    var displaySummary: String {
-        var enabled: [String] = []
-        if showMarkup { enabled.append("Markup") }
-        if showPCode { enabled.append("P-Code") }
-        if showPseudoCode { enabled.append("Pseudocode") }
-        if showVariables { enabled.append("Variables") }
-        if showStackState { enabled.append("Stack") }
-        if verbose { enabled.append("Verbose") }
-        return enabled.isEmpty ? "No optional sections" : enabled.joined(separator: ", ")
-    }
+    var displaySummary: String { display.summary }
 
     var selectedOutputText: String {
         filteredLines
@@ -364,9 +325,9 @@ final class DisassemblyViewModel {
     func saveCommentEdit() {
         guard let draft = commentEditDraft else { return }
         do {
-            let invalidation = try upsertUserComment(draft)
+            let edit = try upsertUserComment(draft)
             commentEditDraft = nil
-            applyMetadataInvalidation(invalidation, restoringFilteredIndex: draft.sourceFilteredIndex)
+            applyMetadataInvalidation(edit.invalidation, comment: edit.comment, restoringFilteredIndex: draft.sourceFilteredIndex)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -527,7 +488,7 @@ final class DisassemblyViewModel {
         }
     }
 
-    private func upsertUserComment(_ draft: CommentEditDraft) throws -> MetadataInvalidationScope {
+    private func upsertUserComment(_ draft: CommentEditDraft) throws -> (invalidation: MetadataInvalidationScope, comment: DisassemblyComment) {
         guard let fileURL else { throw CommentEditError.noOpenFile }
         let comment = DisassemblyComment(
             reference: draft.reference,
@@ -536,21 +497,22 @@ final class DisassemblyViewModel {
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
         let codeFileID = CodeFileID(fileURL: fileURL)
         if let instructionID = InstructionID(codeFile: codeFileID, legacy: comment.reference) {
-            return try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID)).invalidation
+            let invalidation = try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID)).invalidation
+            return (invalidation, comment)
         }
-        return .none
+        return (.none, comment)
     }
 
 
-    private func applyMetadataInvalidation(_ invalidation: MetadataInvalidationScope, restoringFilteredIndex restoreIndex: Int? = nil) {
+    private func applyMetadataInvalidation(_ invalidation: MetadataInvalidationScope, comment: DisassemblyComment? = nil, restoringFilteredIndex restoreIndex: Int? = nil) {
         isLoading = true
-        let verb = verbose
-        let stackState = showStackState
+        let verb = display.verbose
+        let stackState = display.showStackState
         sessionGeneration &+= 1
         let generation = sessionGeneration
         Task {
             do {
-                if let model = try await sessionController.applyEdit(invalidation: invalidation, verbose: verb, showStackState: stackState) {
+                if let model = try await sessionController.applyEdit(invalidation: invalidation, comment: comment, verbose: verb, showStackState: stackState) {
                     guard generation == self.sessionGeneration else { return }
                     applyPresentationModel(model, restoringFilteredIndex: restoreIndex)
                 } else if generation == self.sessionGeneration {
@@ -666,10 +628,10 @@ final class DisassemblyViewModel {
     private func filterLines() -> [OutputLine] {
         allLines.filter { line in
             switch line.kind {
-            case .markup:      return showMarkup
-            case .pcode:       return showPCode
-            case .pseudocode:  return showPseudoCode
-            case .variable:    return showVariables
+            case .markup:      return display.showMarkup
+            case .pcode:       return display.showPCode
+            case .pseudocode:  return display.showPseudoCode
+            case .variable:    return display.showVariables
             case .global:      return true       // always show globals
             case .header:      return true       // always show procedure headers
             case .diagnostic:  return true       // always show diagnostics
@@ -689,16 +651,6 @@ final class DisassemblyViewModel {
             selectedProcedureFilteredIndex = procedureFilteredIndices[selectedProcedure]
         }
         rebuildSearchMatches(resetCurrentIndex: false)
-    }
-
-    private func rerenderStructuredLines() {
-        guard let disassemblyResult else { return }
-        allLines = renderStructuredLines(
-            from: disassemblyResult,
-            showStackState: showStackState,
-            verbose: verbose
-        )
-        rebuildFilteredLinesAndSearchMatches()
     }
 
     private func rebuildFilteredLineIndexes() {
@@ -868,20 +820,7 @@ final class DisassemblyViewModel {
 
     // MARK: - Segment sidebar data
 
-    struct SegmentItem: Identifiable {
-        let id: Int
-        let name: String
-        let procedures: [ProcedureItem]
-    }
-
-    struct ProcedureItem: Identifiable {
-        var id: String { "\(segmentNumber).\(number)" }
-        let segmentNumber: Int
-        let number: Int
-        let name: String
-    }
-
-    var segments: [SegmentItem] = []
+    var segments: [SegmentPresentationItem] = []
 
     /// Metadata filenames relevant to the currently loaded file.
     var relevantMetadataFiles: [String] = []
@@ -896,6 +835,8 @@ final class DisassemblyViewModel {
         {
             searchStatusWidthPreset = preset
         }
+        display.onVisibilityChanged = { [weak self] in self?.rebuildFilteredLinesAndSearchMatches() }
+        display.onStructureChanged = { [weak self] in self?.runDisassembly() }
     }
 
     func openFile(url: URL) {
@@ -956,8 +897,8 @@ final class DisassemblyViewModel {
         currentMatchIndex = 0
         segments = []
 
-        let verb = verbose
-        let stackState = showStackState
+        let verb = display.verbose
+        let stackState = display.showStackState
         sessionGeneration &+= 1
         let generation = sessionGeneration
 
