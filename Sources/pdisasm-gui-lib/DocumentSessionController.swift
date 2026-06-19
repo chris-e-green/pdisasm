@@ -124,7 +124,7 @@ final class DocumentSessionController {
         return runResult?.indexes.search(query) ?? []
     }
 
-    private static func buildSegmentItems(from result: DisassemblyResult) -> [DisassemblyViewModel.SegmentItem] {
+    nonisolated private static func buildSegmentItems(from result: DisassemblyResult) -> [DisassemblyViewModel.SegmentItem] {
         var items: [DisassemblyViewModel.SegmentItem] = []
         for (segIdx, codeSeg) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
             let segName = result.segDictionary.segTable
@@ -141,7 +141,7 @@ final class DocumentSessionController {
         return items
     }
 
-    private static func relevantMetadataFiles(for url: URL, result: DisassemblyResult) -> [String] {
+    nonisolated private static func relevantMetadataFiles(for url: URL, result: DisassemblyResult) -> [String] {
         let fileIdentifier = url.deletingPathExtension().lastPathComponent
         let version = result.segDictionary.segTable[1]?.version ?? result.segDictionary.segTable[0]?.version ?? 0
         return [
