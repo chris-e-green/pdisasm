@@ -102,13 +102,85 @@ private struct ProcedureKey: Hashable, Codable, Sendable {
 }
 
 public protocol MetadataRepository: Sendable {
-    func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle
-    func saveLabels(_ labels: [Location], named name: String) throws
-    func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws
-    func saveComments(_ comments: [DisassemblyComment], named name: String) throws
+    func loadBundle(in scope: MetadataScope, provenance: MetadataProvenance?) throws -> MetadataBundle
+    func saveLabels(_ labels: [Location], in scope: MetadataScope) throws
+    func saveProcedures(_ procedures: [ProcedureIdentifier], in scope: MetadataScope) throws
+    func saveComments(_ comments: [DisassemblyComment], in scope: MetadataScope) throws
+}
+
+public extension MetadataRepository {
+    func loadBundle(in scope: MetadataScope) throws -> MetadataBundle {
+        try loadBundle(in: scope, provenance: nil)
+    }
+
+    /// Low-level escape hatch for tools that intentionally edit a raw metadata file.
+    func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
+        try loadBundle(in: RawMetadataScope(name: name, kind: kind).scope, provenance: provenance)
+    }
+
+    /// Low-level escape hatch for tools that intentionally edit a raw labels CSV.
+    func saveLabels(_ labels: [Location], named name: String) throws {
+        try saveLabels(labels, in: RawMetadataScope(name: name, kind: .labelsCSV).scope)
+    }
+
+    /// Low-level escape hatch for tools that intentionally edit a raw procedures CSV.
+    func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {
+        try saveProcedures(procedures, in: RawMetadataScope(name: name, kind: .proceduresCSV).scope)
+    }
+
+    /// Low-level escape hatch for tools that intentionally edit a raw comments JSON file.
+    func saveComments(_ comments: [DisassemblyComment], named name: String) throws {
+        try saveComments(comments, in: RawMetadataScope(name: name, kind: .commentsJSON).scope)
+    }
+}
+
+private struct RawMetadataScope {
+    let scope: MetadataScope
+    init(name: String, kind: MetadataFileKind) {
+        scope = .raw(name: name, kind: kind)
+    }
 }
 
 public enum MetadataFileKind: Hashable, Sendable { case labelsCSV, proceduresCSV, commentsJSON }
+
+public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
+    case systemLabels(version: Int)
+    case systemProcedures(version: Int)
+    case fileLabels(fileIdentifier: String)
+    case fileProcedures(fileIdentifier: String)
+    case fileComments(fileIdentifier: String)
+    case raw(name: String, kind: MetadataFileKind)
+
+    public var name: String {
+        switch self {
+        case let .systemLabels(version): return "labels_ver_\(version)"
+        case let .systemProcedures(version): return "procedures_ver_\(version)"
+        case let .fileLabels(fileIdentifier): return "labels_\(fileIdentifier)"
+        case let .fileProcedures(fileIdentifier): return "procedures_\(fileIdentifier)"
+        case let .fileComments(fileIdentifier): return "comments_\(fileIdentifier)"
+        case let .raw(name, _): return name
+        }
+    }
+
+    public var kind: MetadataFileKind {
+        switch self {
+        case .systemLabels, .fileLabels: return .labelsCSV
+        case .systemProcedures, .fileProcedures: return .proceduresCSV
+        case .fileComments: return .commentsJSON
+        case let .raw(_, kind): return kind
+        }
+    }
+
+    public var defaultPrecedence: Int {
+        switch self {
+        case .systemLabels, .systemProcedures: return 0
+        case .fileLabels, .fileProcedures, .fileComments: return 10
+        case .raw: return 0
+        }
+    }
+
+    public var description: String { name }
+}
 
 public enum MetadataEditCommand: Hashable, Sendable {
     case upsertLabel(LocationID, name: String, type: String?)
@@ -223,10 +295,10 @@ public struct MetadataEditingService: Sendable {
 
     @discardableResult
     public func upsertLabel(_ location: Location, fileIdentifier: String) throws -> MetadataInvalidationScope {
-        let name = "labels_\(fileIdentifier)"
-        var labels = try repository.loadBundle(named: name, kind: .labelsCSV, provenance: MetadataProvenance(source: name, precedence: 0)).labels.map(\.value)
+        let scope = MetadataScope.fileLabels(fileIdentifier: fileIdentifier)
+        var labels = try repository.loadBundle(in: scope, provenance: MetadataProvenance(source: scope.name, precedence: scope.defaultPrecedence)).labels.map(\.value)
         if let index = labels.firstIndex(where: { LocationReference($0) == LocationReference(location) }) { labels[index] = location } else { labels.append(location) }
-        try repository.saveLabels(labels.sorted { $0 < $1 }, named: name)
+        try repository.saveLabels(labels.sorted { $0 < $1 }, in: scope)
         return location.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || location.typeSource == .unknown
             ? .documentOnly
             : .fullDisassembly
@@ -234,20 +306,25 @@ public struct MetadataEditingService: Sendable {
 
     @discardableResult
     public func upsertComment(_ comment: DisassemblyComment, fileIdentifier: String) throws -> MetadataInvalidationScope {
-        let name = "comments_\(fileIdentifier)"
-        var comments = try repository.loadBundle(named: name, kind: .commentsJSON, provenance: MetadataProvenance(source: name, precedence: 0)).comments.map(\.value)
+        let scope = MetadataScope.fileComments(fileIdentifier: fileIdentifier)
+        var comments = try repository.loadBundle(in: scope, provenance: MetadataProvenance(source: scope.name, precedence: scope.defaultPrecedence)).comments.map(\.value)
         comments.removeAll { $0.reference == comment.reference }
         if !comment.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { comments.append(comment) }
-        try repository.saveComments(comments.sorted { ($0.segment, $0.procedure ?? -1, $0.addr) < ($1.segment, $1.procedure ?? -1, $1.addr) }, named: name)
+        try repository.saveComments(comments.sorted { ($0.segment, $0.procedure ?? -1, $0.addr) < ($1.segment, $1.procedure ?? -1, $1.addr) }, in: scope)
         return .documentOnly
     }
 
     @discardableResult
-    public func upsertProcedure(_ procedure: ProcedureIdentifier, metadataFileName: String) throws -> MetadataInvalidationScope {
-        var procedures = try repository.loadBundle(named: metadataFileName, kind: .proceduresCSV, provenance: MetadataProvenance(source: metadataFileName, precedence: 0)).procedures.map(\.value)
+    public func upsertProcedure(_ procedure: ProcedureIdentifier, in scope: MetadataScope) throws -> MetadataInvalidationScope {
+        var procedures = try repository.loadBundle(in: scope, provenance: MetadataProvenance(source: scope.name, precedence: scope.defaultPrecedence)).procedures.map(\.value)
         if let index = procedures.firstIndex(where: { $0.segment == procedure.segment && $0.procedure == procedure.procedure }) { procedures[index] = procedure } else { procedures.append(procedure) }
-        try repository.saveProcedures(procedures, named: metadataFileName)
+        try repository.saveProcedures(procedures, in: scope)
         return .procedureSignature(segment: procedure.segment, procedure: procedure.procedure)
+    }
+
+    @discardableResult
+    public func upsertProcedure(_ procedure: ProcedureIdentifier, metadataFileName: String) throws -> MetadataInvalidationScope {
+        try upsertProcedure(procedure, in: .raw(name: metadataFileName, kind: .proceduresCSV))
     }
 
     public func invalidationForProcedureEdit(_ procedure: ProcedureIdentifier, in snapshot: ProgramSnapshot?) -> MetadataInvalidationScope {
@@ -300,8 +377,8 @@ public struct MetadataEditingService: Sendable {
     }
 
     private func editableProcedure(for id: ProcedureID, context: MetadataEditContext) throws -> ProcedureIdentifier {
-        let metadataName = procedureMetadataName(for: id, context: context)
-        let procedures = try repository.loadBundle(named: metadataName, kind: .proceduresCSV, provenance: MetadataProvenance(source: metadataName, precedence: 0)).procedures.map(\.value)
+        let metadataScope = procedureMetadataScope(for: id, context: context)
+        let procedures = try repository.loadBundle(in: metadataScope, provenance: MetadataProvenance(source: metadataScope.name, precedence: metadataScope.defaultPrecedence)).procedures.map(\.value)
         if let existing = procedures.first(where: { $0.segment == id.segment.number && $0.procedure == id.number }) {
             return ProcedureIdentifier(isFunction: existing.isFunction, isAssembly: existing.isAssembly, segment: existing.segment, segmentName: existing.segmentName, procedure: existing.procedure, procName: existing.procName, parameters: existing.parameters, returnType: existing.returnType, returnTypeSource: existing.returnTypeSource)
         }
@@ -313,16 +390,16 @@ public struct MetadataEditingService: Sendable {
     }
 
     private func saveProcedure(_ procedure: ProcedureIdentifier, id: ProcedureID, context: MetadataEditContext, diagnostics: [Diagnostic]) throws -> MetadataEditResult {
-        let invalidation = try upsertProcedure(procedure, metadataFileName: procedureMetadataName(for: id, context: context))
+        let invalidation = try upsertProcedure(procedure, in: procedureMetadataScope(for: id, context: context))
         let scopedInvalidation = invalidationForProcedureEdit(procedure, in: context.snapshot)
         return MetadataEditResult(diagnostics: diagnostics, invalidation: scopedInvalidation == .procedureSignature(segment: procedure.segment, procedure: procedure.procedure) ? invalidation : scopedInvalidation)
     }
 
-    private func procedureMetadataName(for id: ProcedureID, context: MetadataEditContext) -> String {
+    private func procedureMetadataScope(for id: ProcedureID, context: MetadataEditContext) -> MetadataScope {
         if context.systemSegments.contains(id.segment.number), let version = context.systemMetadataVersion {
-            return "procedures_ver_\(version)"
+            return .systemProcedures(version: version)
         }
-        return "procedures_\(context.fileIdentifier)"
+        return .fileProcedures(fileIdentifier: context.fileIdentifier)
     }
 }
 
@@ -330,10 +407,11 @@ public struct FileBackedMetadataRepository: MetadataRepository {
     public let workspace: MetadataWorkspace
     public init(workspace: MetadataWorkspace = .applicationSupport()) { self.workspace = workspace }
 
-    public func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
-        guard let url = readURL(named: name, kind: kind) else { return MetadataBundle() }
-        let source = MetadataProvenance(source: url.lastPathComponent, precedence: provenance.precedence)
-        switch kind {
+    public func loadBundle(in scope: MetadataScope, provenance: MetadataProvenance? = nil) throws -> MetadataBundle {
+        guard let url = readURL(in: scope) else { return MetadataBundle() }
+        let requestedProvenance = provenance ?? MetadataProvenance(source: scope.name, precedence: scope.defaultPrecedence)
+        let source = MetadataProvenance(source: url.lastPathComponent, precedence: requestedProvenance.precedence)
+        switch scope.kind {
         case .labelsCSV:
             let rows = try CSVTable(contentsOf: url).records.map(Location.init(csv:))
             return MetadataBundle(labels: rows.map { ProvenancedMetadataFact(value: $0, provenance: source) })
@@ -346,15 +424,15 @@ public struct FileBackedMetadataRepository: MetadataRepository {
         }
     }
 
-    public func saveLabels(_ labels: [Location], named name: String) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeLabelsCSV(labels, to: name, overwrite: true) }
-    public func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeProceduresCSV(procedures, to: name, overwrite: true) }
-    public func saveComments(_ comments: [DisassemblyComment], named name: String) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeJSON(comments, to: name, overwrite: true) }
+    public func saveLabels(_ labels: [Location], in scope: MetadataScope) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeLabelsCSV(labels, to: scope.name, overwrite: true) }
+    public func saveProcedures(_ procedures: [ProcedureIdentifier], in scope: MetadataScope) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeProceduresCSV(procedures, to: scope.name, overwrite: true) }
+    public func saveComments(_ comments: [DisassemblyComment], in scope: MetadataScope) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeJSON(comments, to: scope.name, overwrite: true) }
 
-    private func readURL(named name: String, kind: MetadataFileKind) -> URL? {
-        let ext = kind == .commentsJSON ? "json" : "csv"
-        let writable = workspace.writableDirectory.appendingPathComponent(name).appendingPathExtension(ext)
+    private func readURL(in scope: MetadataScope) -> URL? {
+        let ext = scope.kind == .commentsJSON ? "json" : "csv"
+        let writable = workspace.writableDirectory.appendingPathComponent(scope.name).appendingPathExtension(ext)
         if FileManager.default.fileExists(atPath: writable.path) { return writable }
-        if let bundled = workspace.bundledDirectory?.appendingPathComponent(name).appendingPathExtension(ext), FileManager.default.fileExists(atPath: bundled.path) { return bundled }
+        if let bundled = workspace.bundledDirectory?.appendingPathComponent(scope.name).appendingPathExtension(ext), FileManager.default.fileExists(atPath: bundled.path) { return bundled }
         return nil
     }
 }
@@ -365,13 +443,13 @@ public struct InMemoryMetadataRepository: MetadataRepository, @unchecked Sendabl
         self.bundles = bundles
     }
 
-    public func loadBundle(named name: String, kind: MetadataFileKind, provenance: MetadataProvenance) throws -> MetadataBundle {
-        bundles[MetadataRepositoryKey(name: name, kind: kind)] ?? MetadataBundle()
+    public func loadBundle(in scope: MetadataScope, provenance: MetadataProvenance? = nil) throws -> MetadataBundle {
+        bundles[MetadataRepositoryKey(scope: scope)] ?? MetadataBundle()
     }
 
-    public func saveLabels(_ labels: [Location], named name: String) throws {}
-    public func saveProcedures(_ procedures: [ProcedureIdentifier], named name: String) throws {}
-    public func saveComments(_ comments: [DisassemblyComment], named name: String) throws {}
+    public func saveLabels(_ labels: [Location], in scope: MetadataScope) throws {}
+    public func saveProcedures(_ procedures: [ProcedureIdentifier], in scope: MetadataScope) throws {}
+    public func saveComments(_ comments: [DisassemblyComment], in scope: MetadataScope) throws {}
 }
 
 public struct MetadataRepositoryKey: Hashable, Sendable {
@@ -381,6 +459,11 @@ public struct MetadataRepositoryKey: Hashable, Sendable {
         self.name = name
         self.kind = kind
     }
+
+    public init(scope: MetadataScope) {
+        self.name = scope.name
+        self.kind = scope.kind
+    }
 }
 
 public struct MetadataScopeResolver: Sendable {
@@ -388,15 +471,18 @@ public struct MetadataScopeResolver: Sendable {
     public init(repository: MetadataRepository) { self.repository = repository }
 
     public func resolve(fileIdentifier: String, version: Int) throws -> MetadataSnapshot {
-        let scopes: [(String, MetadataFileKind, Int)] = [
-            ("labels_ver_\(version)", .labelsCSV, 0),
-            ("procedures_ver_\(version)", .proceduresCSV, 0),
-            ("labels_\(fileIdentifier)", .labelsCSV, 10),
-            ("procedures_\(fileIdentifier)", .proceduresCSV, 10),
-            ("comments_\(fileIdentifier)", .commentsJSON, 10),
-        ]
-        let bundles = try scopes.map { name, kind, precedence in
-            try repository.loadBundle(named: name, kind: kind, provenance: MetadataProvenance(source: name, precedence: precedence))
+        try resolve(scopes: [
+            .systemLabels(version: version),
+            .systemProcedures(version: version),
+            .fileLabels(fileIdentifier: fileIdentifier),
+            .fileProcedures(fileIdentifier: fileIdentifier),
+            .fileComments(fileIdentifier: fileIdentifier),
+        ])
+    }
+
+    public func resolve(scopes: [MetadataScope]) throws -> MetadataSnapshot {
+        let bundles = try scopes.map { scope in
+            try repository.loadBundle(in: scope, provenance: MetadataProvenance(source: scope.name, precedence: scope.defaultPrecedence))
         }
         return MetadataSnapshot(merging: bundles)
     }
