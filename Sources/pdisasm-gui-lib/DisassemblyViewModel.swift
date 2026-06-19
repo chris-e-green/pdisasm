@@ -69,10 +69,10 @@ final class DisassemblyViewModel {
     var fileURL: URL?
     var showFileImporter: Bool = false
 
-    // Display toggles – changing these only filters; no re-disassembly.
+    // Display toggles; structural rendering options rerun through the session controller.
     var showMarkup: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var showPCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
-    var showStackState: Bool = false { didSet { rerenderStructuredLines() } }
+    var showStackState: Bool = false { didSet { runDisassembly() } }
     var showPseudoCode: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var showVariables: Bool = true { didSet { rebuildFilteredLinesAndSearchMatches() } }
     var verbose: Bool = false
@@ -342,9 +342,9 @@ final class DisassemblyViewModel {
     func saveLocationEdit() {
         guard let draft = locationEditDraft else { return }
         do {
-            try upsertUserLabel(draft)
+            let invalidation = try upsertUserLabel(draft)
             locationEditDraft = nil
-            runDisassembly(restoringFilteredIndex: draft.sourceFilteredIndex)
+            applyMetadataInvalidation(invalidation, restoringFilteredIndex: draft.sourceFilteredIndex)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -353,9 +353,9 @@ final class DisassemblyViewModel {
     func saveProcedureSignatureEdit() {
         guard let draft = procedureSignatureEditDraft else { return }
         do {
-            try upsertProcedureSignature(draft)
+            let invalidation = try upsertProcedureSignature(draft)
             procedureSignatureEditDraft = nil
-            runDisassembly()
+            applyMetadataInvalidation(invalidation)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -364,9 +364,9 @@ final class DisassemblyViewModel {
     func saveCommentEdit() {
         guard let draft = commentEditDraft else { return }
         do {
-            try upsertUserComment(draft)
+            let invalidation = try upsertUserComment(draft)
             commentEditDraft = nil
-            runDisassembly(restoringFilteredIndex: draft.sourceFilteredIndex)
+            applyMetadataInvalidation(invalidation, restoringFilteredIndex: draft.sourceFilteredIndex)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -447,7 +447,7 @@ final class DisassemblyViewModel {
         character == "_" || character.isLetter || character.isNumber
     }
 
-    private func upsertUserLabel(_ draft: LocationEditDraft) throws {
+    private func upsertUserLabel(_ draft: LocationEditDraft) throws -> MetadataInvalidationScope {
         guard let fileURL else { throw LocationEditError.noOpenFile }
         let reference = draft.reference
         let type = draft.type.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -462,13 +462,13 @@ final class DisassemblyViewModel {
         )
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
         let codeFileID = CodeFileID(fileURL: fileURL)
-        _ = try service.apply(
+        return try service.apply(
             .upsertLabel(LocationID(codeFile: codeFileID, legacy: location), name: location.name, type: location.type),
             context: MetadataEditContext(codeFileID: codeFileID)
-        )
+        ).invalidation
     }
 
-    private func upsertProcedureSignature(_ draft: ProcedureSignatureEditDraft) throws {
+    private func upsertProcedureSignature(_ draft: ProcedureSignatureEditDraft) throws -> MetadataInvalidationScope {
         guard let fileURL else { throw SignatureEditError.noOpenFile }
         guard let disassemblyResult else { throw SignatureEditError.noDisassembly }
         guard let procedure = disassemblyResult.allProcedures.first(where: {
@@ -519,15 +519,15 @@ final class DisassemblyViewModel {
         )
         switch draft.field {
         case .procedureName:
-            _ = try service.apply(.renameProcedure(procedureID, name: edited.procName ?? ""), context: context)
+            return try service.apply(.renameProcedure(procedureID, name: edited.procName ?? ""), context: context).invalidation
         case let .parameter(index):
-            _ = try service.apply(.upsertParameter(procedureID, index: index, name: edited.parameters[index].name, type: edited.parameters[index].type), context: context)
+            return try service.apply(.upsertParameter(procedureID, index: index, name: edited.parameters[index].name, type: edited.parameters[index].type), context: context).invalidation
         case .returnType:
-            _ = try service.apply(.upsertReturnType(procedureID, type: edited.returnType), context: context)
+            return try service.apply(.upsertReturnType(procedureID, type: edited.returnType), context: context).invalidation
         }
     }
 
-    private func upsertUserComment(_ draft: CommentEditDraft) throws {
+    private func upsertUserComment(_ draft: CommentEditDraft) throws -> MetadataInvalidationScope {
         guard let fileURL else { throw CommentEditError.noOpenFile }
         let comment = DisassemblyComment(
             reference: draft.reference,
@@ -536,7 +536,31 @@ final class DisassemblyViewModel {
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
         let codeFileID = CodeFileID(fileURL: fileURL)
         if let instructionID = InstructionID(codeFile: codeFileID, legacy: comment.reference) {
-            _ = try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID))
+            return try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID)).invalidation
+        }
+        return .none
+    }
+
+
+    private func applyMetadataInvalidation(_ invalidation: MetadataInvalidationScope, restoringFilteredIndex restoreIndex: Int? = nil) {
+        isLoading = true
+        let verb = verbose
+        let stackState = showStackState
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        Task {
+            do {
+                if let model = try await sessionController.applyEdit(invalidation: invalidation, verbose: verb, showStackState: stackState) {
+                    guard generation == self.sessionGeneration else { return }
+                    applyPresentationModel(model, restoringFilteredIndex: restoreIndex)
+                } else if generation == self.sessionGeneration {
+                    isLoading = false
+                }
+            } catch {
+                guard generation == self.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
         }
     }
 
@@ -580,6 +604,8 @@ final class DisassemblyViewModel {
     private var searchDebounceTask: Task<Void, Never>?
     private var searchRebuildTask: Task<Void, Never>?
     private var searchRevision: Int = 0
+    private let sessionController = DocumentSessionController()
+    private var sessionGeneration: Int = 0
 
     private static let searchDebounceDelayNanoseconds: UInt64 = 250_000_000
     private static let asyncSearchThreshold = 3000
@@ -749,6 +775,18 @@ final class DisassemblyViewModel {
         return matches
     }
 
+
+    private func indexedSearchMatches(for query: String, visibleLineIDs: [Int: Int]) -> [Int]? {
+        let nodeIDs = sessionController.indexedSearchNodeIDs(for: query)
+        guard !nodeIDs.isEmpty, let document = sessionController.runResult?.document else { return nil }
+        let matches = nodeIDs.compactMap { nodeID -> Int? in
+            guard let lineID = document.nodesByID[nodeID]?.line.id else { return nil }
+            return visibleLineIDs[lineID]
+        }
+        let uniqueMatches = Array(Set(matches)).sorted()
+        return uniqueMatches.isEmpty ? nil : uniqueMatches
+    }
+
     private func applySearchMatches(_ matches: [Int], resetCurrentIndex: Bool) {
         searchMatchIndices = matches
         searchMatchIndexSet = Set(matches)
@@ -771,6 +809,12 @@ final class DisassemblyViewModel {
         let query = committedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
             applySearchMatches([], resetCurrentIndex: true)
+            return
+        }
+
+        let visibleLineIDs = Dictionary(uniqueKeysWithValues: filteredLines.enumerated().map { ($0.element.id, $0.offset) })
+        if let matches = indexedSearchMatches(for: query, visibleLineIDs: visibleLineIDs) {
+            applySearchMatches(matches, resetCurrentIndex: resetCurrentIndex)
             return
         }
 
@@ -855,6 +899,7 @@ final class DisassemblyViewModel {
     }
 
     func openFile(url: URL) {
+        sessionController.open(url: url)
         fileURL = url
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         persistURL(url)
@@ -874,6 +919,7 @@ final class DisassemblyViewModel {
         if isStale { persistURL(url) }
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
+        sessionController.open(url: url)
         fileURL = url
         runDisassembly()
     }
@@ -888,7 +934,7 @@ final class DisassemblyViewModel {
     }
 
     func runDisassembly(restoringFilteredIndex restoreIndex: Int? = nil) {
-        guard let url = fileURL else { return }
+        guard fileURL != nil else { return }
         searchDebounceTask?.cancel()
         searchRebuildTask?.cancel()
         isSearching = false
@@ -910,81 +956,44 @@ final class DisassemblyViewModel {
         currentMatchIndex = 0
         segments = []
 
-        let path = url.path
         let verb = verbose
         let stackState = showStackState
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
 
         Task {
             do {
-                let (result, lines, items, relevantFiles) = try await Task.detached {
-                    let result = try DisassemblyService().run(DisassemblyRunRequest(
-                        source: .file(URL(fileURLWithPath: path)),
-                        options: DisassemblyOptions(verbose: verb)
-                    )).legacyResult
-                    let lines = renderStructuredLines(
-                        from: result,
-                        showStackState: stackState,
-                        verbose: verb
-                    )
-
-                    // Determine relevant metadata filenames
-                    let fileIdentifier = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
-                    let version = result.segDictionary.segTable[1]?.version ?? result.segDictionary.segTable[0]?.version ?? 0
-                    let relevantFiles = [
-                        "labels_\(fileIdentifier).csv",
-                        "labels_ver_\(version).csv",
-                        "procedures_\(fileIdentifier).csv",
-                        "procedures_ver_\(version).csv",
-                        "records_\(fileIdentifier).json",
-                        "records_ver_\(version).json",
-                        "types_\(fileIdentifier).pas",
-                        "types_ver_\(version).pas",
-                        "comments_\(fileIdentifier).json"
-                    ]
-
-                    // Build sidebar items
-                    var items: [DisassemblyViewModel.SegmentItem] = []
-                    for (segIdx, codeSeg) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
-                        let segName = result.segDictionary.segTable
-                            .first(where: { $0.value.segNum == segIdx })?.value.name ?? "Segment \(segIdx)"
-                        let procs = codeSeg.procedures.compactMap { proc -> DisassemblyViewModel.ProcedureItem? in
-                            guard let ident = proc.identifier else { return nil }
-                            let name = result.allProcedures
-                                .first(where: { $0.segment == ident.segment && $0.procedure == ident.procedure })?
-                                .shortDescription ?? ident.shortDescription
-                            return DisassemblyViewModel.ProcedureItem(
-                                segmentNumber: segIdx,
-                                number: ident.procedure,
-                                name: name
-                            )
-                        }
-                        items.append(DisassemblyViewModel.SegmentItem(
-                            id: segIdx,
-                            name: segName,
-                            procedures: procs
-                        ))
-                    }
-                    return (result, lines, items, relevantFiles)
-                }.value
-
-                self.disassemblyResult = result
-                self.allLines = lines
-                self.rebuildLocationIndexes(from: result)
-                self.rebuildFilteredLinesAndSearchMatches()
-                self.segments = items
-                self.relevantMetadataFiles = relevantFiles
+                let model = try await sessionController.rerun(verbose: verb, showStackState: stackState)
+                guard generation == self.sessionGeneration else { return }
+                applyPresentationModel(model, restoringFilteredIndex: restoreIndex)
+            } catch is CancellationError {
+                guard generation == self.sessionGeneration else { return }
                 self.isLoading = false
-                if let restoreIndex, !self.filteredLines.isEmpty {
-                    let clampedRestoreIndex = min(max(restoreIndex, 0), self.filteredLines.count - 1)
-                    Task { @MainActor in
-                        await Task.yield()
-                        self.outputRestoreFilteredIndex = clampedRestoreIndex
-                        self.outputRestoreScrollRequest += 1
-                    }
-                }
+            } catch is DisassemblyCancelledError {
+                guard generation == self.sessionGeneration else { return }
+                self.isLoading = false
             } catch {
+                guard generation == self.sessionGeneration else { return }
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
+            }
+        }
+    }
+
+    private func applyPresentationModel(_ model: DocumentSessionController.PresentationModel, restoringFilteredIndex restoreIndex: Int? = nil) {
+        self.disassemblyResult = model.result
+        self.allLines = model.lines
+        self.rebuildLocationIndexes(from: model.result)
+        self.rebuildFilteredLinesAndSearchMatches()
+        self.segments = model.segments
+        self.relevantMetadataFiles = model.relevantMetadataFiles
+        self.isLoading = false
+        if let restoreIndex, !self.filteredLines.isEmpty {
+            let clampedRestoreIndex = min(max(restoreIndex, 0), self.filteredLines.count - 1)
+            Task { @MainActor in
+                await Task.yield()
+                self.outputRestoreFilteredIndex = clampedRestoreIndex
+                self.outputRestoreScrollRequest += 1
             }
         }
     }
