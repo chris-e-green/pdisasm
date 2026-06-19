@@ -90,7 +90,7 @@ public struct ContentView: View {
 
                 Menu {
                     Picker("Search Status Width", selection: $viewModel.searchStatusWidthPreset) {
-                        ForEach(DisassemblyViewModel.SearchStatusWidthPreset.allCases) { preset in
+                        ForEach(SearchStatusWidthPreset.allCases) { preset in
                             Text(preset.title).tag(preset)
                         }
                     }

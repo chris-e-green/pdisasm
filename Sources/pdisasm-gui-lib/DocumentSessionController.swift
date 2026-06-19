@@ -8,8 +8,21 @@ final class DocumentSessionController {
         let result: DisassemblyResult
         let runResult: DisassemblyRunResult
         let lines: [OutputLine]
-        let segments: [DisassemblyViewModel.SegmentItem]
+        let segments: [SegmentItem]
         let relevantMetadataFiles: [String]
+    }
+
+    struct SegmentItem: Identifiable {
+        let id: Int
+        let name: String
+        let procedures: [ProcedureItem]
+    }
+
+    struct ProcedureItem: Identifiable {
+        var id: String { "\(segmentNumber).\(number)" }
+        let segmentNumber: Int
+        let number: Int
+        let name: String
     }
 
     private final class SessionCancellationToken: CancellationToken, @unchecked Sendable {
@@ -111,12 +124,30 @@ final class DocumentSessionController {
         case .none:
             return nil
         case .documentOnly, .patchDocument:
-            // Existing renderers still derive location/signature/comment display from the legacy result.
-            // Keep the policy centralized here and conservatively rerun until document patches cover all edit types.
             return try await rerun(verbose: verbose, showStackState: showStackState)
         case .procedureSignature, .propagateCallGraph, .fullDisassembly:
             return try await rerun(verbose: verbose, showStackState: showStackState)
         }
+    }
+
+    func applyCommentEdit(_ comment: DisassemblyComment, fallbackInvalidation: MetadataInvalidationScope, verbose: Bool, showStackState: Bool) async throws -> PresentationModel? {
+        guard let runResult else {
+            return try await applyEdit(invalidation: fallbackInvalidation, verbose: verbose, showStackState: showStackState)
+        }
+
+        let patch = runResult.patchingComment(comment)
+        guard !patch.patchedNodes.isEmpty else {
+            return try await applyEdit(invalidation: fallbackInvalidation, verbose: verbose, showStackState: showStackState)
+        }
+
+        self.runResult = patch.result
+        return PresentationModel(
+            result: patch.result.legacyResult,
+            runResult: patch.result,
+            lines: patch.result.document.nodes.map(\.line),
+            segments: Self.buildSegmentItems(from: patch.result),
+            relevantMetadataFiles: Self.relevantMetadataFiles(for: sourceURL, result: patch.result)
+        )
     }
 
     func indexedSearchNodeIDs(for query: String) -> [DocumentNodeID] {
@@ -124,21 +155,26 @@ final class DocumentSessionController {
         return runResult?.indexes.search(query) ?? []
     }
 
-    nonisolated private static func buildSegmentItems(from result: DisassemblyResult) -> [DisassemblyViewModel.SegmentItem] {
-        var items: [DisassemblyViewModel.SegmentItem] = []
+    nonisolated private static func buildSegmentItems(from result: DisassemblyResult) -> [SegmentItem] {
+        var items: [SegmentItem] = []
         for (segIdx, codeSeg) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
             let segName = result.segDictionary.segTable
                 .first(where: { $0.value.segNum == segIdx })?.value.name ?? "Segment \(segIdx)"
-            let procs = codeSeg.procedures.compactMap { proc -> DisassemblyViewModel.ProcedureItem? in
+            let procs = codeSeg.procedures.compactMap { proc -> ProcedureItem? in
                 guard let ident = proc.identifier else { return nil }
                 let name = result.allProcedures
                     .first(where: { $0.segment == ident.segment && $0.procedure == ident.procedure })?
                     .shortDescription ?? ident.shortDescription
-                return DisassemblyViewModel.ProcedureItem(segmentNumber: segIdx, number: ident.procedure, name: name)
+                return ProcedureItem(segmentNumber: segIdx, number: ident.procedure, name: name)
             }
-            items.append(DisassemblyViewModel.SegmentItem(id: segIdx, name: segName, procedures: procs))
+            items.append(SegmentItem(id: segIdx, name: segName, procedures: procs))
         }
         return items
+    }
+
+    nonisolated private static func relevantMetadataFiles(for url: URL?, result: DisassemblyRunResult) -> [String] {
+        let url = url ?? URL(fileURLWithPath: result.legacyResult.sourceFilename)
+        return relevantMetadataFiles(for: url, result: result.legacyResult)
     }
 
     nonisolated private static func relevantMetadataFiles(for url: URL, result: DisassemblyResult) -> [String] {

@@ -104,30 +104,6 @@ final class DisassemblyViewModel {
     /// Indices into `filteredLines` that match the committed search query.
     var searchMatchIndices: [Int] = []
 
-    enum SearchStatusWidthPreset: String, CaseIterable, Identifiable {
-        case compact
-        case medium
-        case wide
-
-        var id: String { rawValue }
-
-        var width: Double {
-            switch self {
-            case .compact: return 200
-            case .medium:  return 280
-            case .wide:    return 360
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .compact: return "Status Width: Compact"
-            case .medium:  return "Status Width: Medium"
-            case .wide:    return "Status Width: Wide"
-            }
-        }
-    }
-
     var searchStatusWidthPreset: SearchStatusWidthPreset = .medium {
         didSet {
             UserDefaults.standard.set(searchStatusWidthPreset.rawValue, forKey: Self.searchStatusWidthPresetKey)
@@ -364,9 +340,9 @@ final class DisassemblyViewModel {
     func saveCommentEdit() {
         guard let draft = commentEditDraft else { return }
         do {
-            let invalidation = try upsertUserComment(draft)
+            let edit = try upsertUserComment(draft)
             commentEditDraft = nil
-            applyMetadataInvalidation(invalidation, restoringFilteredIndex: draft.sourceFilteredIndex)
+            applyCommentEdit(edit.comment, fallbackInvalidation: edit.invalidation, restoringFilteredIndex: draft.sourceFilteredIndex)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -527,7 +503,7 @@ final class DisassemblyViewModel {
         }
     }
 
-    private func upsertUserComment(_ draft: CommentEditDraft) throws -> MetadataInvalidationScope {
+    private func upsertUserComment(_ draft: CommentEditDraft) throws -> (invalidation: MetadataInvalidationScope, comment: DisassemblyComment) {
         guard let fileURL else { throw CommentEditError.noOpenFile }
         let comment = DisassemblyComment(
             reference: draft.reference,
@@ -536,11 +512,32 @@ final class DisassemblyViewModel {
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
         let codeFileID = CodeFileID(fileURL: fileURL)
         if let instructionID = InstructionID(codeFile: codeFileID, legacy: comment.reference) {
-            return try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID)).invalidation
+            return (try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID)).invalidation, comment)
         }
-        return .none
+        return (.none, comment)
     }
 
+    private func applyCommentEdit(_ comment: DisassemblyComment, fallbackInvalidation: MetadataInvalidationScope, restoringFilteredIndex restoreIndex: Int? = nil) {
+        isLoading = true
+        let verb = verbose
+        let stackState = showStackState
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        Task {
+            do {
+                if let model = try await sessionController.applyCommentEdit(comment, fallbackInvalidation: fallbackInvalidation, verbose: verb, showStackState: stackState) {
+                    guard generation == self.sessionGeneration else { return }
+                    applyPresentationModel(model, restoringFilteredIndex: restoreIndex)
+                } else if generation == self.sessionGeneration {
+                    isLoading = false
+                }
+            } catch {
+                guard generation == self.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
+        }
+    }
 
     private func applyMetadataInvalidation(_ invalidation: MetadataInvalidationScope, restoringFilteredIndex restoreIndex: Int? = nil) {
         isLoading = true
@@ -868,20 +865,7 @@ final class DisassemblyViewModel {
 
     // MARK: - Segment sidebar data
 
-    struct SegmentItem: Identifiable {
-        let id: Int
-        let name: String
-        let procedures: [ProcedureItem]
-    }
-
-    struct ProcedureItem: Identifiable {
-        var id: String { "\(segmentNumber).\(number)" }
-        let segmentNumber: Int
-        let number: Int
-        let name: String
-    }
-
-    var segments: [SegmentItem] = []
+    var segments: [DocumentSessionController.SegmentItem] = []
 
     /// Metadata filenames relevant to the currently loaded file.
     var relevantMetadataFiles: [String] = []

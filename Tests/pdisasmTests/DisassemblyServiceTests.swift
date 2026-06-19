@@ -202,6 +202,56 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(patched.document.nodes.map(\.line.text), ["0003: NOP ; new", "0004: RTS"])
     }
 
+    func testRunResultCommentPatchRefreshesDocumentIndexes() throws {
+        let documentID = DocumentID("fixture")
+        let lineID = DocumentNodeID(document: documentID, value: "line-1")
+        let document = DisassemblyDocument(
+            id: documentID,
+            nodes: [
+                DocumentNode(
+                    id: lineID,
+                    line: OutputLine(
+                        id: 1,
+                        kind: .pcode,
+                        text: "0003: NOP ; old",
+                        commentReference: InstructionReference(segment: 1, procedure: 2, addr: 3)
+                    )
+                ),
+            ]
+        )
+        let runResult = DisassemblyRunResult(
+            legacyResult: DisassemblyResult(
+                sourceFilename: "fixture.bin",
+                segDictionary: SegDictionary(segTable: [:], intrinsics: [], comment: ""),
+                codeSegments: [:],
+                dataSegments: [],
+                allLocations: [],
+                allProcedures: [],
+                allCallers: [],
+                knownRecords: [],
+                typeAliases: [:],
+                scalarTypes: [:],
+                constants: [:],
+                subrangeTypes: [:],
+                typeConflicts: [],
+                diagnostics: []
+            ),
+            snapshot: ProgramSnapshot(codeFileID: CodeFileID("fixture")),
+            document: document,
+            indexes: DocumentIndexes.build(document: document),
+            report: RunReport()
+        )
+
+        let patched = runResult.patchingComment(
+            DisassemblyComment(reference: InstructionReference(segment: 1, procedure: 2, addr: 3), comment: "newtoken")
+        )
+
+        XCTAssertEqual(patched.patchedNodes, [lineID])
+        XCTAssertEqual(patched.result.document.nodes.map { $0.line.text }, ["0003: NOP ; newtoken"])
+        XCTAssertEqual(patched.result.indexes.search("newtoken"), [lineID])
+        XCTAssertTrue(patched.result.indexes.search("old").isEmpty)
+    }
+
     func testLabelInvalidationIsDocumentOnlyWhenTypeDoesNotAffectAnalysis() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("pdisasm-metadata-tests")
