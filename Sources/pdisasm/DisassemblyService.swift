@@ -369,17 +369,29 @@ public struct DisassemblyService: Sendable {
 
     public func run(_ request: DisassemblyRunRequest) throws -> DisassemblyRunResult {
         try request.checkCancellation()
-        let filename = try request.source.filenameForLegacyRunner
-        try request.checkCancellation()
-        let injectedMetadata: MetadataSnapshot? = request.metadata.isEmpty ? nil : request.metadata
-        let legacyResult = try disassemble(
-            filename: filename,
-            verbose: request.options.verbose,
-            writeMetadata: request.options.writeMetadata,
-            overwriteMetadata: request.options.overwriteMetadata,
-            metadataWorkspace: request.metadataWorkspace,
-            metadataSnapshot: injectedMetadata
+        let codefileLoad = try CodefileLoadStage().run(
+            CodefileLoadStageInput(source: request.source, cancellation: request.cancellation)
         )
+        try request.checkCancellation()
+        let metadataWorkspaceResolver = request.metadataWorkspace.map { MetadataScopeResolver(repository: FileBackedMetadataRepository(workspace: $0)) }
+        let metadataMerge = try MetadataMergeStage(resolver: metadataWorkspaceResolver).run(
+            MetadataMergeStageInput(
+                fileIdentifier: codefileLoad.fileIdentifier,
+                version: codefileLoad.version,
+                explicit: request.metadata
+            )
+        )
+        try request.checkCancellation()
+        let legacy = try LegacyPipelineStages().run(
+            LegacyPipelineStageInput(
+                codefile: codefileLoad,
+                metadata: metadataMerge.snapshot,
+                options: request.options,
+                workspace: request.metadataWorkspace,
+                cancellation: request.cancellation
+            )
+        )
+        let legacyResult = legacy.result
         try request.checkCancellation()
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
         let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
@@ -391,19 +403,23 @@ public struct DisassemblyService: Sendable {
         let document = DisassemblyDocument.build(from: structuredLines, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename, codeFileID: codeFileID)
         let indexes = DocumentIndexes.build(document: document, codeFileID: codeFileID)
         try request.checkCancellation()
-        let report = RunReport(stages: legacyResult.runReport.stages + [
-            StageReport(name: "snapshotBuild", metrics: [
-                "segments": snapshot.segments.count,
-                "procedures": snapshot.procedures.count,
-                "instructions": snapshot.instructions.count,
-                "locations": snapshot.locations.count,
-            ]),
-            StageReport(name: "documentBuild", metrics: [
-                "documentNodes": document.nodes.count,
-                "procedureNodes": indexes.procedureNodes.count,
-                "instructionNodes": indexes.instructionNodes.count,
-            ]),
-        ], warnings: legacyResult.runReport.warnings, isComplete: legacyResult.runReport.isComplete)
+        let snapshotReport = StageReport(name: "snapshotBuild", metrics: [
+            "segments": snapshot.segments.count,
+            "procedures": snapshot.procedures.count,
+            "instructions": snapshot.instructions.count,
+            "locations": snapshot.locations.count,
+        ])
+        let documentReport = StageReport(name: "documentBuild", metrics: [
+            "documentNodes": document.nodes.count,
+            "procedureNodes": indexes.procedureNodes.count,
+            "instructionNodes": indexes.instructionNodes.count,
+        ])
+        let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotReport, documentReport]
+        let report = RunReport(
+            stages: stageReports,
+            warnings: legacyResult.runReport.warnings,
+            isComplete: stageReports.allSatisfy(\.isComplete)
+        )
         return DisassemblyRunResult(
             legacyResult: legacyResult,
             snapshot: snapshot,
@@ -687,32 +703,94 @@ public extension MetadataSnapshot {
     var isEmpty: Bool { labels.isEmpty && procedures.isEmpty && comments.isEmpty }
 }
 
+public struct CodefileLoadStageInput: Sendable {
+    public let source: CodeFileSource
+    public let cancellation: CancellationToken?
+
+    public init(source: CodeFileSource, cancellation: CancellationToken? = nil) {
+        self.source = source
+        self.cancellation = cancellation
+    }
+}
+
 public struct CodefileLoadStage: Sendable {
     public init() {}
-    public func run(source: CodeFileSource, cancellation: CancellationToken? = nil) throws -> CodefileLoadStageOutput {
-        if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
-        let filename = try source.filenameForLegacyRunner
+
+    public func run(_ input: CodefileLoadStageInput) throws -> CodefileLoadStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let filename = try input.source.filenameForLegacyRunner
         let data = try Data(contentsOf: URL(fileURLWithPath: filename))
-        return CodefileLoadStageOutput(filename: filename, data: data, report: StageReport(name: "codefileLoading", metrics: ["bytes": data.count]))
+        let codeData = CodeData(data: data)
+        let fileIdentifier = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
+        var version = 0
+        var segmentCount = 0
+        var diagnostics: [String] = []
+        if data.count >= 80 {
+            do {
+                let segDictionary = try readCodeFileStructure(codeData: codeData)
+                version = segDictionary.segTable[1]?.version ?? segDictionary.segTable[0]?.version ?? 0
+                segmentCount = segDictionary.segTable.count
+            } catch {
+                diagnostics.append("Codefile dictionary preflight failed: \(error)")
+            }
+        } else {
+            diagnostics.append("Codefile is too small for segment dictionary preflight")
+        }
+        return CodefileLoadStageOutput(
+            filename: filename,
+            fileIdentifier: fileIdentifier,
+            data: data,
+            version: version,
+            segmentCount: segmentCount,
+            report: StageReport(name: "codefileLoading", isComplete: diagnostics.isEmpty, metrics: [
+                "bytes": data.count,
+                "segments": segmentCount,
+                "version": version,
+            ], diagnostics: diagnostics)
+        )
+    }
+
+    public func run(source: CodeFileSource, cancellation: CancellationToken? = nil) throws -> CodefileLoadStageOutput {
+        try run(CodefileLoadStageInput(source: source, cancellation: cancellation))
     }
 }
 
 public struct CodefileLoadStageOutput: Sendable {
     public let filename: String
+    public let fileIdentifier: String
     public let data: Data
+    public let version: Int
+    public let segmentCount: Int
     public let report: StageReport
+}
+
+public struct MetadataMergeStageInput: Sendable {
+    public let fileIdentifier: String
+    public let version: Int
+    public let explicit: MetadataSnapshot
+
+    public init(fileIdentifier: String, version: Int, explicit: MetadataSnapshot = MetadataSnapshot()) {
+        self.fileIdentifier = fileIdentifier
+        self.version = version
+        self.explicit = explicit
+    }
 }
 
 public struct MetadataMergeStage: Sendable {
     public let resolver: MetadataScopeResolver?
     public init(resolver: MetadataScopeResolver? = nil) { self.resolver = resolver }
-    public func run(fileIdentifier: String, version: Int, explicit: MetadataSnapshot = MetadataSnapshot()) throws -> MetadataMergeStageOutput {
-        let snapshot = explicit.isEmpty ? (try resolver?.resolve(fileIdentifier: fileIdentifier, version: version) ?? MetadataSnapshot()) : explicit
+
+    public func run(_ input: MetadataMergeStageInput) throws -> MetadataMergeStageOutput {
+        let snapshot = input.explicit.isEmpty ? (try resolver?.resolve(fileIdentifier: input.fileIdentifier, version: input.version) ?? MetadataSnapshot()) : input.explicit
         return MetadataMergeStageOutput(snapshot: snapshot, report: StageReport(name: "metadataMerge", metrics: [
             "labels": snapshot.labels.count,
             "procedures": snapshot.procedures.count,
             "comments": snapshot.comments.count,
         ]))
+    }
+
+    public func run(fileIdentifier: String, version: Int, explicit: MetadataSnapshot = MetadataSnapshot()) throws -> MetadataMergeStageOutput {
+        try run(MetadataMergeStageInput(fileIdentifier: fileIdentifier, version: version, explicit: explicit))
     }
 }
 
@@ -721,8 +799,46 @@ public struct MetadataMergeStageOutput: Sendable {
     public let report: StageReport
 }
 
+public struct LegacyPipelineStageInput: Sendable {
+    public let codefile: CodefileLoadStageOutput
+    public let metadata: MetadataSnapshot
+    public let options: DisassemblyOptions
+    public let workspace: MetadataWorkspace?
+    public let cancellation: CancellationToken?
+
+    public init(codefile: CodefileLoadStageOutput, metadata: MetadataSnapshot, options: DisassemblyOptions, workspace: MetadataWorkspace? = nil, cancellation: CancellationToken? = nil) {
+        self.codefile = codefile
+        self.metadata = metadata
+        self.options = options
+        self.workspace = workspace
+        self.cancellation = cancellation
+    }
+}
+
+public struct LegacyPipelineStageOutput: @unchecked Sendable {
+    public let result: DisassemblyResult
+    public let reports: [StageReport]
+}
+
 public struct LegacyPipelineStages: Sendable {
     public init() {}
+
+    public func run(_ input: LegacyPipelineStageInput) throws -> LegacyPipelineStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let metadata = input.metadata.isEmpty ? nil : input.metadata
+        let result = try disassemble(
+            filename: input.codefile.filename,
+            verbose: input.options.verbose,
+            writeMetadata: input.options.writeMetadata,
+            overwriteMetadata: input.options.overwriteMetadata,
+            metadataWorkspace: input.workspace,
+            metadataSnapshot: metadata
+        )
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let reports = result.runReport.stages.filter { !["codefileLoading", "metadataMerge"].contains($0.name) }
+        return LegacyPipelineStageOutput(result: result, reports: reports)
+    }
+
     public func run(filename: String, options: DisassemblyOptions, workspace: MetadataWorkspace?, metadata: MetadataSnapshot?) throws -> DisassemblyResult {
         try disassemble(filename: filename, verbose: options.verbose, writeMetadata: options.writeMetadata, overwriteMetadata: options.overwriteMetadata, metadataWorkspace: workspace, metadataSnapshot: metadata)
     }
