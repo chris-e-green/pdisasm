@@ -296,3 +296,41 @@ extension DisassemblyServiceTests {
         }
     }
 }
+
+extension DisassemblyServiceTests {
+    func testMetadataScopeResolverMergesInMemoryScopesByPrecedence() throws {
+        let systemLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "SYSTEM", type: "INTEGER", typeSource: .metadata)
+        let fileLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "FILE", type: "BOOLEAN", typeSource: .user)
+        let repository = pdisasm.InMemoryMetadataRepository(bundles: [
+            MetadataRepositoryKey(name: "labels_ver_1", kind: .labelsCSV): MetadataBundle(labels: [
+                ProvenancedMetadataFact(value: systemLocation, provenance: MetadataProvenance(source: "labels_ver_1", precedence: 0))
+            ]),
+            MetadataRepositoryKey(name: "labels_SAMPLE", kind: .labelsCSV): MetadataBundle(labels: [
+                ProvenancedMetadataFact(value: fileLocation, provenance: MetadataProvenance(source: "labels_SAMPLE", precedence: 10))
+            ]),
+        ])
+
+        let snapshot = try MetadataScopeResolver(repository: repository).resolve(fileIdentifier: "SAMPLE", version: 1)
+
+        XCTAssertEqual(snapshot.labels.count, 1)
+        XCTAssertEqual(snapshot.labels.first?.value.name, "FILE")
+    }
+
+    func testStageFacadesAcceptInMemoryInputs() throws {
+        let bytes = Data([0, 1, 2, 3])
+        let load = try CodefileLoadStage().run(source: .bytes(bytes, suggestedFilename: "sample.bin"))
+        XCTAssertEqual(load.data, bytes)
+        XCTAssertEqual(load.report.name, "codefileLoading")
+        XCTAssertEqual(load.report.metrics["bytes"], bytes.count)
+
+        let snapshot = MetadataSnapshot(labels: [
+            ProvenancedMetadataFact(
+                value: Location(segment: 1, procedure: 1, lexLevel: 0, addr: 4, name: "L", type: "", typeSource: .unknown),
+                provenance: MetadataProvenance(source: "test", precedence: 1)
+            )
+        ])
+        let merge = try MetadataMergeStage().run(fileIdentifier: "sample", version: 1, explicit: snapshot)
+        XCTAssertEqual(merge.snapshot.labels.count, 1)
+        XCTAssertEqual(merge.report.metrics["labels"], 1)
+    }
+}
