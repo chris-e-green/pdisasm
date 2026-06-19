@@ -972,7 +972,10 @@ public func renderDisassemblyDocument(
 
 
 public extension MetadataSnapshot {
-    var isEmpty: Bool { labels.isEmpty && procedures.isEmpty && comments.isEmpty }
+    var isEmpty: Bool {
+        labels.isEmpty && procedures.isEmpty && comments.isEmpty && records.isEmpty && typeAliases.isEmpty
+            && scalarTypes.isEmpty && constants.isEmpty && subrangeTypes.isEmpty && globals.isEmpty
+    }
 }
 
 public struct CodefileLoadStageInput: Sendable {
@@ -1058,6 +1061,12 @@ public struct MetadataMergeStage: Sendable {
             "labels": snapshot.labels.count,
             "procedures": snapshot.procedures.count,
             "comments": snapshot.comments.count,
+            "records": snapshot.records.count,
+            "typeAliases": snapshot.typeAliases.count,
+            "scalarTypes": snapshot.scalarTypes.count,
+            "constants": snapshot.constants.count,
+            "subrangeTypes": snapshot.subrangeTypes.count,
+            "globals": snapshot.globals.count,
         ]))
     }
 

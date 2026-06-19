@@ -1,7 +1,7 @@
 import Foundation
 
 extension URL {
-    static var applicationSupportDirectory: URL {
+    public static var pdisasmApplicationSupportDirectory: URL {
         #if os(macOS)
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)

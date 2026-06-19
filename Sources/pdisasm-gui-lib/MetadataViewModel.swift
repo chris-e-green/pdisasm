@@ -129,7 +129,7 @@ final class MetadataViewModel {
     // MARK: - File Discovery
 
     func discoverFiles() {
-        let appSupportDir = URL.applicationSupportDirectory
+        let appSupportDir = URL.pdisasmApplicationSupportDirectory
             .appendingPathComponent("pdisasm")
 
         let allFiles = (try? FileManager.default.contentsOfDirectory(
