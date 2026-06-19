@@ -50,7 +50,7 @@ public final class PascalRecord: CustomStringConvertible, Hashable, Sendable, Co
         self.isSystemRecord = try container.decodeIfPresent(Bool.self, forKey: .isSystemRecord) ?? false
     }
 
-    init(
+    public init(
         name: String,
         members: [Int: Identifier],
         allMembers: [PascalRecordMember]? = nil,

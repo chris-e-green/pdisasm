@@ -480,11 +480,15 @@ extension DisassemblyServiceTests {
     }
 
     func testBytesSourceWithInMemoryMetadataDoesNotReadApplicationSupportMetadata() throws {
-        let applicationSupport = URL.applicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true)
+        let applicationSupport = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-application-support-poison")
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("pdisasm", isDirectory: true)
         try FileManager.default.createDirectory(at: applicationSupport, withIntermediateDirectories: true)
         let poisonURL = applicationSupport.appendingPathComponent("labels_sample").appendingPathExtension("csv")
         try "segment,procedure,lexLevel,addr,name,type,typeSource\n1,1,0,4,POISON,,unknown\n".write(to: poisonURL, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: poisonURL) }
+        defer { try? FileManager.default.removeItem(at: applicationSupport.deletingLastPathComponent().deletingLastPathComponent()) }
 
         let bytes = Data([0, 1, 2, 3])
         let load = try CodefileLoadStage().run(source: .bytes(bytes, suggestedFilename: "sample.bin"))

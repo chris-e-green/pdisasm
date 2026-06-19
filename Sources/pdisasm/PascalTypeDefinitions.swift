@@ -12,7 +12,7 @@ public struct PascalScalarType: Hashable, Sendable, Codable {
         Dictionary(uniqueKeysWithValues: cases.enumerated().map { ($0.offset, $0.element) })
     }
 
-    init(name: String, cases: [String]) {
+    public init(name: String, cases: [String]) {
         self.name = name
         self.cases = cases
     }
@@ -27,7 +27,7 @@ public struct PascalSubrangeType: Hashable, Sendable, Codable {
         "\(lowerBound)..\(upperBound)"
     }
 
-    init(name: String, lowerBound: Int, upperBound: Int) {
+    public init(name: String, lowerBound: Int, upperBound: Int) {
         self.name = name
         self.lowerBound = lowerBound
         self.upperBound = upperBound
