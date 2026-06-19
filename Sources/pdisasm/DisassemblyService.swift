@@ -647,7 +647,22 @@ public struct DocumentBuildStage: Sendable {
 
     public func run(_ input: DocumentBuildStageInput) throws -> DocumentBuildStageOutput {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
-        let document = DisassemblyDocument.build(from: input.snapshot, id: input.id, title: input.title)
+        let document: DisassemblyDocument
+        if input.result.codeSegments.isEmpty && !input.snapshot.procedures.isEmpty {
+            document = DisassemblyDocument.build(from: input.snapshot, id: input.id, title: input.title)
+        } else {
+            let lines = renderStructuredLines(
+                from: input.result,
+                showStackState: input.showStackState,
+                verbose: input.verbose
+            )
+            document = DisassemblyDocument.build(
+                from: lines,
+                snapshot: input.snapshot,
+                id: input.id,
+                title: input.title
+            )
+        }
         let indexes = DocumentIndexes.build(document: document)
         let unmappedNodes = document.nodes.count - document.sourceMap.count
         return DocumentBuildStageOutput(document: document, indexes: indexes, report: StageReport(name: "documentBuild", metrics: [

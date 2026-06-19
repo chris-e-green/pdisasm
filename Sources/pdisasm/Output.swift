@@ -749,7 +749,16 @@ public func renderStructuredLines(
                             if showStackState {
                                 pcLine += " " + prettyStack(inst.stackState ?? [])
                             }
-                            addLine(.pcode, pcLine, location: inst.memLocation)
+                            addLine(
+                                .pcode,
+                                pcLine,
+                                location: inst.memLocation,
+                                commentReference: InstructionReference(
+                                    segment: s,
+                                    procedure: proc.identifier?.procedure,
+                                    addr: address
+                                )
+                            )
                             if paramStrings.count > 1 {
                                 for i in 1..<paramStrings.count {
                                     addLine(.pcode,
