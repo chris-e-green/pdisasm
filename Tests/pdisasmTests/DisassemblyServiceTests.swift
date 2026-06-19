@@ -151,6 +151,52 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(snapshot.labels.first?.provenance.source, "user")
     }
 
+    func testMetadataSnapshotMergesRecordsTypesGlobalsConstantsAndSubranges() {
+        let system = MetadataBundle(
+            records: [
+                ProvenancedMetadataFact(value: PascalRecord(name: "REC", members: [0: Identifier(name: "OLD", type: "INTEGER")]), provenance: MetadataProvenance(source: "system", precedence: 0))
+            ],
+            typeAliases: [
+                ProvenancedMetadataFact(value: MetadataTypeAlias(name: "ALIAS", type: "INTEGER"), provenance: MetadataProvenance(source: "system", precedence: 0))
+            ],
+            constants: [
+                ProvenancedMetadataFact(value: MetadataConstant(name: "LIMIT", value: 1), provenance: MetadataProvenance(source: "system", precedence: 0))
+            ],
+            globals: [
+                ProvenancedMetadataFact(value: MetadataGlobal(address: 12, identifier: Identifier(name: "G", type: "INTEGER")), provenance: MetadataProvenance(source: "system", precedence: 0))
+            ]
+        )
+        let file = MetadataBundle(
+            records: [
+                ProvenancedMetadataFact(value: PascalRecord(name: "REC", members: [0: Identifier(name: "NEW", type: "BOOLEAN")]), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ],
+            typeAliases: [
+                ProvenancedMetadataFact(value: MetadataTypeAlias(name: "ALIAS", type: "BOOLEAN"), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ],
+            scalarTypes: [
+                ProvenancedMetadataFact(value: PascalScalarType(name: "CHOICE", cases: ["A", "B"]), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ],
+            constants: [
+                ProvenancedMetadataFact(value: MetadataConstant(name: "LIMIT", value: 2), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ],
+            subrangeTypes: [
+                ProvenancedMetadataFact(value: PascalSubrangeType(name: "SMALL", lowerBound: 1, upperBound: 3), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ],
+            globals: [
+                ProvenancedMetadataFact(value: MetadataGlobal(address: 12, identifier: Identifier(name: "FILEG", type: "BOOLEAN")), provenance: MetadataProvenance(source: "file", precedence: 10))
+            ]
+        )
+
+        let snapshot = MetadataSnapshot(merging: [system, file])
+
+        XCTAssertEqual(snapshot.records.first?.value.members[0]?.name, "NEW")
+        XCTAssertEqual(snapshot.typeAliases.first?.value.type, "BOOLEAN")
+        XCTAssertEqual(snapshot.scalarTypes.first?.value.cases, ["A", "B"])
+        XCTAssertEqual(snapshot.constants.first?.value.value, 2)
+        XCTAssertEqual(snapshot.subrangeTypes.first?.value.renderedType, "1..3")
+        XCTAssertEqual(snapshot.globals.first?.value.identifier.name, "FILEG")
+    }
+
     func testMetadataEditingServiceUpsertsCommentsThroughRepository() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("pdisasm-metadata-tests")
@@ -431,5 +477,33 @@ extension DisassemblyServiceTests {
         let merge = try MetadataMergeStage().run(fileIdentifier: "sample", version: 1, explicit: snapshot)
         XCTAssertEqual(merge.snapshot.labels.count, 1)
         XCTAssertEqual(merge.report.metrics["labels"], 1)
+    }
+
+    func testBytesSourceWithInMemoryMetadataDoesNotReadApplicationSupportMetadata() throws {
+        let applicationSupport = URL.applicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true)
+        try FileManager.default.createDirectory(at: applicationSupport, withIntermediateDirectories: true)
+        let poisonURL = applicationSupport.appendingPathComponent("labels_sample").appendingPathExtension("csv")
+        try "segment,procedure,lexLevel,addr,name,type,typeSource\n1,1,0,4,POISON,,unknown\n".write(to: poisonURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: poisonURL) }
+
+        let bytes = Data([0, 1, 2, 3])
+        let load = try CodefileLoadStage().run(source: .bytes(bytes, suggestedFilename: "sample.bin"))
+        let repository = pdisasm.InMemoryMetadataRepository(bundles: [
+            MetadataRepositoryKey(name: "labels_sample", kind: .labelsCSV): MetadataBundle(labels: [
+                ProvenancedMetadataFact(
+                    value: Location(segment: 1, procedure: 1, lexLevel: 0, addr: 4, name: "MEMORY", type: "", typeSource: .unknown),
+                    provenance: MetadataProvenance(source: "memory", precedence: 10)
+                )
+            ])
+        ])
+
+        let merge = try MetadataMergeStage(resolver: MetadataScopeResolver(repository: repository)).run(
+            fileIdentifier: load.fileIdentifier,
+            version: 1
+        )
+
+        XCTAssertEqual(load.fileIdentifier, "sample")
+        XCTAssertEqual(merge.snapshot.labels.map { $0.value.name }, ["MEMORY"])
+        XCTAssertFalse(merge.snapshot.labels.map { $0.value.name }.contains("POISON"))
     }
 }

@@ -876,7 +876,11 @@ public func renderDisassemblyDocument(
 
 
 public extension MetadataSnapshot {
-    var isEmpty: Bool { labels.isEmpty && procedures.isEmpty && comments.isEmpty }
+    var isEmpty: Bool {
+        labels.isEmpty && procedures.isEmpty && comments.isEmpty && records.isEmpty
+            && typeAliases.isEmpty && scalarTypes.isEmpty && constants.isEmpty
+            && subrangeTypes.isEmpty && globals.isEmpty
+    }
 }
 
 public struct CodefileLoadStageInput: Sendable {
@@ -957,11 +961,20 @@ public struct MetadataMergeStage: Sendable {
     public init(resolver: MetadataScopeResolver? = nil) { self.resolver = resolver }
 
     public func run(_ input: MetadataMergeStageInput) throws -> MetadataMergeStageOutput {
-        let snapshot = input.explicit.isEmpty ? (try resolver?.resolve(fileIdentifier: input.fileIdentifier, version: input.version) ?? MetadataSnapshot()) : input.explicit
+        let resolved = try resolver?.resolve(fileIdentifier: input.fileIdentifier, version: input.version) ?? MetadataSnapshot()
+        let snapshot = input.explicit.isEmpty
+            ? resolved
+            : MetadataSnapshot(merging: [resolved.bundle, input.explicit.bundle])
         return MetadataMergeStageOutput(snapshot: snapshot, report: StageReport(name: "metadataMerge", metrics: [
             "labels": snapshot.labels.count,
             "procedures": snapshot.procedures.count,
             "comments": snapshot.comments.count,
+            "records": snapshot.records.count,
+            "typeAliases": snapshot.typeAliases.count,
+            "scalarTypes": snapshot.scalarTypes.count,
+            "constants": snapshot.constants.count,
+            "subrangeTypes": snapshot.subrangeTypes.count,
+            "globals": snapshot.globals.count,
         ]))
     }
 
