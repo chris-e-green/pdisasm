@@ -12,7 +12,7 @@ public struct MetadataWorkspace: Hashable, Sendable {
     public static func applicationSupport(fileManager: FileManager = .default) -> MetadataWorkspace {
         let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
         return MetadataWorkspace(
-            writableDirectory: URL.applicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true),
+            writableDirectory: URL.pdisasmApplicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true),
             bundledDirectory: cwd.appendingPathComponent("metadata", isDirectory: true)
         )
     }

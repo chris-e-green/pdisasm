@@ -255,7 +255,7 @@ private struct MetadataContext {
         commentsFile = "comments_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
         self.workspace = workspace
-        appSupportDirectory = workspace?.writableDirectory ?? URL.applicationSupportDirectory
+        appSupportDirectory = workspace?.writableDirectory ?? URL.pdisasmApplicationSupportDirectory
             .appendingPathComponent("pdisasm")
         store = MetadataStore(
             appSupportDirectory: appSupportDirectory,

@@ -526,7 +526,7 @@ extension DisassemblyServiceTests {
             withExtension: "bin",
             subdirectory: "Fixtures"
         ))
-        let appSupport = URL.applicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true)
+        let appSupport = URL.pdisasmApplicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true)
         try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         let sentinel = appSupport.appendingPathComponent("procedures_MEMORY.csv")
         try "segmentNumber,segmentName,procNumber,procName,isFunction,isAssembly,parameters,returnType,returnTypeSource\n1,,1,SHOULD_NOT_BE_READ,false,false,,,unknown\n"
