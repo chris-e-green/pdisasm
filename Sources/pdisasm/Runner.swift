@@ -529,6 +529,159 @@ private func runPascalAnalysisPass(
     return typeConflicts
 }
 
+
+private struct SegmentDecodeStageOutput {
+    var codeSegments: [Int: CodeSegment]
+    var dataSegments: [Int]
+    var report: StageReport
+}
+
+private struct SegmentDecodeStageFacade {
+    func run(
+        segDict: SegDictionary,
+        binaryData: CodeData,
+        verbose: Bool,
+        allLocations: inout Set<Location>,
+        allProcedures: inout [ProcedureIdentifier],
+        allCallers: inout Set<Call>,
+        diagnostics: DiagnosticCollector
+    ) throws -> SegmentDecodeStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        let locationsBefore = allLocations.count
+        let proceduresBefore = allProcedures.count
+        let callersBefore = allCallers.count
+        var dataSegments: [Int] = []
+        let codeSegments = try decodeCodeSegments(
+            segDict: segDict,
+            binaryData: binaryData,
+            verbose: verbose,
+            allLocations: &allLocations,
+            allProcedures: &allProcedures,
+            allCallers: &allCallers,
+            dataSegments: &dataSegments,
+            diagnostics: diagnostics
+        )
+        let procedureCount = codeSegments.values.reduce(0) { $0 + $1.procedures.count }
+        let instructionCount = codeSegments.values.reduce(0) { total, segment in
+            total + segment.procedures.reduce(0) { $0 + $1.instructions.count }
+        }
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        return SegmentDecodeStageOutput(
+            codeSegments: codeSegments,
+            dataSegments: dataSegments,
+            report: StageReport(name: "decode", metrics: [
+                "segments": codeSegments.count,
+                "procedures": procedureCount,
+                "instructions": instructionCount,
+                "dataSegments": dataSegments.count,
+                "locationsAdded": allLocations.count - locationsBefore,
+                "proceduresAdded": allProcedures.count - proceduresBefore,
+                "callersAdded": allCallers.count - callersBefore,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message))
+        )
+    }
+}
+
+private struct ReferenceResolutionStageOutput {
+    var typeConflicts: [TypeConflict]
+    var report: StageReport
+}
+
+private struct ReferenceResolutionStageFacade {
+    func run(
+        codeSegments: [Int: CodeSegment],
+        lineComments: [InstructionReference: String],
+        allCallers: inout Set<Call>,
+        allLocations: inout Set<Location>,
+        diagnostics: DiagnosticCollector
+    ) -> ReferenceResolutionStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        let locationsBefore = allLocations.count
+        applyDisassemblyComments(lineComments, to: codeSegments)
+        let conflicts = prepareDecodedProgram(
+            codeSegments: codeSegments,
+            allCallers: &allCallers,
+            allLocations: &allLocations
+        )
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        return ReferenceResolutionStageOutput(
+            typeConflicts: conflicts,
+            report: StageReport(name: "referenceResolution", metrics: [
+                "callers": allCallers.count,
+                "locations": allLocations.count,
+                "locationsAdded": allLocations.count - locationsBefore,
+                "commentsApplied": lineComments.count,
+                "typeConflicts": conflicts.count,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message))
+        )
+    }
+}
+
+private struct AnalysisSignatureStageOutput {
+    var typeConflicts: [TypeConflict]
+    var converged: Bool
+    var iterations: Int
+    var report: StageReport
+}
+
+private struct AnalysisSignatureStageFacade {
+    let maxSignatureIterations = 4
+
+    func run(
+        codeSegments: [Int: CodeSegment],
+        knownRecords: Set<PascalRecord>,
+        typeAliases: [String: String],
+        scalarTypes: [String: PascalScalarType],
+        allProcedures: inout [ProcedureIdentifier],
+        allLocations: inout Set<Location>,
+        diagnostics: DiagnosticCollector
+    ) -> AnalysisSignatureStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        var typeConflicts: [TypeConflict] = []
+        var iterations = 0
+        var previousFingerprint: String?
+        var converged = false
+        while iterations < maxSignatureIterations {
+            iterations += 1
+            typeConflicts.append(contentsOf: runPascalAnalysisPass(
+                codeSegments: codeSegments,
+                knownRecords: knownRecords,
+                typeAliases: typeAliases,
+                scalarTypes: scalarTypes,
+                allProcedures: &allProcedures,
+                allLocations: &allLocations,
+                diagnostics: diagnostics
+            ))
+            let fingerprint = analysisFingerprint(allProcedures: allProcedures, allLocations: allLocations)
+            if fingerprint == previousFingerprint {
+                converged = true
+                break
+            }
+            previousFingerprint = fingerprint
+        }
+        if !converged {
+            diagnostics.warning("Signature/type analysis did not converge after \(maxSignatureIterations) iterations")
+        }
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        let stageDiagnostics = diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message)
+        return AnalysisSignatureStageOutput(
+            typeConflicts: typeConflicts,
+            converged: converged,
+            iterations: iterations,
+            report: StageReport(name: "analysis", isComplete: converged, metrics: [
+                "iterations": iterations,
+                "maxIterations": maxSignatureIterations,
+                "procedures": allProcedures.count,
+                "locations": allLocations.count,
+                "typeConflicts": typeConflicts.count,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: stageDiagnostics)
+        )
+    }
+}
+
 /// Disassemble a binary file and return structured results without printing.
 public func disassemble(
     filename: String,
@@ -586,53 +739,38 @@ public func disassemble(
         )
     }
 
-    let allCodeSegs = try decodeCodeSegments(
+    let decode = try SegmentDecodeStageFacade().run(
         segDict: segDict,
         binaryData: binaryData,
         verbose: verbose,
         allLocations: &allLocations,
         allProcedures: &allProcedures,
         allCallers: &allCallers,
-        dataSegments: &dataSegments,
         diagnostics: diagnostics
     )
+    let allCodeSegs = decode.codeSegments
+    dataSegments = decode.dataSegments
 
-    applyDisassemblyComments(lineComments, to: allCodeSegs)
-
-    typeConflicts.append(contentsOf: prepareDecodedProgram(
+    let references = ReferenceResolutionStageFacade().run(
         codeSegments: allCodeSegs,
+        lineComments: lineComments,
         allCallers: &allCallers,
-        allLocations: &allLocations
-    ))
+        allLocations: &allLocations,
+        diagnostics: diagnostics
+    )
+    typeConflicts.append(contentsOf: references.typeConflicts)
 
-    // Do stack simulation and pseudocode generation once we have all procedures decoded.
-    // Signatures and inferred location types can improve after a pass, so keep running
-    // the pass until the signature/location facts stop changing or a bounded limit is hit.
-    let maxSignatureIterations = 4
-    var analysisIterations = 0
-    var previousAnalysisFingerprint: String?
-    var analysisConverged = false
-    while analysisIterations < maxSignatureIterations {
-        analysisIterations += 1
-        typeConflicts.append(contentsOf: runPascalAnalysisPass(
-            codeSegments: allCodeSegs,
-            knownRecords: knownRecords,
-            typeAliases: typeAliases,
-            scalarTypes: scalarTypes,
-            allProcedures: &allProcedures,
-            allLocations: &allLocations,
-            diagnostics: diagnostics
-        ))
-        let fingerprint = analysisFingerprint(allProcedures: allProcedures, allLocations: allLocations)
-        if fingerprint == previousAnalysisFingerprint {
-            analysisConverged = true
-            break
-        }
-        previousAnalysisFingerprint = fingerprint
-    }
-    if !analysisConverged {
-        diagnostics.warning("Signature/type analysis did not converge after \(maxSignatureIterations) iterations")
-    }
+    let analysis = AnalysisSignatureStageFacade().run(
+        codeSegments: allCodeSegs,
+        knownRecords: knownRecords,
+        typeAliases: typeAliases,
+        scalarTypes: scalarTypes,
+        allProcedures: &allProcedures,
+        allLocations: &allLocations,
+        diagnostics: diagnostics
+    )
+    typeConflicts.append(contentsOf: analysis.typeConflicts)
+    let analysisConverged = analysis.converged
 
     let baseStages = [
         StageReport(name: "codefileLoading", metrics: ["bytes": binaryData.data.count]),
@@ -644,21 +782,9 @@ public func disassemble(
             "typeAliases": typeAliases.count,
             "scalarTypes": scalarTypes.count,
         ]),
-        StageReport(name: "decode", metrics: [
-            "segments": allCodeSegs.count,
-            "procedures": allCodeSegs.values.reduce(0) { $0 + $1.procedures.count },
-            "dataSegments": dataSegments.count,
-        ]),
-        StageReport(name: "referenceResolution", metrics: [
-            "callers": allCallers.count,
-            "locations": allLocations.count,
-        ]),
-        StageReport(name: "analysis", isComplete: analysisConverged, metrics: [
-            "iterations": analysisIterations,
-            "maxIterations": maxSignatureIterations,
-            "typeConflicts": typeConflicts.count,
-            "diagnostics": diagnostics.diagnostics.count,
-        ], diagnostics: analysisConverged ? [] : ["Signature/type analysis did not converge after \(maxSignatureIterations) iterations"]),
+        decode.report,
+        references.report,
+        analysis.report,
     ]
     let result = DisassemblyResult(
         sourceFilename: metadata.fileIdentifier,

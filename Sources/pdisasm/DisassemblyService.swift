@@ -519,30 +519,25 @@ public struct DisassemblyService: Sendable {
         let legacyResult = legacy.result
         try request.checkCancellation()
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
-        let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
-        let structuredLines = renderStructuredLines(
-            from: legacyResult,
-            showStackState: request.options.showStackState,
-            verbose: request.options.verbose
+        let snapshotBuild = try SnapshotBuildStage().run(
+            SnapshotBuildStageInput(result: legacyResult, codeFileID: codeFileID, cancellation: request.cancellation)
         )
-        let document = DisassemblyDocument.build(from: structuredLines, snapshot: snapshot, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
-        let indexes = DocumentIndexes.build(document: document)
+        let snapshot = snapshotBuild.snapshot
+        let documentBuild = try DocumentBuildStage().run(
+            DocumentBuildStageInput(
+                result: legacyResult,
+                snapshot: snapshot,
+                id: DocumentID(codeFileID.value),
+                title: legacyResult.sourceFilename,
+                showStackState: request.options.showStackState,
+                verbose: request.options.verbose,
+                cancellation: request.cancellation
+            )
+        )
+        let document = documentBuild.document
+        let indexes = documentBuild.indexes
         try request.checkCancellation()
-        let snapshotReport = StageReport(name: "snapshotBuild", metrics: [
-            "segments": snapshot.segments.count,
-            "procedures": snapshot.procedures.count,
-            "instructions": snapshot.instructions.count,
-            "locations": snapshot.locations.count,
-        ])
-        let documentReport = StageReport(name: "documentBuild", metrics: [
-            "documentNodes": document.nodes.count,
-            "sourceMappedNodes": document.sourceMap.count,
-            "sourceMapCoveragePercent": document.sourceMapCoveragePercent,
-            "procedureNodes": indexes.procedureNodes.count,
-            "instructionNodes": indexes.instructionNodes.count,
-            "locationNodes": indexes.locationNodes.count,
-        ])
-        let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotReport, documentReport]
+        let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotBuild.report, documentBuild.report]
         let metadataWarnings = metadataMerge.report.diagnostics
         let report = RunReport(
             stages: stageReports,
@@ -559,6 +554,96 @@ public struct DisassemblyService: Sendable {
             indexes: indexes,
             report: report
         )
+    }
+}
+
+
+public struct SnapshotBuildStageInput: @unchecked Sendable {
+    public let result: DisassemblyResult
+    public let codeFileID: CodeFileID
+    public let cancellation: CancellationToken?
+
+    public init(result: DisassemblyResult, codeFileID: CodeFileID, cancellation: CancellationToken? = nil) {
+        self.result = result
+        self.codeFileID = codeFileID
+        self.cancellation = cancellation
+    }
+}
+
+public struct SnapshotBuildStageOutput: Sendable {
+    public let snapshot: ProgramSnapshot
+    public let report: StageReport
+}
+
+public struct SnapshotBuildStage: Sendable {
+    public init() {}
+
+    public func run(_ input: SnapshotBuildStageInput) throws -> SnapshotBuildStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let snapshot = ProgramSnapshot.build(from: input.result, codeFileID: input.codeFileID)
+        let danglingCalls = input.result.allCallers.filter { call in
+            guard let targetProcedure = call.target.procedure else { return true }
+            let targetID = ProcedureID(segment: SegmentID(codeFile: input.codeFileID, number: call.target.segment), number: targetProcedure)
+            return snapshot.procedures[targetID] == nil
+        }.count
+        let diagnostics = danglingCalls == 0 ? [] : ["Snapshot contains \(danglingCalls) call references without decoded target procedures"]
+        return SnapshotBuildStageOutput(snapshot: snapshot, report: StageReport(name: "snapshotBuild", isComplete: diagnostics.isEmpty, metrics: [
+            "segments": snapshot.segments.count,
+            "procedures": snapshot.procedures.count,
+            "instructions": snapshot.instructions.count,
+            "locations": snapshot.locations.count,
+            "callEdges": snapshot.callsByOrigin.values.reduce(0) { $0 + $1.count },
+            "diagnostics": input.result.diagnostics.count,
+            "danglingCalls": danglingCalls,
+        ], diagnostics: diagnostics))
+    }
+}
+
+public struct DocumentBuildStageInput: @unchecked Sendable {
+    public let result: DisassemblyResult
+    public let snapshot: ProgramSnapshot
+    public let id: DocumentID
+    public let title: String
+    public let showStackState: Bool
+    public let verbose: Bool
+    public let cancellation: CancellationToken?
+
+    public init(result: DisassemblyResult, snapshot: ProgramSnapshot, id: DocumentID, title: String, showStackState: Bool, verbose: Bool, cancellation: CancellationToken? = nil) {
+        self.result = result
+        self.snapshot = snapshot
+        self.id = id
+        self.title = title
+        self.showStackState = showStackState
+        self.verbose = verbose
+        self.cancellation = cancellation
+    }
+}
+
+public struct DocumentBuildStageOutput: Sendable {
+    public let document: DisassemblyDocument
+    public let indexes: DocumentIndexes
+    public let report: StageReport
+}
+
+public struct DocumentBuildStage: Sendable {
+    public init() {}
+
+    public func run(_ input: DocumentBuildStageInput) throws -> DocumentBuildStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let structuredLines = renderStructuredLines(from: input.result, showStackState: input.showStackState, verbose: input.verbose)
+        let document = DisassemblyDocument.build(from: structuredLines, snapshot: input.snapshot, id: input.id, title: input.title)
+        let indexes = DocumentIndexes.build(document: document)
+        let unmappedNodes = document.nodes.count - document.sourceMap.count
+        return DocumentBuildStageOutput(document: document, indexes: indexes, report: StageReport(name: "documentBuild", metrics: [
+            "documentNodes": document.nodes.count,
+            "sourceMappedNodes": document.sourceMap.count,
+            "unmappedNodes": unmappedNodes,
+            "sourceMapCoveragePercent": document.sourceMapCoveragePercent,
+            "procedureNodes": indexes.procedureNodes.count,
+            "instructionNodes": indexes.instructionNodes.count,
+            "locationNodes": indexes.locationNodes.count,
+            "searchTerms": indexes.searchIndex.count,
+        ]))
     }
 }
 
