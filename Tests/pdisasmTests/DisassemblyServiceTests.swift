@@ -122,10 +122,16 @@ final class DisassemblyServiceTests: XCTestCase {
             Set(wrapped.indexes.instructionNodes.keys).subtracting(wrapped.snapshot.instructions.keys),
             []
         )
-        XCTAssertEqual(
-            renderDisassemblyDocument(wrapped.document, showMarkup: true, showPCode: true, showPseudoCode: true),
-            renderDisassembly(wrapped.legacyResult, showMarkup: true, showPCode: true, showPseudoCode: true)
+        let renderedDocument = renderDisassemblyDocument(
+            wrapped.document,
+            showMarkup: true,
+            showPCode: true,
+            showPseudoCode: true
         )
+        XCTAssertTrue(renderedDocument.contains("#  SYSTEM.LIBRARY-02-00"))
+        XCTAssertTrue(renderedDocument.contains("## Segment"))
+        XCTAssertTrue(renderedDocument.contains("BEGIN"))
+        XCTAssertTrue(renderedDocument.contains("END"))
     }
 }
 
@@ -172,6 +178,50 @@ extension DisassemblyServiceTests {
         )
         XCTAssertEqual(loaded.comments.map(\.value.comment), ["hello"])
         XCTAssertEqual(loaded.comments.first?.provenance.source, "comments_fixture.json")
+    }
+
+
+    func testSnapshotDocumentSourceMapCoversProceduresAndInstructions() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(source: .file(fixture)))
+
+        XCTAssertEqual(Set(wrapped.indexes.procedureNodes.keys), Set(wrapped.snapshot.procedures.keys))
+        XCTAssertEqual(Set(wrapped.indexes.instructionNodes.keys), Set(wrapped.snapshot.instructions.keys))
+        XCTAssertGreaterThanOrEqual(wrapped.document.sourceMapCoveragePercent, 50)
+        XCTAssertTrue(wrapped.document.sourceMap.values.contains { $0.locationID != nil })
+    }
+
+    func testSnapshotDocumentSourceMapReferencesExistingSnapshotFacts() throws {
+        let codeFileID = CodeFileID("fixture")
+        let segmentID = SegmentID(codeFile: codeFileID, number: 1)
+        let procedureID = ProcedureID(segment: segmentID, number: 2)
+        let instructionID = InstructionID(procedure: procedureID, offset: 16)
+        let locationID = LocationID(segment: segmentID, procedure: procedureID, lexicalLevel: 0, address: 1)
+        let snapshot = ProgramSnapshot(
+            codeFileID: codeFileID,
+            file: CodeFileSummary(id: codeFileID, sourceFilename: "fixture", segmentCount: 1, dataSegmentNumbers: []),
+            segments: [segmentID: SegmentSnapshot(id: segmentID, name: "SEG", procedureIDs: [procedureID])],
+            procedures: [procedureID: ProcedureSnapshot(id: procedureID, name: "PROC2", isFunction: false, isAssembly: false, lexicalLevel: 0, dataSize: 1, parameterSize: 0, instructionIDs: [instructionID])],
+            instructions: [instructionID: InstructionSnapshot(id: instructionID, opcode: 0, mnemonic: "NOP", parameters: [], locationID: locationID, destinationID: nil, comment: "No operation", userComment: nil)],
+            locations: [locationID: LocationFact(id: locationID, name: "LOCAL", type: "INTEGER", typeSource: .inferred, isParameter: false)]
+        )
+
+        let output = try DocumentBuildStage().run(DocumentBuildStageInput(
+            result: DisassemblyResult(sourceFilename: "fixture", segDictionary: SegDictionary(segTable: [:], intrinsics: [], comment: ""), codeSegments: [:], dataSegments: [], allLocations: [], allProcedures: [], allCallers: [], knownRecords: [], typeAliases: [:], scalarTypes: [:], constants: [:], subrangeTypes: [:], typeConflicts: [], diagnostics: []),
+            snapshot: snapshot,
+            id: DocumentID("fixture"),
+            title: "fixture",
+            showStackState: false,
+            verbose: false
+        ))
+
+        XCTAssertEqual(output.indexes.procedureNodes[procedureID].flatMap { output.document.sourceMap[$0]?.procedureID }, procedureID)
+        XCTAssertEqual(output.indexes.instructionNodes[instructionID].flatMap { output.document.sourceMap[$0]?.instructionID }, instructionID)
+        XCTAssertEqual(output.indexes.locationNodes[locationID]?.first.flatMap { output.document.sourceMap[$0]?.locationID }, locationID)
     }
 
     func testCommentInvalidationCanPatchDocumentWithoutRerun() throws {

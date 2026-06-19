@@ -641,8 +641,7 @@ public struct DocumentBuildStage: Sendable {
 
     public func run(_ input: DocumentBuildStageInput) throws -> DocumentBuildStageOutput {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
-        let structuredLines = renderStructuredLines(from: input.result, showStackState: input.showStackState, verbose: input.verbose)
-        let document = DisassemblyDocument.build(from: structuredLines, snapshot: input.snapshot, id: input.id, title: input.title)
+        let document = DisassemblyDocument.build(from: input.snapshot, id: input.id, title: input.title)
         let indexes = DocumentIndexes.build(document: document)
         let unmappedNodes = document.nodes.count - document.sourceMap.count
         return DocumentBuildStageOutput(document: document, indexes: indexes, report: StageReport(name: "documentBuild", metrics: [
@@ -838,6 +837,87 @@ private extension ProgramSnapshot {
 }
 
 private extension DisassemblyDocument {
+    static func build(from snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
+        var lines: [OutputLine] = []
+        var nextID = 0
+
+        func addLine(
+            _ kind: LineKind,
+            _ text: String,
+            anchor: String? = nil,
+            locationID: LocationID? = nil,
+            instructionID: InstructionID? = nil
+        ) {
+            lines.append(OutputLine(
+                id: nextID,
+                kind: kind,
+                text: text,
+                anchor: anchor,
+                locationReference: locationID.map(legacyReference),
+                commentReference: instructionID.map(legacyReference)
+            ))
+            nextID += 1
+        }
+
+        addLine(.markup, "#  \(snapshot.file.sourceFilename) ")
+        addLine(.markup, "")
+        if !snapshot.diagnostics.isEmpty {
+            addLine(.markup, "## Diagnostics")
+            for diagnostic in snapshot.diagnostics {
+                addLine(.diagnostic, "\(diagnostic.severity.rawValue.uppercased()): \(diagnostic.message)")
+            }
+            addLine(.diagnostic, "")
+        }
+
+        addLine(.markup, "## Globals")
+        for location in snapshot.locations.values.sorted(by: locationSort) where location.id.segment.number == 0 {
+            addLine(.global, locationLine(prefix: "G", location: location), locationID: location.id)
+        }
+        addLine(.global, "")
+
+        let dataSegments = Set(snapshot.file.dataSegmentNumbers)
+        for segmentNumber in dataSegments.sorted() {
+            addLine(.variable, "## Data Segment \(segmentNumber)")
+            for location in snapshot.locations.values.sorted(by: locationSort) where location.id.segment.number == segmentNumber {
+                addLine(.variable, locationLine(prefix: "D", location: location), locationID: location.id)
+            }
+        }
+        addLine(.variable, "")
+
+        for segment in snapshot.segments.values.sorted(by: { $0.id.number < $1.id.number }) {
+            addLine(.markup, "## Segment \(segment.name) (\(segment.id.number))")
+            addLine(.markup, "")
+            for procedureID in segment.procedureIDs {
+                guard let procedure = snapshot.procedures[procedureID] else { continue }
+                let anchor = "\(procedureID.segment.number).\(procedureID.number)"
+                addLine(.header, procedureHeaderText(for: procedure), anchor: anchor)
+                let callers = (snapshot.callsByTarget[procedureID] ?? []).compactMap { edge in
+                    snapshot.procedures[edge.origin.procedure]?.name
+                }.sorted()
+                if !callers.isEmpty {
+                    addLine(.header, "Callers: \(callers.joined(separator: ", "))")
+                }
+                addLine(.markup, "```")
+                for location in snapshot.locations.values.sorted(by: locationSort) where location.id.procedure == procedureID {
+                    addLine(.variable, locationLine(prefix: "L", location: location), locationID: location.id)
+                }
+                addLine(.markup, "```")
+                addLine(.markup, procedure.isAssembly ? "```assembly" : "```pascal")
+                addLine(.pseudocode, procedure.isAssembly ? "; ASSEMBLER PROCEDURE" : "BEGIN")
+                for instructionID in procedure.instructionIDs {
+                    guard let instruction = snapshot.instructions[instructionID] else { continue }
+                    addLine(.pcode, instructionLine(instruction, snapshot: snapshot), locationID: instruction.locationID, instructionID: instructionID)
+                }
+                addLine(.pseudocode, procedure.isAssembly ? ".END" : "END")
+                addLine(.markup, "```")
+                addLine(.markup, "")
+            }
+        }
+
+        return build(from: lines, snapshot: snapshot, id: id, title: title)
+    }
+
+    /// Compatibility renderer path for legacy structured output. New document generation should use ProgramSnapshot.
     static func build(from lines: [OutputLine], snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
         let nodes = lines.map { line in
             DocumentNode(id: nodeID(for: line, in: id, snapshot: snapshot), line: line)
@@ -854,6 +934,62 @@ private extension DisassemblyDocument {
             }
         }
         return DisassemblyDocument(id: id, title: title, nodes: nodes, sections: sections, sourceMap: sourceMap)
+    }
+
+
+    private static func legacyReference(for id: InstructionID) -> InstructionReference {
+        InstructionReference(segment: id.procedure.segment.number, procedure: id.procedure.number, addr: id.offset)
+    }
+
+    private static func legacyReference(for id: LocationID) -> LocationReference {
+        LocationReference(segment: id.segment.number, procedure: id.procedure?.number, lexLevel: id.lexicalLevel, addr: id.address)
+    }
+
+    private static func locationSort(_ lhs: LocationFact, _ rhs: LocationFact) -> Bool {
+        if lhs.id.segment.number != rhs.id.segment.number { return lhs.id.segment.number < rhs.id.segment.number }
+        if (lhs.id.procedure?.number ?? -1) != (rhs.id.procedure?.number ?? -1) {
+            return (lhs.id.procedure?.number ?? -1) < (rhs.id.procedure?.number ?? -1)
+        }
+        if (lhs.id.lexicalLevel ?? -1) != (rhs.id.lexicalLevel ?? -1) {
+            return (lhs.id.lexicalLevel ?? -1) < (rhs.id.lexicalLevel ?? -1)
+        }
+        return (lhs.id.address ?? -1) < (rhs.id.address ?? -1)
+    }
+
+    private static func locationLine(prefix: String, location: LocationFact) -> String {
+        "\(prefix)\(location.id.address ?? -1)=\(location.name):\(location.type)"
+    }
+
+    private static func procedureHeaderText(for procedure: ProcedureSnapshot) -> String {
+        let keyword = procedure.isFunction ? "FUNCTION" : "PROCEDURE"
+        let assembly = procedure.isAssembly ? " ASSEMBLY" : ""
+        return "\(keyword) \(procedure.name) (* S=\(procedure.id.segment.number), P=\(procedure.id.number), LL=\(procedure.lexicalLevel), D=\(procedure.dataSize) PAR=\(procedure.parameterSize)\(assembly) *)"
+    }
+
+    private static func instructionLine(_ instruction: InstructionSnapshot, snapshot: ProgramSnapshot) -> String {
+        var text = String(format: "   %04x: ", instruction.id.offset)
+            + instruction.mnemonic.padding(toLength: 8, withPad: " ", startingAt: 0)
+        let params = instruction.parameters.map { value in
+            value > 0xff ? String(format: "%04x", value) : String(format: "%02x", value)
+        }.joined(separator: " ")
+        text += params.padding(toLength: 16, withPad: " ", startingAt: 0)
+        let comments = [instruction.comment, instruction.userComment]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !comments.isEmpty {
+            text += "; " + comments.joined(separator: "; ")
+        }
+        if let locationID = instruction.locationID, let location = snapshot.locations[locationID] {
+            text += " " + location.name
+        }
+        if let destinationID = instruction.destinationID {
+            if let procedureID = destinationID.procedure, let procedure = snapshot.procedures[procedureID] {
+                text += " " + procedure.name
+            } else if let location = snapshot.locations[destinationID] {
+                text += " " + location.name
+            }
+        }
+        return text
     }
 
     private static func sourceReference(for line: OutputLine, snapshot: ProgramSnapshot) -> SourceReference {
