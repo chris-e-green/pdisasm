@@ -432,12 +432,29 @@ extension DisassemblyServiceTests {
     func testMetadataScopeResolverMergesInMemoryScopesByPrecedence() throws {
         let systemLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "SYSTEM", type: "INTEGER", typeSource: .metadata)
         let fileLocation = Location(segment: 1, procedure: 1, lexLevel: 0, addr: 10, name: "FILE", type: "BOOLEAN", typeSource: .user)
+        let systemRecord = PascalRecord(name: "REC", members: [0: Identifier(name: "OLD", type: "INTEGER")], isSystemRecord: true)
+        let fileRecord = PascalRecord(name: "REC", members: [0: Identifier(name: "NEW", type: "BOOLEAN")])
         let repository = pdisasm.InMemoryMetadataRepository(bundles: [
             MetadataRepositoryKey(name: "labels_ver_1", kind: .labelsCSV): MetadataBundle(labels: [
                 ProvenancedMetadataFact(value: systemLocation, provenance: MetadataProvenance(source: "labels_ver_1", precedence: 0))
             ]),
+            MetadataRepositoryKey(name: "records_ver_1", kind: .recordsJSON): MetadataBundle(records: [
+                ProvenancedMetadataFact(value: systemRecord, provenance: MetadataProvenance(source: "records_ver_1", precedence: 0))
+            ]),
+            MetadataRepositoryKey(name: "types_ver_1", kind: .typesPascal): MetadataBundle(
+                typeAliases: [ProvenancedMetadataFact(value: MetadataTypeAlias(name: "ALIAS", type: "INTEGER"), provenance: MetadataProvenance(source: "types_ver_1", precedence: 0))],
+                scalarTypes: [ProvenancedMetadataFact(value: PascalScalarType(name: "CHOICE", cases: ["A"]), provenance: MetadataProvenance(source: "types_ver_1", precedence: 0))],
+                constants: [ProvenancedMetadataFact(value: MetadataConstant(name: "MAX", value: 1), provenance: MetadataProvenance(source: "types_ver_1", precedence: 0))],
+                subrangeTypes: [ProvenancedMetadataFact(value: PascalSubrangeType(name: "RANGE", lowerBound: 1, upperBound: 1), provenance: MetadataProvenance(source: "types_ver_1", precedence: 0))]
+            ),
+            MetadataRepositoryKey(name: "globals_ver_1", kind: .globalsJSON): MetadataBundle(globals: [
+                ProvenancedMetadataFact(value: MetadataGlobal(address: 7, identifier: Identifier(name: "GLOBAL", type: "INTEGER")), provenance: MetadataProvenance(source: "globals_ver_1", precedence: 0))
+            ]),
             MetadataRepositoryKey(name: "labels_SAMPLE", kind: .labelsCSV): MetadataBundle(labels: [
                 ProvenancedMetadataFact(value: fileLocation, provenance: MetadataProvenance(source: "labels_SAMPLE", precedence: 10))
+            ]),
+            MetadataRepositoryKey(name: "records_SAMPLE", kind: .recordsJSON): MetadataBundle(records: [
+                ProvenancedMetadataFact(value: fileRecord, provenance: MetadataProvenance(source: "records_SAMPLE", precedence: 10))
             ]),
         ])
 
@@ -445,6 +462,44 @@ extension DisassemblyServiceTests {
 
         XCTAssertEqual(snapshot.labels.count, 1)
         XCTAssertEqual(snapshot.labels.first?.value.name, "FILE")
+        XCTAssertEqual(snapshot.records.count, 1)
+        XCTAssertEqual(snapshot.records.first?.value.members[0]?.name, "NEW")
+        XCTAssertEqual(snapshot.typeAliases.first?.value.type, "INTEGER")
+        XCTAssertEqual(snapshot.scalarTypes.first?.value.cases, ["A"])
+        XCTAssertEqual(snapshot.constants.first?.value.value, 1)
+        XCTAssertEqual(snapshot.subrangeTypes.first?.value.upperBound, 1)
+        XCTAssertEqual(snapshot.globals.first?.value.identifier.name, "GLOBAL")
+    }
+
+    func testFileBackedResolverLoadsCompleteMetadataSnapshot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-metadata-complete-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "segment,procedure,lexLevel,addr,name,type,typeSource\n1,1,0,4,FILE_LABEL,INTEGER,user\n"
+            .write(to: directory.appendingPathComponent("labels_SAMPLE.csv"), atomically: true, encoding: .utf8)
+        try "segmentNumber,segmentName,procNumber,procName,isFunction,isAssembly,parameters,returnType,returnTypeSource\n1,,1,FILE_PROC,false,false,,,unknown\n"
+            .write(to: directory.appendingPathComponent("procedures_SAMPLE.csv"), atomically: true, encoding: .utf8)
+        try JSONEncoder().encode([DisassemblyComment(reference: InstructionReference(segment: 1, procedure: 1, addr: 4), comment: "hello")])
+            .write(to: directory.appendingPathComponent("comments_SAMPLE.json"))
+        try JSONEncoder().encode([PascalRecord(name: "REC", members: [0: Identifier(name: "FIELD", type: "INTEGER")])])
+            .write(to: directory.appendingPathComponent("records_SAMPLE.json"))
+        try "MAX = 3;\nCHOICE = (A, B);\nRANGE = 1..MAX;\nALIAS = INTEGER;\n"
+            .write(to: directory.appendingPathComponent("types_SAMPLE.pas"), atomically: true, encoding: .utf8)
+        try JSONEncoder().encode([9: Identifier(name: "GLOBAL", type: "INTEGER")])
+            .write(to: directory.appendingPathComponent("globals_ver_1.json"))
+
+        let snapshot = try MetadataScopeResolver(repository: FileBackedMetadataRepository(workspace: MetadataWorkspace(writableDirectory: directory))).resolve(fileIdentifier: "SAMPLE", version: 1)
+
+        XCTAssertEqual(snapshot.labels.first?.value.name, "FILE_LABEL")
+        XCTAssertEqual(snapshot.procedures.first?.value.procName, "FILE_PROC")
+        XCTAssertEqual(snapshot.comments.first?.value.comment, "hello")
+        XCTAssertEqual(snapshot.records.first?.value.name, "REC")
+        XCTAssertEqual(snapshot.constants.first?.value.value, 3)
+        XCTAssertEqual(snapshot.scalarTypes.first?.value.cases, ["A", "B"])
+        XCTAssertEqual(snapshot.subrangeTypes.first?.value.upperBound, 3)
+        XCTAssertEqual(snapshot.typeAliases.first?.value.type, "INTEGER")
+        XCTAssertEqual(snapshot.globals.first?.value.identifier.name, "GLOBAL")
     }
 
     func testStageFacadesAcceptInMemoryInputs() throws {
@@ -463,5 +518,34 @@ extension DisassemblyServiceTests {
         let merge = try MetadataMergeStage().run(fileIdentifier: "sample", version: 1, explicit: snapshot)
         XCTAssertEqual(merge.snapshot.labels.count, 1)
         XCTAssertEqual(merge.report.metrics["labels"], 1)
+    }
+
+    func testBytesSourceWithInMemoryMetadataDoesNotReadApplicationSupport() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+        let appSupport = URL.applicationSupportDirectory.appendingPathComponent("pdisasm", isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        let sentinel = appSupport.appendingPathComponent("procedures_MEMORY.csv")
+        try "segmentNumber,segmentName,procNumber,procName,isFunction,isAssembly,parameters,returnType,returnTypeSource\n1,,1,SHOULD_NOT_BE_READ,false,false,,,unknown\n"
+            .write(to: sentinel, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: sentinel) }
+
+        let bytes = try Data(contentsOf: fixture)
+        let snapshot = MetadataSnapshot(labels: [
+            ProvenancedMetadataFact(
+                value: Location(segment: 1, procedure: nil, lexLevel: nil, addr: nil, name: "IN_MEMORY_ONLY", type: "", typeSource: .user),
+                provenance: MetadataProvenance(source: "in-memory", precedence: 100)
+            )
+        ])
+        let wrapped = try DisassemblyService().run(DisassemblyRunRequest(
+            source: .bytes(bytes, suggestedFilename: "MEMORY.bin"),
+            metadata: snapshot
+        ))
+
+        XCTAssertTrue(wrapped.legacyResult.allLocations.contains { $0.name == "IN_MEMORY_ONLY" })
+        XCTAssertFalse(wrapped.legacyResult.allProcedures.contains { $0.procName == "SHOULD_NOT_BE_READ" })
     }
 }
