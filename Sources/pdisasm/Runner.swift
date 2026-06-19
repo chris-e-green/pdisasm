@@ -569,6 +569,12 @@ public func disassemble(
     if let metadataSnapshot {
         allLocations.formUnion(metadataSnapshot.labels.map(\.value))
         allProcedures.append(contentsOf: metadataSnapshot.procedures.map(\.value))
+        knownRecords.formUnion(metadataSnapshot.records.map(\.value))
+        typeAliases.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.typeAliases.map { ($0.value.name, $0.value.type) })) { _, new in new }
+        scalarTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.scalarTypes.map { ($0.value.name, $0.value) })) { _, new in new }
+        constants.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.constants.map { ($0.value.name, $0.value.value) })) { _, new in new }
+        subrangeTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.subrangeTypes.map { ($0.value.name, $0.value) })) { _, new in new }
+        globalNames.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.globals.map { ($0.value.address, $0.value.identifier) })) { _, new in new }
         for comment in metadataSnapshot.comments {
             lineComments[comment.value.reference] = comment.value.comment
         }
@@ -643,6 +649,9 @@ public func disassemble(
             "records": knownRecords.count,
             "typeAliases": typeAliases.count,
             "scalarTypes": scalarTypes.count,
+            "constants": constants.count,
+            "subrangeTypes": subrangeTypes.count,
+            "globals": globalNames.count,
         ]),
         StageReport(name: "decode", metrics: [
             "segments": allCodeSegs.count,

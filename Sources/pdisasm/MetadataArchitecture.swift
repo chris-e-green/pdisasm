@@ -36,19 +36,64 @@ public struct ProvenancedMetadataFact<Value: Hashable & Codable>: Hashable, Coda
     }
 }
 
+public struct MetadataTypeAlias: Hashable, Codable, Sendable {
+    public let name: String
+    public let type: String
+    public init(name: String, type: String) {
+        self.name = name
+        self.type = type
+    }
+}
+
+public struct MetadataConstant: Hashable, Codable, Sendable {
+    public let name: String
+    public let value: Int
+    public init(name: String, value: Int) {
+        self.name = name
+        self.value = value
+    }
+}
+
+public struct MetadataGlobal: Hashable, Codable, Sendable {
+    public let address: Int
+    public let identifier: Identifier
+    public init(address: Int, identifier: Identifier) {
+        self.address = address
+        self.identifier = identifier
+    }
+}
+
 public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
     public var labels: [ProvenancedMetadataFact<Location>]
     public var procedures: [ProvenancedMetadataFact<ProcedureIdentifier>]
     public var comments: [ProvenancedMetadataFact<DisassemblyComment>]
+    public var records: [ProvenancedMetadataFact<PascalRecord>]
+    public var typeAliases: [ProvenancedMetadataFact<MetadataTypeAlias>]
+    public var scalarTypes: [ProvenancedMetadataFact<PascalScalarType>]
+    public var constants: [ProvenancedMetadataFact<MetadataConstant>]
+    public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
+    public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
 
     public init(
         labels: [ProvenancedMetadataFact<Location>] = [],
         procedures: [ProvenancedMetadataFact<ProcedureIdentifier>] = [],
-        comments: [ProvenancedMetadataFact<DisassemblyComment>] = []
+        comments: [ProvenancedMetadataFact<DisassemblyComment>] = [],
+        records: [ProvenancedMetadataFact<PascalRecord>] = [],
+        typeAliases: [ProvenancedMetadataFact<MetadataTypeAlias>] = [],
+        scalarTypes: [ProvenancedMetadataFact<PascalScalarType>] = [],
+        constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
+        subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
+        globals: [ProvenancedMetadataFact<MetadataGlobal>] = []
     ) {
         self.labels = labels
         self.procedures = procedures
         self.comments = comments
+        self.records = records
+        self.typeAliases = typeAliases
+        self.scalarTypes = scalarTypes
+        self.constants = constants
+        self.subrangeTypes = subrangeTypes
+        self.globals = globals
     }
 }
 
@@ -56,25 +101,55 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
     public var labels: [ProvenancedMetadataFact<Location>]
     public var procedures: [ProvenancedMetadataFact<ProcedureIdentifier>]
     public var comments: [ProvenancedMetadataFact<DisassemblyComment>]
+    public var records: [ProvenancedMetadataFact<PascalRecord>]
+    public var typeAliases: [ProvenancedMetadataFact<MetadataTypeAlias>]
+    public var scalarTypes: [ProvenancedMetadataFact<PascalScalarType>]
+    public var constants: [ProvenancedMetadataFact<MetadataConstant>]
+    public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
+    public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
 
     public init(
         labels: [ProvenancedMetadataFact<Location>] = [],
         procedures: [ProvenancedMetadataFact<ProcedureIdentifier>] = [],
-        comments: [ProvenancedMetadataFact<DisassemblyComment>] = []
+        comments: [ProvenancedMetadataFact<DisassemblyComment>] = [],
+        records: [ProvenancedMetadataFact<PascalRecord>] = [],
+        typeAliases: [ProvenancedMetadataFact<MetadataTypeAlias>] = [],
+        scalarTypes: [ProvenancedMetadataFact<PascalScalarType>] = [],
+        constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
+        subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
+        globals: [ProvenancedMetadataFact<MetadataGlobal>] = []
     ) {
         self.labels = labels
         self.procedures = procedures
         self.comments = comments
+        self.records = records
+        self.typeAliases = typeAliases
+        self.scalarTypes = scalarTypes
+        self.constants = constants
+        self.subrangeTypes = subrangeTypes
+        self.globals = globals
     }
 
     public init(merging bundles: [MetadataBundle]) {
         var labels: [LocationReference: ProvenancedMetadataFact<Location>] = [:]
         var procedures: [ProcedureKey: ProvenancedMetadataFact<ProcedureIdentifier>] = [:]
         var comments: [InstructionReference: ProvenancedMetadataFact<DisassemblyComment>] = [:]
+        var records: [String: ProvenancedMetadataFact<PascalRecord>] = [:]
+        var typeAliases: [String: ProvenancedMetadataFact<MetadataTypeAlias>] = [:]
+        var scalarTypes: [String: ProvenancedMetadataFact<PascalScalarType>] = [:]
+        var constants: [String: ProvenancedMetadataFact<MetadataConstant>] = [:]
+        var subrangeTypes: [String: ProvenancedMetadataFact<PascalSubrangeType>] = [:]
+        var globals: [Int: ProvenancedMetadataFact<MetadataGlobal>] = [:]
         for bundle in bundles {
             for fact in bundle.labels { labels.mergeKeepingHighestPrecedence(fact, key: LocationReference(fact.value)) }
             for fact in bundle.procedures { procedures.mergeKeepingHighestPrecedence(fact, key: ProcedureKey(fact.value)) }
             for fact in bundle.comments { comments.mergeKeepingHighestPrecedence(fact, key: fact.value.reference) }
+            for fact in bundle.records { records.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
+            for fact in bundle.typeAliases { typeAliases.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
+            for fact in bundle.scalarTypes { scalarTypes.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
+            for fact in bundle.constants { constants.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
+            for fact in bundle.subrangeTypes { subrangeTypes.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
+            for fact in bundle.globals { globals.mergeKeepingHighestPrecedence(fact, key: fact.value.address) }
         }
         self.labels = labels.values.sorted { $0.value < $1.value }
         self.procedures = procedures.values.sorted { lhs, rhs in
@@ -86,6 +161,26 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
             if lhs.value.procedure != rhs.value.procedure { return (lhs.value.procedure ?? -1) < (rhs.value.procedure ?? -1) }
             return lhs.value.addr < rhs.value.addr
         }
+        self.records = records.values.sorted { $0.value.name < $1.value.name }
+        self.typeAliases = typeAliases.values.sorted { $0.value.name < $1.value.name }
+        self.scalarTypes = scalarTypes.values.sorted { $0.value.name < $1.value.name }
+        self.constants = constants.values.sorted { $0.value.name < $1.value.name }
+        self.subrangeTypes = subrangeTypes.values.sorted { $0.value.name < $1.value.name }
+        self.globals = globals.values.sorted { $0.value.address < $1.value.address }
+    }
+
+    public var bundle: MetadataBundle {
+        MetadataBundle(
+            labels: labels,
+            procedures: procedures,
+            comments: comments,
+            records: records,
+            typeAliases: typeAliases,
+            scalarTypes: scalarTypes,
+            constants: constants,
+            subrangeTypes: subrangeTypes,
+            globals: globals
+        )
     }
 }
 
@@ -108,7 +203,9 @@ public protocol MetadataRepository: Sendable {
     func saveComments(_ comments: [DisassemblyComment], named name: String) throws
 }
 
-public enum MetadataFileKind: Hashable, Sendable { case labelsCSV, proceduresCSV, commentsJSON }
+public enum MetadataFileKind: Hashable, Sendable {
+    case labelsCSV, proceduresCSV, commentsJSON, recordsJSON, typesPascal, globalsJSON
+}
 
 public enum MetadataEditCommand: Hashable, Sendable {
     case upsertLabel(LocationID, name: String, type: String?)
@@ -343,6 +440,21 @@ public struct FileBackedMetadataRepository: MetadataRepository {
         case .commentsJSON:
             let rows = try JSONDecoder().decode([DisassemblyComment].self, from: Data(contentsOf: url))
             return MetadataBundle(comments: rows.map { ProvenancedMetadataFact(value: $0, provenance: source) })
+        case .recordsJSON:
+            let rows = try JSONDecoder().decode([PascalRecord].self, from: Data(contentsOf: url))
+            return MetadataBundle(records: rows.map { ProvenancedMetadataFact(value: $0, provenance: source) })
+        case .typesPascal:
+            let definitions = PascalTypeDefinitionParser.parse(try String(contentsOf: url, encoding: .utf8), isSystemRecord: name.hasPrefix("types_ver_"))
+            return MetadataBundle(
+                records: definitions.records.map { ProvenancedMetadataFact(value: $0, provenance: source) },
+                typeAliases: definitions.aliases.map { ProvenancedMetadataFact(value: MetadataTypeAlias(name: $0.key, type: $0.value), provenance: source) },
+                scalarTypes: definitions.scalarTypes.map { ProvenancedMetadataFact(value: $0.value, provenance: source) },
+                constants: definitions.constants.map { ProvenancedMetadataFact(value: MetadataConstant(name: $0.key, value: $0.value), provenance: source) },
+                subrangeTypes: definitions.subrangeTypes.map { ProvenancedMetadataFact(value: $0.value, provenance: source) }
+            )
+        case .globalsJSON:
+            let rows = try JSONDecoder().decode([Int: Identifier].self, from: Data(contentsOf: url))
+            return MetadataBundle(globals: rows.map { ProvenancedMetadataFact(value: MetadataGlobal(address: $0.key, identifier: $0.value), provenance: source) })
         }
     }
 
@@ -351,7 +463,12 @@ public struct FileBackedMetadataRepository: MetadataRepository {
     public func saveComments(_ comments: [DisassemblyComment], named name: String) throws { try MetadataStore(appSupportDirectory: workspace.writableDirectory).writeJSON(comments, to: name, overwrite: true) }
 
     private func readURL(named name: String, kind: MetadataFileKind) -> URL? {
-        let ext = kind == .commentsJSON ? "json" : "csv"
+        let ext: String
+        switch kind {
+        case .commentsJSON, .recordsJSON, .globalsJSON: ext = "json"
+        case .typesPascal: ext = "pas"
+        case .labelsCSV, .proceduresCSV: ext = "csv"
+        }
         let writable = workspace.writableDirectory.appendingPathComponent(name).appendingPathExtension(ext)
         if FileManager.default.fileExists(atPath: writable.path) { return writable }
         if let bundled = workspace.bundledDirectory?.appendingPathComponent(name).appendingPathExtension(ext), FileManager.default.fileExists(atPath: bundled.path) { return bundled }
@@ -389,8 +506,13 @@ public struct MetadataScopeResolver: Sendable {
 
     public func resolve(fileIdentifier: String, version: Int) throws -> MetadataSnapshot {
         let scopes: [(String, MetadataFileKind, Int)] = [
+            ("records_ver_\(version)", .recordsJSON, 0),
+            ("types_ver_\(version)", .typesPascal, 0),
+            ("globals_ver_\(version)", .globalsJSON, 0),
             ("labels_ver_\(version)", .labelsCSV, 0),
             ("procedures_ver_\(version)", .proceduresCSV, 0),
+            ("records_\(fileIdentifier)", .recordsJSON, 10),
+            ("types_\(fileIdentifier)", .typesPascal, 10),
             ("labels_\(fileIdentifier)", .labelsCSV, 10),
             ("procedures_\(fileIdentifier)", .proceduresCSV, 10),
             ("comments_\(fileIdentifier)", .commentsJSON, 10),
