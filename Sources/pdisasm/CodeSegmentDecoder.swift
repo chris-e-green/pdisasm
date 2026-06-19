@@ -5,6 +5,7 @@ struct CodeSegmentDecoder {
     let binaryData: CodeData
     let verbose: Bool
     let diagnostics: DiagnosticCollector?
+    let cancellation: CancellationToken?
 
     func decode(
         allLocations: inout Set<Location>,
@@ -15,6 +16,7 @@ struct CodeSegmentDecoder {
         var allCodeSegs: [Int: CodeSegment] = [:]
 
         for segment in segDict.segTable.sorted(by: { $0.key < $1.key }) {
+            try cancellation?.checkCancellation()
             let seg = segment.value
             var extraCodeOffset = 0
             let code = binaryData.getCodeBlock(
@@ -96,6 +98,7 @@ struct CodeSegmentDecoder {
             for (procIdx, procPtr) in codeSeg.procedureDictionary.procedurePointers
                 .enumerated()
             {
+                try cancellation?.checkCancellation()
                 var tempCallers: Set<Call> = []
                 var proc = Procedure()
                 var segCodeBlock: Data
@@ -147,7 +150,8 @@ struct CodeSegmentDecoder {
                         code: segCodeBlock,
                         addr: procStartOffset,
                         assemblerEntryPoints: &asmEntryPoints,
-                        procedureBounds: procedureBounds
+                        procedureBounds: procedureBounds,
+                        cancellation: cancellation
                     )
                     if proc.segmentEndAddress == nil {
                         proc.segmentEndAddress = procStartOffset + 2
@@ -163,7 +167,8 @@ struct CodeSegmentDecoder {
                         allLocations: &allLocations,
                         allProcedures: &allProcedures,
                         verbose: verbose,
-                        diagnostics: diagnostics
+                        diagnostics: diagnostics,
+                        cancellation: cancellation
                     )
                 }
 

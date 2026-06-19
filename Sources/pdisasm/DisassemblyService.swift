@@ -56,6 +56,14 @@ public struct DisassemblyCancelledError: Error, Sendable, CustomStringConvertibl
     public var description: String { "Disassembly was cancelled" }
 }
 
+public extension CancellationToken {
+    func checkCancellation() throws {
+        if isCancellationRequested {
+            throw DisassemblyCancelledError()
+        }
+    }
+}
+
 public struct DisassemblyRunRequest: Sendable {
     public let source: CodeFileSource
     public let metadata: MetadataSnapshot
@@ -78,9 +86,7 @@ public struct DisassemblyRunRequest: Sendable {
     }
 
     public func checkCancellation() throws {
-        if cancellation?.isCancellationRequested == true {
-            throw DisassemblyCancelledError()
-        }
+        try cancellation?.checkCancellation()
     }
 }
 
@@ -1250,7 +1256,8 @@ public struct LegacyPipelineStages: Sendable {
             writeMetadata: input.options.writeMetadata,
             overwriteMetadata: input.options.overwriteMetadata,
             metadataWorkspace: input.workspace,
-            metadataSnapshot: metadata
+            metadataSnapshot: metadata,
+            cancellation: input.cancellation
         )
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         let reports = result.runReport.stages.filter { !["codefileLoading", "metadataMerge"].contains($0.name) }
