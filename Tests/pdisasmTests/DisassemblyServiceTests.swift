@@ -183,6 +183,58 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(scope, .documentOnly)
     }
 
+
+    func testTypedMetadataCommandsValidateAndSaveWithBackup() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-metadata-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let repository = FileBackedMetadataRepository(workspace: MetadataWorkspace(writableDirectory: directory))
+        let service = MetadataEditingService(repository: repository)
+        let codeFileID = CodeFileID("fixture")
+        let procedureID = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 2)
+        let instructionID = InstructionID(procedure: procedureID, offset: 3)
+        let snapshot = ProgramSnapshot(
+            codeFileID: codeFileID,
+            procedures: [procedureID: ProcedureSnapshot(id: procedureID, name: "PROC2", isFunction: false, isAssembly: false, lexicalLevel: 1, dataSize: 0, parameterSize: 0, instructionIDs: [instructionID])],
+            instructions: [instructionID: InstructionSnapshot(id: instructionID, opcode: 0, mnemonic: "NOP", parameters: [], locationID: nil, destinationID: nil, comment: nil, userComment: nil)]
+        )
+        let context = MetadataEditContext(codeFileID: codeFileID, snapshot: snapshot)
+
+        let first = try service.apply(.upsertComment(instructionID, text: "old"), context: context)
+        let second = try service.apply(.upsertComment(instructionID, text: "new"), context: context)
+
+        XCTAssertEqual(first.invalidation, .documentOnly)
+        XCTAssertEqual(second.diagnostics, [])
+        XCTAssertEqual(second.invalidation, .documentOnly)
+        let loaded = try repository.loadBundle(named: "comments_fixture", kind: .commentsJSON, provenance: MetadataProvenance(source: "test", precedence: 0))
+        XCTAssertEqual(loaded.comments.map(\.value.comment), ["new"])
+        let backups = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasPrefix("comments_fixture.json.bak.") }
+        XCTAssertFalse(backups.isEmpty)
+    }
+
+    func testTypedProcedureCommandChoosesSystemMetadataScope() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdisasm-metadata-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let repository = FileBackedMetadataRepository(workspace: MetadataWorkspace(writableDirectory: directory))
+        let service = MetadataEditingService(repository: repository)
+        let codeFileID = CodeFileID("fixture")
+        let procedureID = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 2), number: 7)
+
+        let result = try service.apply(
+            .renameProcedure(procedureID, name: "RENAMED"),
+            context: MetadataEditContext(codeFileID: codeFileID, systemMetadataVersion: 42, systemSegments: [2])
+        )
+
+        XCTAssertEqual(result.invalidation, .procedureSignature(segment: 2, procedure: 7))
+        let loaded = try repository.loadBundle(named: "procedures_ver_42", kind: .proceduresCSV, provenance: MetadataProvenance(source: "test", precedence: 0))
+        XCTAssertEqual(loaded.procedures.first?.value.procName, "RENAMED")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("procedures_fixture.csv").path))
+    }
+
     func testProcedureSignatureInvalidationCanPropagateToCallers() throws {
         let codeFileID = CodeFileID("fixture")
         let callee = ProcedureID(segment: SegmentID(codeFile: codeFileID, number: 1), number: 2)

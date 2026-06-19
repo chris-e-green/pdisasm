@@ -461,7 +461,11 @@ final class DisassemblyViewModel {
             typeSource: type.isEmpty ? .unknown : .user
         )
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
-        try service.upsertLabel(location, fileIdentifier: fileURL.deletingPathExtension().lastPathComponent)
+        let codeFileID = CodeFileID(fileURL: fileURL)
+        _ = try service.apply(
+            .upsertLabel(LocationID(codeFile: codeFileID, legacy: location), name: location.name, type: location.type),
+            context: MetadataEditContext(codeFileID: codeFileID)
+        )
     }
 
     private func upsertProcedureSignature(_ draft: ProcedureSignatureEditDraft) throws {
@@ -505,14 +509,22 @@ final class DisassemblyViewModel {
         }
 
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
-        try service.upsertProcedure(
-            edited,
-            metadataFileName: procedureMetadataName(
-                forSegment: draft.segment,
-                fileURL: fileURL,
-                disassemblyResult: disassemblyResult
-            )
+        let codeFileID = CodeFileID(fileURL: fileURL)
+        let procedureID = ProcedureID(codeFile: codeFileID, legacy: edited)
+        let context = MetadataEditContext(
+            codeFileID: codeFileID,
+            systemMetadataVersion: metadataVersion(from: disassemblyResult),
+            systemSegments: Self.systemSegments,
+            procedures: disassemblyResult.allProcedures
         )
+        switch draft.field {
+        case .procedureName:
+            _ = try service.apply(.renameProcedure(procedureID, name: edited.procName ?? ""), context: context)
+        case let .parameter(index):
+            _ = try service.apply(.upsertParameter(procedureID, index: index, name: edited.parameters[index].name, type: edited.parameters[index].type), context: context)
+        case .returnType:
+            _ = try service.apply(.upsertReturnType(procedureID, type: edited.returnType), context: context)
+        }
     }
 
     private func upsertUserComment(_ draft: CommentEditDraft) throws {
@@ -522,30 +534,15 @@ final class DisassemblyViewModel {
             comment: draft.comment.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         let service = MetadataEditingService(repository: FileBackedMetadataRepository())
-        try service.upsertComment(comment, fileIdentifier: fileURL.deletingPathExtension().lastPathComponent)
+        let codeFileID = CodeFileID(fileURL: fileURL)
+        if let instructionID = InstructionID(codeFile: codeFileID, legacy: comment.reference) {
+            _ = try service.apply(.upsertComment(instructionID, text: comment.comment), context: MetadataEditContext(codeFileID: codeFileID))
+        }
     }
 
-    private func procedureMetadataName(
-        forSegment segment: Int,
-        fileURL: URL,
-        disassemblyResult: DisassemblyResult
-    ) -> String {
-        if Self.systemSegments.contains(segment),
-           let systemProcedures = relevantMetadataFiles.first(where: {
-               $0.hasPrefix("procedures_ver_") && $0.hasSuffix(".csv")
-           }) {
-            return String(systemProcedures.dropLast(4))
-        }
-
-        if Self.systemSegments.contains(segment) {
-            let version = disassemblyResult.segDictionary.segTable[1]?.version
-                ?? disassemblyResult.segDictionary.segTable[0]?.version
-                ?? 0
-            return "procedures_ver_\(version)"
-        }
-
-        let fileIdentifier = fileURL.deletingPathExtension().lastPathComponent
-        return "procedures_\(fileIdentifier)"
+    private func metadataVersion(from disassemblyResult: DisassemblyResult) -> Int? {
+        disassemblyResult.segDictionary.segTable[1]?.version
+            ?? disassemblyResult.segDictionary.segTable[0]?.version
     }
 
     func commitSearch() {
