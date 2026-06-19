@@ -69,7 +69,7 @@ final class DisassemblyViewModel {
     var fileURL: URL?
     var showFileImporter: Bool = false
 
-    let display = DisassemblyDisplayPresentation()
+    var display = DisassemblyDisplayPresentation()
 
     /// The anchor ID of the procedure to scroll to (e.g. "2.3"). Set by sidebar selection.
     var selectedProcedure: String?
