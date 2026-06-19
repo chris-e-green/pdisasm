@@ -394,6 +394,39 @@ extension DisassemblyServiceTests {
             XCTAssertTrue(error is DisassemblyCancelledError)
         }
     }
+
+
+    func testCancellationTokenStopsRunInsideLegacyPipeline() throws {
+        final class CountingCancellationToken: CancellationToken, @unchecked Sendable {
+            private let lock = NSLock()
+            private let threshold: Int
+            private var checks = 0
+
+            init(threshold: Int) {
+                self.threshold = threshold
+            }
+
+            var isCancellationRequested: Bool {
+                lock.lock()
+                defer { lock.unlock() }
+                checks += 1
+                return checks >= threshold
+            }
+        }
+
+        let fixture = try XCTUnwrap(Bundle.module.url(
+            forResource: "SYSTEM.LIBRARY-02-00",
+            withExtension: "bin",
+            subdirectory: "Fixtures"
+        ))
+
+        XCTAssertThrowsError(try DisassemblyService().run(DisassemblyRunRequest(
+            source: .file(fixture),
+            cancellation: CountingCancellationToken(threshold: 5)
+        ))) { error in
+            XCTAssertTrue(error is DisassemblyCancelledError)
+        }
+    }
 }
 
 extension DisassemblyServiceTests {

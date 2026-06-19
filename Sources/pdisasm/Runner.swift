@@ -449,13 +449,15 @@ private func decodeCodeSegments(
     allProcedures: inout [ProcedureIdentifier],
     allCallers: inout Set<Call>,
     dataSegments: inout [Int],
-    diagnostics: DiagnosticCollector
+    diagnostics: DiagnosticCollector,
+    cancellation: CancellationToken? = nil
 ) throws -> [Int: CodeSegment] {
     try CodeSegmentDecoder(
         segDict: segDict,
         binaryData: binaryData,
         verbose: verbose,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        cancellation: cancellation
     ).decode(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
@@ -536,7 +538,8 @@ public func disassemble(
     writeMetadata: Bool = false,
     overwriteMetadata: Bool = false,
     metadataWorkspace: MetadataWorkspace? = nil,
-    metadataSnapshot: MetadataSnapshot? = nil
+    metadataSnapshot: MetadataSnapshot? = nil,
+    cancellation: CancellationToken? = nil
 ) throws -> DisassemblyResult {
     var fileURL: URL
     var binaryData: CodeData
@@ -586,6 +589,7 @@ public func disassemble(
         )
     }
 
+    if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
     let allCodeSegs = try decodeCodeSegments(
         segDict: segDict,
         binaryData: binaryData,
@@ -594,7 +598,8 @@ public func disassemble(
         allProcedures: &allProcedures,
         allCallers: &allCallers,
         dataSegments: &dataSegments,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        cancellation: cancellation
     )
 
     applyDisassemblyComments(lineComments, to: allCodeSegs)
@@ -613,6 +618,7 @@ public func disassemble(
     var previousAnalysisFingerprint: String?
     var analysisConverged = false
     while analysisIterations < maxSignatureIterations {
+        if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         analysisIterations += 1
         typeConflicts.append(contentsOf: runPascalAnalysisPass(
             codeSegments: allCodeSegs,

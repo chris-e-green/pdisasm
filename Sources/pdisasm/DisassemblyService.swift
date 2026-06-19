@@ -1008,7 +1008,8 @@ public struct LegacyPipelineStages: Sendable {
             writeMetadata: input.options.writeMetadata,
             overwriteMetadata: input.options.overwriteMetadata,
             metadataWorkspace: input.workspace,
-            metadataSnapshot: metadata
+            metadataSnapshot: metadata,
+            cancellation: input.cancellation
         )
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         let reports = result.runReport.stages.filter { !["codefileLoading", "metadataMerge"].contains($0.name) }

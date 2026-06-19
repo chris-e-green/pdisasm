@@ -5,6 +5,7 @@ struct CodeSegmentDecoder {
     let binaryData: CodeData
     let verbose: Bool
     let diagnostics: DiagnosticCollector?
+    let cancellation: CancellationToken?
 
     func decode(
         allLocations: inout Set<Location>,
@@ -15,6 +16,7 @@ struct CodeSegmentDecoder {
         var allCodeSegs: [Int: CodeSegment] = [:]
 
         for segment in segDict.segTable.sorted(by: { $0.key < $1.key }) {
+            if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
             let seg = segment.value
             var extraCodeOffset = 0
             let code = binaryData.getCodeBlock(
@@ -96,6 +98,7 @@ struct CodeSegmentDecoder {
             for (procIdx, procPtr) in codeSeg.procedureDictionary.procedurePointers
                 .enumerated()
             {
+                if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
                 var tempCallers: Set<Call> = []
                 var proc = Procedure()
                 var segCodeBlock: Data
@@ -149,6 +152,7 @@ struct CodeSegmentDecoder {
                         assemblerEntryPoints: &asmEntryPoints,
                         procedureBounds: procedureBounds
                     )
+                    if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
                     if proc.segmentEndAddress == nil {
                         proc.segmentEndAddress = procStartOffset + 2
                     }
@@ -163,8 +167,10 @@ struct CodeSegmentDecoder {
                         allLocations: &allLocations,
                         allProcedures: &allProcedures,
                         verbose: verbose,
-                        diagnostics: diagnostics
+                        diagnostics: diagnostics,
+                        cancellation: cancellation
                     )
+                    if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
                 }
 
                 registerProcedureIdentifier(proc, in: &allProcedures)
