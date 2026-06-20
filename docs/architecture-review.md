@@ -134,10 +134,11 @@ pdisasm-analysis
   type inference, signature propagation, call graph construction
 
 pdisasm-document
-  ProgramSnapshot, DisassemblyDocument, cross-reference indexes, search index
+  ProgramSnapshot, DisassemblyDocumentSet, per-procedure representation documents,
+  cross-document links, cross-reference indexes, search index
 
 pdisasm-rendering
-  CLI text renderer, GUI line renderer, JSON renderer, graph renderer
+  CLI text renderer, GUI representation renderer, JSON renderer, graph renderer
 
 pdisasm-application
   DisassemblyService, MetadataEditingService, DocumentSessionController,
@@ -207,7 +208,7 @@ struct DisassemblyRunRequest: Sendable {
 
 struct DisassemblyRunResult: Sendable {
     let snapshot: ProgramSnapshot
-    let document: DisassemblyDocument
+    let documents: DisassemblyDocumentSet
     let indexes: DocumentIndexes
     let report: RunReport
 }
@@ -279,7 +280,7 @@ Snapshot rules:
 
 8. DocumentBuildStage
    Input: ProgramSnapshot and document options
-   Output: DisassemblyDocument
+   Output: DisassemblyDocumentSet
    Fatal: no
 ```
 
@@ -353,31 +354,83 @@ enum InvalidationScope: Sendable {
 
 ### 3.9 Document and rendering architecture
 
-`DisassemblyDocument` is the rendering-neutral representation:
+The rendering-neutral product should be a `DisassemblyDocumentSet`, not a single monolithic stream. A document set keeps the run-level identity and shared indexes while allowing each procedure representation to be independently addressable:
 
 ```swift
+enum ProcedureRepresentation: Hashable, Codable, Sendable {
+    case pCode
+    case pseudocode
+    case assembly
+}
+
+struct ProcedureDocuments: Sendable {
+    let procedure: ProcedureID
+    let representations: [ProcedureRepresentation: DocumentID]
+}
+
+struct DisassemblyDocumentSet: Sendable {
+    let id: DocumentSetID
+    let title: String
+    let documents: [DocumentID: DisassemblyDocument]
+    let procedureDocuments: [ProcedureID: ProcedureDocuments]
+    let links: [DocumentLink]
+}
+
 struct DisassemblyDocument: Sendable {
     let id: DocumentID
     let title: String
+    let kind: DocumentKind
     let sections: [DocumentSection]
     let nodesByID: [DocumentNodeID: DocumentNode]
     let sourceMap: [DocumentNodeID: SourceReference]
 }
 ```
 
+Pascal procedures normally produce two representation documents: one P-code document and one pseudocode document. Assembler procedures produce one assembly document. Run-level/global material such as file summaries, segment dictionaries, globals, diagnostics, and call-graph summaries may live in dedicated documents in the same set.
+
+Cross-representation and cross-procedure navigation should be explicit data, not text parsing:
+
+```swift
+enum DocumentLinkKind: Hashable, Codable, Sendable {
+    case equivalentRepresentation
+    case generatedFrom
+    case calls
+    case calledBy
+    case declares
+    case references
+    case diagnosticSource
+}
+
+struct DocumentLink: Sendable {
+    let source: DocumentNodeID
+    let target: NavigationTarget
+    let kind: DocumentLinkKind
+}
+
+enum NavigationTarget: Hashable, Codable, Sendable {
+    case document(DocumentID)
+    case node(DocumentNodeID)
+    case procedure(ProcedureID, representation: ProcedureRepresentation?)
+    case instruction(InstructionID, representation: ProcedureRepresentation?)
+    case location(LocationID)
+}
+```
+
 Renderers:
 
-- `PlainTextRenderer`: CLI and snapshot fixtures;
-- `StructuredLineRenderer`: GUI table/list rows with kinds, anchors, edit ranges, and references;
-- `JSONRenderer`: machine-readable exports;
+- `PlainTextRenderer`: CLI and snapshot fixtures, flattening a `DisassemblyDocumentSet` in stable procedure order and interleaving enabled representations as the current CLI does;
+- `GUIRepresentationRenderer`: GUI windows/tabs/panes for a selected procedure representation, with links for jumping between P-code, pseudocode, callers, callees, locations, and diagnostics;
+- `JSONRenderer`: machine-readable exports of the document set, source maps, links, and indexes;
 - `GraphRenderer`: call graph/control-flow graph exports.
 
 Rendering rules:
 
-- renderers consume `DisassemblyDocument`, not mutable procedures;
-- renderers may be cached by document ID and options;
-- display filters hide/show rendered nodes without changing the underlying document;
-- search indexes are built from document nodes plus structured fields, not only from rendered text.
+- renderers consume `DisassemblyDocumentSet` and `DisassemblyDocument`, not mutable procedures;
+- renderers may be cached by document ID, representation, and options;
+- display filters choose which representation documents to render without changing the underlying document set;
+- CLI output is a flattening policy over the document set, not the shape of the document model;
+- GUI navigation uses `DocumentLink` and typed IDs, not rendered anchor strings;
+- search indexes are built from document nodes plus structured fields, with enough document/repr metadata to route results to the right window or pane.
 
 ### 3.10 Application services
 
@@ -491,13 +544,13 @@ Exit criteria:
 
 - Build `ProgramSnapshot` from the current mutable pipeline output.
 - Add procedure, instruction, location, call-origin, call-target, and symbol indexes.
-- Add a document builder that consumes `ProgramSnapshot`.
-- Make text output render from `DisassemblyDocument` and compare against existing snapshots.
+- Add a document-set builder that consumes `ProgramSnapshot` and emits per-procedure representation documents.
+- Make text output render from `DisassemblyDocumentSet` by flattening enabled representations and compare against existing snapshots.
 
 Exit criteria:
 
 - renderers no longer need direct access to mutable procedures;
-- GUI navigation and edits target typed IDs;
+- GUI navigation can open P-code, pseudocode, and assembly representation documents independently while links target typed IDs;
 - repeated linear scans in common UI paths are replaced by indexes.
 
 ### Phase 4: split pipeline stages
@@ -549,12 +602,12 @@ If starting from an empty repository while preserving current product requiremen
 2. **Codefile reader:** load bytes, parse segment dictionary, expose raw segment slices.
 3. **Minimal decoder:** decode one procedure into instruction snapshots with diagnostics.
 4. **Snapshot builder:** produce `ProgramSnapshot` and indexes for decoded procedures.
-5. **Text renderer:** produce CLI-compatible text from `DisassemblyDocument`.
+5. **Document-set renderer:** produce per-procedure P-code, pseudocode, and assembly documents, plus a CLI-compatible flattened text view from `DisassemblyDocumentSet`.
 6. **Metadata repository:** read labels/procedures/comments from in-memory and file-backed stores.
 7. **Application service:** deterministic run from bytes plus metadata to snapshot/document/report.
 8. **CLI:** thin adapter over the service and text renderer.
 9. **Analysis passes:** stack simulation, type inference, pseudocode, calls, signature convergence.
-10. **GUI:** session controller, presentation model, structured line renderer, search index, metadata commands.
+10. **GUI:** session controller, presentation model, representation-document renderer, cross-document navigation/search, metadata commands.
 11. **Incremental editing:** command invalidation and scoped reruns.
 12. **Exports/workspaces:** project metadata, JSON, graph output, batch analysis.
 
@@ -573,7 +626,7 @@ This order keeps every milestone runnable and testable.
 1. **ADR-001: Metadata scopes and precedence.** Define system, project, file, and user-edit ordering.
 2. **ADR-002: Canonical ID serialization.** Define stable string forms for codefile, segment, procedure, instruction, and location IDs.
 3. **ADR-003: Snapshot boundary.** Define which models are immutable public contracts and which remain mutable internals.
-4. **ADR-004: Document/rendering contract.** Decide the lifetime of `OutputLine` and the shape of `DisassemblyDocument`.
+4. **ADR-004: Document/rendering contract.** Decide the lifetime of `OutputLine` and the shape of `DisassemblyDocumentSet`, per-procedure representation documents, and cross-document links.
 5. **ADR-005: Invalidation policy.** Define command-to-scope rules and fallback behavior.
 6. **ADR-006: Run status semantics.** Define fatal, degraded, incomplete, warning, and strict-mode exit behavior.
 
