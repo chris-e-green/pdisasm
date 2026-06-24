@@ -33,9 +33,10 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     public var showPCode: Bool
     public var showStackState: Bool
     public var showPseudoCode: Bool
+    public var showPascalSource: Bool
     public var showDot: Bool
 
-    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showDot: Bool = false) {
+    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showPascalSource: Bool = false, showDot: Bool = false) {
         self.verbose = verbose
         self.writeMetadata = writeMetadata
         self.overwriteMetadata = overwriteMetadata
@@ -43,6 +44,7 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
         self.showPCode = showPCode
         self.showStackState = showStackState
         self.showPseudoCode = showPseudoCode
+        self.showPascalSource = showPascalSource
         self.showDot = showDot
     }
 }

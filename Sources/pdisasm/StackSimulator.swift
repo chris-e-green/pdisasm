@@ -377,7 +377,7 @@ struct StackSimulator {
                 // pop the element
                 let (element, _) = self.pop(true)
                 // we use '{' to indicate words within an array of elements
-                // eg. SETDATA{0}, SETDATA{1}, ... so that counting the words
+                // eg. SETDATA{0}, SETDATA{1}, and so on, so that counting the words
                 // on the stack still works
                 if !element.contains("{") {
                     // if the element is an integer, we extract the bits set
@@ -418,7 +418,7 @@ struct StackSimulator {
                     setData.append("\(group[0])")
                 } else {
                     // otherwise, add it as a range
-                    setData.append("\(group.first!)...\(group.last!)")
+                    setData.append("\(group.first!)..\(group.last!)")
                 }
                 // remove the processed values from the setVals
                 setVals = Array(setVals.dropFirst(group.count))
