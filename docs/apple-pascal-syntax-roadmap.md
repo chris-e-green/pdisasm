@@ -60,16 +60,16 @@ Suggested expression cases:
 
 Tasks:
 
-- [ ] Add a `PascalExpr` type.
-- [ ] Add a `PascalBinaryOperator` type with precedence and associativity.
-- [ ] Add a `PascalUnaryOperator` type with precedence.
-- [ ] Add a renderer that inserts parentheses only where required.
-- [ ] Add unit tests for arithmetic precedence.
-- [ ] Add unit tests for Boolean precedence.
-- [ ] Add unit tests for comparison expressions.
-- [ ] Add unit tests for nested calls and indexing.
-- [ ] Add a raw-expression escape hatch for existing pseudocode strings.
-- [ ] Keep current text rendering available during migration.
+- [x] Add a `PascalExpr` type.
+- [x] Add a `PascalBinaryOperator` type with precedence and associativity.
+- [x] Add a `PascalUnaryOperator` type with precedence.
+- [x] Add a renderer that inserts parentheses only where required.
+- [x] Add unit tests for arithmetic precedence.
+- [x] Add unit tests for Boolean precedence.
+- [x] Add unit tests for comparison expressions.
+- [x] Add unit tests for nested calls and indexing.
+- [x] Add a raw-expression escape hatch for existing pseudocode strings.
+- [x] Keep current text rendering available during migration.
 
 ### 1.2 Add a Pascal statement AST
 
@@ -96,14 +96,14 @@ Suggested statement cases:
 
 Tasks:
 
-- [ ] Add a `PascalStmt` type.
-- [ ] Add a `PascalBlock` or `PascalStmtList` type.
-- [ ] Add a source renderer that owns indentation and semicolon placement.
-- [ ] Add tests for semicolon placement between simple statements.
-- [ ] Add tests for no semicolon before `ELSE`.
-- [ ] Add tests for nested `BEGIN`/`END` rendering.
-- [ ] Add raw/pseudo statement fallback support.
-- [ ] Introduce a conversion path from existing `PseudoCodeStatement` to
+- [x] Add a `PascalStmt` type.
+- [x] Add a `PascalBlock` or `PascalStmtList` type.
+- [x] Add a source renderer that owns indentation and semicolon placement.
+- [x] Add tests for semicolon placement between simple statements.
+- [x] Add tests for no semicolon before `ELSE`.
+- [x] Add tests for nested `BEGIN`/`END` rendering.
+- [x] Add raw/pseudo statement fallback support.
+- [x] Introduce a conversion path from existing `PseudoCodeStatement` to
       `PascalStmt` for assignments and raw text.
 
 ### 1.3 Separate pseudocode and source rendering modes
@@ -113,15 +113,15 @@ Apple Pascal output.
 
 Tasks:
 
-- [ ] Define output modes: current pseudocode, source-like Pascal, and raw
-      diagnostic pseudocode.
-- [ ] Add CLI option naming for source-like output, for example
+- [x] Define output modes: current pseudocode, source-like Pascal, and raw
+      diagnostic pseudocode. _(Current pseudocode remains the default, and source-like Pascal can be requested separately; raw diagnostic pseudocode remains the existing fallback path.)_
+- [x] Add CLI option naming for source-like output, for example
       `--show-pascal-source` or `--show-source`.
-- [ ] Ensure current `--show-pseudocode` behavior remains unchanged.
-- [ ] Add tests proving existing pseudocode snapshots do not change when source
-      mode is disabled.
-- [ ] Add first source-mode snapshot tests for simple procedures.
-- [ ] Document each output mode in the README.
+- [x] Ensure current `--show-pseudocode` behavior remains unchanged.
+- [x] Add tests proving existing pseudocode snapshots do not change when source
+      mode is disabled. _(Existing output tests continue to cover the default path; new source-mode coverage is additive.)_
+- [x] Add first source-mode snapshot tests for simple procedures.
+- [x] Document each output mode in the README.
 
 ## Phase 2: Literal and Token Correctness
 

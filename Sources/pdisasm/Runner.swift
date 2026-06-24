@@ -912,6 +912,7 @@ public func runPdisasm(
     showPCode: Bool = false,
     showStackState: Bool = false,
     showPseudoCode: Bool = false,
+    showPascalSource: Bool = false,
     showDot: Bool = false
 ) throws {
     let runResult = try DisassemblyService().run(DisassemblyRunRequest(
@@ -924,6 +925,7 @@ public func runPdisasm(
             showPCode: showPCode,
             showStackState: showStackState,
             showPseudoCode: showPseudoCode,
+            showPascalSource: showPascalSource,
             showDot: showDot
         )
     ))
@@ -949,6 +951,7 @@ public func runPdisasm(
         showPCode: showPCode,
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
+        showPascalSource: showPascalSource,
         showDot: showDot
     )
 }

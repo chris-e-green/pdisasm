@@ -41,7 +41,7 @@ If no filename is supplied, the CLI defaults to the bundled
 ## Command-line usage
 
 ```text
-USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-dot]
+USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
 ```
 
 Common examples:
@@ -80,6 +80,7 @@ Options:
 - `--show-pcode`: include decoded P-code lines.
 - `--show-stack-state`: include stack-state annotations where available.
 - `--show-pseudocode`: include generated pseudocode.
+- `--show-source` / `--show-pascal-source`: include the experimental source-like Apple Pascal reconstruction output. This is additive and does not replace the existing pseudocode output.
 - `--show-dot`: enable DOT-oriented output paths used by the disassembly layer.
 - `--help` / `-h`: print CLI help.
 
