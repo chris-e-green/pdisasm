@@ -42,8 +42,8 @@ extension PseudoCodeGenerator {
             let value = stack.popStackValue()
             inferStackValueType(value, "CHAR", evidence: evidence)
             let argument = typedOperandText(value, "CHAR", stack: stack)
-            if let ch = Int(argument), ch >= 0x20 && ch <= 0x7E {
-                arguments.append("'\(String(format: "%c", ch))'")
+            if let ch = Int(argument) {
+                arguments.append(renderPascalCharLiteral(ch))
             } else {
                 arguments.append(argument)
             }

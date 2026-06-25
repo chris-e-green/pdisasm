@@ -37,8 +37,8 @@ extension PseudoCodeGenerator {
         }
         switch assignmentDestType {
         case "CHAR":
-            if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
-                src = "'\(String(format: "%c", ch))'"
+            if let ch = Int(src) {
+                src = renderPascalCharLiteral(ch)
             }
         case "BOOLEAN":
             if src == "0" {
@@ -115,9 +115,8 @@ extension PseudoCodeGenerator {
            dstoffstype == "INTEGER",
            let offset = Int(dstoffs),
            offset > 0,
-           let ch = Int(src),
-           ch >= 0x20 && ch <= 0x7E {
-            src = "'\(String(format: "%c", ch))'"
+           let ch = Int(src) {
+            src = renderPascalCharLiteral(ch)
         }
         let target = dstaddrValue.type == "REAL" ? dstaddr : "\(dstaddr)[\(dstoffs)]"
         return .assignment(targetValue: dstaddrValue, targetText: target, source: src)

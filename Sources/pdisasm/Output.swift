@@ -1036,9 +1036,9 @@ public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: 
         for procedure in codeSegment.procedures.sorted(by: { ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1) }) {
             guard procedure.identifier?.isAssembly == false else { continue }
             if let identifier = procedure.identifier {
-                lines.append("PROCEDURE \(identifier.procName ?? "P\(identifier.procedure)");")
+                lines.append("PROCEDURE \(renderPascalIdentifier(identifier.procName ?? "P\(identifier.procedure)"));")
             } else {
-                lines.append("PROCEDURE P\(procedure.enterIC);")
+                lines.append("PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));")
             }
             if showMarkup { lines.append("```pascal") }
             var statements: [PascalStmt] = []

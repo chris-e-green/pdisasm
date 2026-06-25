@@ -55,6 +55,54 @@ final class PascalSourceSyntaxTests: XCTestCase {
         XCTAssertEqual(expr.rendered(), "GETREC(1, 'O''Brien')[I].NAME")
     }
 
+    func testCharacterLiteralRenderingUsesCHRForControlAndHighBitCharacters() {
+        XCTAssertEqual(renderPascalCharLiteral(65), "'A'")
+        XCTAssertEqual(renderPascalCharLiteral(39), "''''")
+        XCTAssertEqual(renderPascalCharLiteral(10), "CHR(10)")
+        XCTAssertEqual(renderPascalCharLiteral(128), "CHR(128)")
+    }
+
+    func testStringLiteralRenderingEscapesQuotesAndUsesCHRForUnsafeScalars() {
+        XCTAssertEqual(renderPascalStringLiteral(""), "''")
+        XCTAssertEqual(renderPascalStringLiteral("O'Brien"), "'O''Brien'")
+        XCTAssertEqual(renderPascalStringLiteral("A\nB"), "'A' + CHR(10) + 'B'")
+        XCTAssertEqual(renderPascalStringLiteral("A" + String(UnicodeScalar(0x80)!) + "B"), "'A' + CHR(128) + 'B'")
+    }
+
+    func testIdentifierRenderingSanitizesInvalidNamesAndKeywords() {
+        XCTAssertTrue(isValidPascalIdentifier("GOOD_NAME1"))
+        XCTAssertFalse(isValidPascalIdentifier("1BAD"))
+        XCTAssertEqual(renderPascalIdentifier("BEGIN"), "BEGIN_")
+        XCTAssertEqual(renderPascalIdentifier("1 bad-name"), "_1_bad_name")
+        XCTAssertEqual(renderPascalIdentifier(""), "_")
+    }
+
+    func testSourceIdentifiersAreSanitizedInExpressionsAndStatements() {
+        XCTAssertEqual(PascalExpr.identifier("BEGIN").rendered(), "BEGIN_")
+        XCTAssertEqual(PascalExpr.field(base: .identifier("rec value"), name: "1field").rendered(), "rec_value._1field")
+        XCTAssertEqual(PascalStmt.goto(label: "END").rendered(), ["GOTO END_;"])
+    }
+
+    func testCaseStatementRendererUsesPascalRangeSyntax() {
+        let statement = PascalStmt.caseStatement(
+            expression: .identifier("CHOICE"),
+            arms: [
+                PascalCaseArm(labels: [.integer(1)], body: [.call(name: "ONE", arguments: [])]),
+                PascalCaseArm(labels: [.range(.integer(2), .integer(4)), .integer(7)], body: [.call(name: "MANY", arguments: [])]),
+            ],
+            defaultBody: nil
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "CASE CHOICE OF",
+            "  1:",
+            "    ONE();",
+            "  2..4, 7:",
+            "    MANY();",
+            "END",
+        ])
+    }
+
     func testStatementRendererAddsSemicolonsToStatements() {
         let statement = PascalStmt.assignment(target: .identifier("DEST"), source: .binary(.add, .identifier("A"), .integer(1)))
 

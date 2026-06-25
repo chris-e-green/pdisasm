@@ -225,8 +225,8 @@ final class StackSimulatorTests: XCTestCase {
         sim.push(("1", "INTEGER"))  // set length
         let (len, str) = sim.popSet()
         XCTAssertEqual(len, 1)
-        // bits 0,1,2 -> 0...2 and bit 4 -> 4
-        XCTAssertTrue(str.contains("0...2"))
+        // bits 0,1,2 -> 0..2 and bit 4 -> 4
+        XCTAssertTrue(str.contains("0..2"))
         XCTAssertTrue(str.contains("4"))
     }
 

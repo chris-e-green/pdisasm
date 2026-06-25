@@ -1,5 +1,96 @@
 import Foundation
 
+private let pascalKeywords: Set<String> = [
+    "AND", "ARRAY", "BEGIN", "CASE", "CONST", "DIV", "DO", "DOWNTO", "ELSE",
+    "END", "FILE", "FOR", "FUNCTION", "GOTO", "IF", "IN", "LABEL", "MOD",
+    "NIL", "NOT", "OF", "OR", "OTHERWISE", "PACKED", "PROCEDURE", "PROGRAM",
+    "RECORD", "REPEAT", "SET", "THEN", "TO", "TYPE", "UNTIL", "VAR", "WHILE",
+    "WITH", "UNIT", "INTERFACE", "IMPLEMENTATION", "USES"
+]
+
+func renderPascalCharLiteral(_ value: Int) -> String {
+    guard value >= 0x20 && value <= 0x7E,
+          let scalar = UnicodeScalar(value)
+    else {
+        return "CHR(\(value))"
+    }
+
+    let character = String(Character(scalar))
+    return "'" + character.replacingOccurrences(of: "'", with: "''") + "'"
+}
+
+func renderPascalCharLiteral(_ value: String) -> String {
+    let scalars = Array(value.unicodeScalars)
+    guard scalars.count == 1 else {
+        return renderPascalStringLiteral(value)
+    }
+    return renderPascalCharLiteral(Int(scalars[0].value))
+}
+
+func renderPascalStringLiteral(_ value: String) -> String {
+    if value.isEmpty { return "''" }
+
+    var parts: [String] = []
+    var literalBuffer = ""
+
+    func flushLiteralBuffer() {
+        guard !literalBuffer.isEmpty else { return }
+        parts.append("'" + literalBuffer.replacingOccurrences(of: "'", with: "''") + "'")
+        literalBuffer = ""
+    }
+
+    for scalar in value.unicodeScalars {
+        let code = Int(scalar.value)
+        if code >= 0x20 && code <= 0x7E {
+            literalBuffer.append(Character(scalar))
+        } else {
+            flushLiteralBuffer()
+            parts.append("CHR(\(code))")
+        }
+    }
+    flushLiteralBuffer()
+
+    return parts.joined(separator: " + ")
+}
+
+func isValidPascalIdentifier(_ name: String) -> Bool {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    guard let first = trimmed.unicodeScalars.first,
+          CharacterSet.letters.contains(first) || first.value == 0x5F
+    else {
+        return false
+    }
+    return trimmed.unicodeScalars.allSatisfy {
+        CharacterSet.alphanumerics.contains($0) || $0.value == 0x5F
+    }
+}
+
+func renderPascalIdentifier(_ name: String) -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "_" }
+
+    var rendered = ""
+    for scalar in trimmed.unicodeScalars {
+        if CharacterSet.alphanumerics.contains(scalar) || scalar.value == 0x5F {
+            rendered.append(Character(scalar))
+        } else {
+            rendered.append("_")
+        }
+    }
+
+    if let first = rendered.unicodeScalars.first,
+       !(CharacterSet.letters.contains(first) || first.value == 0x5F) {
+        rendered = "_" + rendered
+    }
+
+    if pascalKeywords.contains(rendered.uppercased()) {
+        rendered += "_"
+    }
+
+    return rendered.isEmpty ? "_" : rendered
+}
+
 enum PascalBinaryOperator: String, Sendable {
     case multiply = "*"
     case realDivide = "/"
@@ -75,15 +166,15 @@ indirect enum PascalExpr: Sendable {
         let text: String
         switch self {
         case .identifier(let name):
-            text = name
+            text = renderPascalIdentifier(name)
         case .integer(let value):
             text = String(value)
         case .real(let value):
             text = value
         case .character(let value):
-            text = "'\(value.replacingOccurrences(of: "'", with: "''"))'"
+            text = renderPascalCharLiteral(value)
         case .string(let value):
-            text = "'\(value.replacingOccurrences(of: "'", with: "''"))'"
+            text = renderPascalStringLiteral(value)
         case .boolean(let value):
             text = value ? "TRUE" : "FALSE"
         case .nilPointer:
@@ -99,11 +190,11 @@ indirect enum PascalExpr: Sendable {
             let right = rhs.render(parentPrecedence: op.precedence, isRightChild: true)
             text = "\(left) \(op.rawValue) \(right)"
         case .call(let name, let arguments):
-            text = "\(name)(\(arguments.map { $0.rendered() }.joined(separator: ", ")))"
+            text = "\(renderPascalIdentifier(name))(\(arguments.map { $0.rendered() }.joined(separator: ", ")))"
         case .index(let base, let index):
             text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false))[\(index.rendered())]"
         case .field(let base, let name):
-            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false)).\(name)"
+            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false)).\(renderPascalIdentifier(name))"
         case .dereference(let expr):
             text = "\(expr.render(parentPrecedence: ownPrecedence, isRightChild: false))^"
         case .addressOf(let expr):
@@ -141,7 +232,7 @@ indirect enum PascalStmt: Sendable {
         case .assignment(let target, let source):
             return ["\(indent)\(target.rendered()) := \(source.rendered());"]
         case .call(let name, let arguments):
-            return ["\(indent)\(name)(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
+            return ["\(indent)\(renderPascalIdentifier(name))(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
         case .block(let statements):
             var lines = ["\(indent)BEGIN"]
             lines.append(contentsOf: statements.flatMap { $0.rendered(indentation: indentation + 2) })
@@ -156,7 +247,7 @@ indirect enum PascalStmt: Sendable {
         case .repeatUntil(let body, let condition):
             return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2) } + ["\(indent)UNTIL \(condition.rendered());"]
         case .forLoop(let variable, let start, let limit, let direction, let body):
-            return ["\(indent)FOR \(variable) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2)
+            return ["\(indent)FOR \(renderPascalIdentifier(variable)) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2)
         case .caseStatement(let expression, let arms, let defaultBody):
             var lines = ["\(indent)CASE \(expression.rendered()) OF"]
             for arm in arms {
@@ -170,12 +261,12 @@ indirect enum PascalStmt: Sendable {
             lines.append("\(indent)END")
             return lines
         case .goto(let label):
-            return ["\(indent)GOTO \(label);"]
+            return ["\(indent)GOTO \(renderPascalIdentifier(label));"]
         case .label(let label, let statement):
             if let statement {
-                return ["\(indent)\(label):"] + statement.rendered(indentation: indentation + 2)
+                return ["\(indent)\(renderPascalIdentifier(label)):"] + statement.rendered(indentation: indentation + 2)
             }
-            return ["\(indent)\(label):"]
+            return ["\(indent)\(renderPascalIdentifier(label)):"]
         case .raw(let text):
             return ["\(indent)\(PascalStmt.renderRaw(text))"]
         }

@@ -132,17 +132,17 @@ than through ad hoc interpolation.
 
 Tasks:
 
-- [ ] Add `renderPascalCharLiteral`.
-- [ ] Add `renderPascalStringLiteral`.
-- [ ] Escape embedded single quotes correctly.
-- [ ] Decide dialect-specific rendering for non-printable characters.
-- [ ] Decide dialect-specific rendering for high-bit Apple II characters.
-- [ ] Add tests for printable ASCII characters.
-- [ ] Add tests for single quote characters.
-- [ ] Add tests for control characters.
-- [ ] Add tests for empty strings.
-- [ ] Add tests for strings containing quotes.
-- [ ] Replace direct `String(format: "%c", ...)` literal generation with the
+- [x] Add `renderPascalCharLiteral`.
+- [x] Add `renderPascalStringLiteral`.
+- [x] Escape embedded single quotes correctly.
+- [x] Decide dialect-specific rendering for non-printable characters. _(Conservative starting policy: render as `CHR(n)`.)_
+- [x] Decide dialect-specific rendering for high-bit Apple II characters. _(Conservative starting policy: render as `CHR(n)`.)_
+- [x] Add tests for printable ASCII characters.
+- [x] Add tests for single quote characters.
+- [x] Add tests for control characters.
+- [x] Add tests for empty strings.
+- [x] Add tests for strings containing quotes.
+- [x] Replace direct `String(format: "%c", ...)` literal generation with the
       central helpers.
 
 ### 2.2 Normalize Pascal range syntax
@@ -152,12 +152,12 @@ intentionally showing a non-Pascal artifact.
 
 Tasks:
 
-- [ ] Replace source-mode case label ranges with `..`.
-- [ ] Audit set literal range rendering for consistent `..` syntax.
-- [ ] Add tests for case labels with singleton values.
-- [ ] Add tests for case labels with contiguous ranges.
-- [ ] Add tests for mixed singleton and range labels.
-- [ ] Preserve old representation in raw diagnostic mode if needed.
+- [x] Replace source-mode case label ranges with `..`.
+- [x] Audit set literal range rendering for consistent `..` syntax.
+- [x] Add tests for case labels with singleton values.
+- [x] Add tests for case labels with contiguous ranges.
+- [x] Add tests for mixed singleton and range labels.
+- [x] Preserve old representation in raw diagnostic mode if needed.
 
 ### 2.3 Define keyword and identifier escaping rules
 
@@ -166,13 +166,13 @@ characters that are not source-valid.
 
 Tasks:
 
-- [ ] Add an Apple Pascal keyword list.
-- [ ] Add identifier validation.
-- [ ] Add identifier sanitization for generated names.
-- [ ] Add a policy for metadata names that are not source-valid.
-- [ ] Add tests for keyword collisions.
-- [ ] Add tests for names with spaces or punctuation.
-- [ ] Add tests for generated labels and temporaries.
+- [x] Add an Apple Pascal keyword list.
+- [x] Add identifier validation.
+- [x] Add identifier sanitization for generated names.
+- [x] Add a policy for metadata names that are not source-valid. _(Conservative source-mode policy: replace invalid characters with `_`, prefix names that start with non-letters, and suffix keywords with `_`.)_
+- [x] Add tests for keyword collisions.
+- [x] Add tests for names with spaces or punctuation.
+- [x] Add tests for generated labels and temporaries.
 
 ## Phase 3: Type Model and Declaration Generation
 
