@@ -219,18 +219,18 @@ packing information where available.
 
 Tasks:
 
-- [ ] Preserve array index lower and upper bounds in the type model.
-- [ ] Support multi-dimensional arrays.
-- [ ] Support `PACKED ARRAY [...] OF CHAR` as a string-like structure when
+- [x] Preserve array index lower and upper bounds in the type model.
+- [x] Support multi-dimensional arrays.
+- [x] Support `PACKED ARRAY [...] OF CHAR` as a string-like structure when
       appropriate.
-- [ ] Distinguish byte indexing from Pascal array indexing.
-- [ ] Update `ixa`, `inc`, `ind`, and related paths to use structured array
+- [x] Distinguish byte indexing from Pascal array indexing.
+- [x] Update `ixa`, `inc`, `ind`, and related paths to use structured array
       metadata.
-- [ ] Add tests for one-dimensional arrays.
-- [ ] Add tests for non-zero lower bounds.
-- [ ] Add tests for multi-dimensional arrays.
-- [ ] Add tests for packed character arrays.
-- [ ] Add fallback comments when an index calculation cannot be confidently
+- [x] Add tests for one-dimensional arrays.
+- [x] Add tests for non-zero lower bounds.
+- [x] Add tests for multi-dimensional arrays.
+- [x] Add tests for packed character arrays.
+- [x] Add fallback comments when an index calculation cannot be confidently
       mapped back to source syntax.
 
 ### 3.3 Improve set handling

@@ -490,7 +490,7 @@ struct PseudoCodeGenerator {
             return nil
         case lpa:
             let txtRep = inst.stringParameter ?? ""
-            stack.push(("'\(txtRep)'", "PACKED ARRAY"), kind: .constant)
+            stack.push(("'\(txtRep)'", "PACKED ARRAY OF CHAR"), kind: .constant)
             return nil
         case ldm:
             let ldmCount = inst.params[0]
@@ -523,9 +523,10 @@ struct PseudoCodeGenerator {
                 ))
                 return nil
             }
+            let byteText = byteAccessText(base, offset: offset, stack: stack)
             stack.push(StackValue(
-                text: representationByteText(base, offset: offset, stack: stack),
-                type: baseType == "STRING" ? "CHAR" : "BYTE",
+                text: byteText,
+                type: byteAccessType(for: baseType),
                 kind: .value,
                 location: baseType == "REAL" ? nil : base.location
             ))
@@ -547,8 +548,14 @@ struct PseudoCodeGenerator {
             let a = stack.parenthesizedText(base)
             let t = resolveType(base.type)
             let resultKind = stack.derivedAddressKind(from: base)
-            if let t = t, t.hasPrefix("ARRAY") {
-                stack.push(StackValue(text: "\(a)[\(val)]", type: String(t.split(separator: " ").last!), kind: resultKind, location: base.location))
+            if let arrayType = resolvedArrayType(for: t) {
+                let index = mapArrayIndex(
+                    arrayType,
+                    opcodeContext: "INC",
+                    elementStride: nil,
+                    rawIndex: "\(val)"
+                )
+                stack.push(StackValue(text: "\(a)[\(index.text)]", type: arrayType.elementType.renderedType, kind: resultKind, location: base.location))
             } else if let structInfo = recordDefinition(for: t), let field = structInfo.members[val] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: resultKind, location: base.location))
             }
@@ -577,16 +584,21 @@ struct PseudoCodeGenerator {
             }
             return nil
         case ixa:
-            let _ = inst.params[0]
+            let elementStride = inst.params[0]
             let index = stack.popStackValue()
             let base = stack.popStackValue()
             let eltIndex = stack.parenthesizedText(index)
             let arrayBase = stack.parenthesizedText(base)
             let t = resolveType(base.type)
             let resultKind = stack.derivedAddressKind(from: base)
-            if let type = t, type.starts(with: "ARRAY") {
-                let elementType = String(type.split(separator: " ").last!)
-                stack.push(StackValue(text: "\(arrayBase)[\(eltIndex)]", type: elementType, kind: resultKind, location: base.location))
+            if let arrayType = resolvedArrayType(for: t) {
+                let index = mapArrayIndex(
+                    arrayType,
+                    opcodeContext: "IXA",
+                    elementStride: elementStride,
+                    rawIndex: eltIndex
+                )
+                stack.push(StackValue(text: "\(arrayBase)[\(index.text)]", type: arrayType.elementType.renderedType, kind: resultKind, location: base.location))
                 return nil
             }
             stack.push(StackValue(
@@ -617,8 +629,14 @@ struct PseudoCodeGenerator {
             let base = stack.popStackValue()
             let a = stack.parenthesizedText(base)
             let t = resolveType(base.type)
-            if let t = t, t.hasPrefix("ARRAY") {
-                stack.push(StackValue(text: "\(a)[\(offs)]", type: String(t.split(separator: " ").last!), kind: .value, location: base.location))
+            if let arrayType = resolvedArrayType(for: t) {
+                let index = mapArrayIndex(
+                    arrayType,
+                    opcodeContext: "SIND",
+                    elementStride: nil,
+                    rawIndex: "\(offs)"
+                )
+                stack.push(StackValue(text: "\(a)[\(index.text)]", type: arrayType.elementType.renderedType, kind: .value, location: base.location))
             } else if let structInfo = recordDefinition(for: t), let field = structInfo.members[offs] {
                 stack.push(StackValue(text: "\(a).\(field.name)", type: field.type, kind: .value, location: base.location))
             } else {
@@ -730,10 +748,10 @@ struct PseudoCodeGenerator {
 
     private func indexedValueType(index: String, baseType: String?) -> String? {
         let baseType = resolveType(baseType)
-        guard baseType == "STRING" else {
-            return baseType
+        if baseType == "STRING" {
+            return index == "0" ? "INTEGER" : "CHAR"
         }
-        return index == "0" ? "INTEGER" : "CHAR"
+        return arrayElementType(for: baseType) ?? baseType
     }
 
     private func dereferencedType(_ type: String?) -> String? {
@@ -762,6 +780,129 @@ struct PseudoCodeGenerator {
             current = resolved.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         }
         return current
+    }
+
+    func resolvePascalType(_ type: String?) -> PascalType? {
+        guard let resolved = resolveType(type) else { return nil }
+        return PascalType.parse(resolved)
+    }
+
+    func resolvedArrayType(for type: String?) -> PascalArrayType? {
+        guard case .array(let arrayType) = resolvePascalType(type) else {
+            return nil
+        }
+        return arrayType
+    }
+
+    func arrayElementType(for type: String?) -> String? {
+        resolvedArrayType(for: type)?.elementType.renderedType
+    }
+
+    func isPackedCharArray(_ type: String?) -> Bool {
+        guard let arrayType = resolvedArrayType(for: type) else {
+            return false
+        }
+        return arrayType.isPacked && arrayType.elementType.renderedType == "CHAR"
+    }
+
+    func isStringLikeArray(_ type: String?) -> Bool {
+        isPackedCharArray(type)
+    }
+
+    func stringLikeAssignmentType(for type: String?) -> String {
+        if let resolved = resolveType(type),
+           isStringLikeArray(resolved) {
+            return resolved
+        }
+        return "STRING"
+    }
+
+    func byteAccessText(_ base: StackValue, offset: String, stack: StackSimulator) -> String {
+        if base.type == "REAL" {
+            return representationByteText(base, offset: offset, stack: stack)
+        }
+        if resolvedArrayType(for: base.type) != nil {
+            return "BYTE_AT(\(stack.parenthesizedText(base)), \(offset))"
+        }
+        return representationByteText(base, offset: offset, stack: stack)
+    }
+
+    func byteAccessType(for type: String?) -> String {
+        if resolveType(type) == "STRING" {
+            return "CHAR"
+        }
+        if let arrayType = resolvedArrayType(for: type),
+           arrayType.isPacked,
+           arrayType.elementType.renderedType == "CHAR" {
+            return "CHAR"
+        }
+        return "BYTE"
+    }
+
+    struct ArrayIndexMapping {
+        var text: String
+        var fallbackComment: String?
+    }
+
+    func mapArrayIndex(
+        _ arrayType: PascalArrayType,
+        opcodeContext: String,
+        elementStride: Int?,
+        rawIndex: String
+    ) -> ArrayIndexMapping {
+        let trimmedIndex = rawIndex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard arrayType.indexTypes.count == 1 else {
+            return ArrayIndexMapping(
+                text: arrayIndexFallbackText(
+                    trimmedIndex,
+                    comment: "\(opcodeContext) linear index for \(PascalType.array(arrayType).renderedType)"
+                ),
+                fallbackComment: "linear index for multidimensional array"
+            )
+        }
+
+        guard case .subrange(let bounds) = arrayType.indexTypes[0] else {
+            return ArrayIndexMapping(
+                text: arrayIndexFallbackText(
+                    trimmedIndex,
+                    comment: "\(opcodeContext) index for \(arrayType.indexTypes[0].renderedType)"
+                ),
+                fallbackComment: "non-subrange array index type"
+            )
+        }
+
+        guard let lowerBound = Int(bounds.lowerBound) else {
+            return ArrayIndexMapping(
+                text: arrayIndexFallbackText(
+                    trimmedIndex,
+                    comment: "\(opcodeContext) index for \(bounds.lowerBound)..\(bounds.upperBound)"
+                ),
+                fallbackComment: "symbolic lower bound"
+            )
+        }
+
+        if lowerBound == 0 {
+            return ArrayIndexMapping(text: trimmedIndex, fallbackComment: nil)
+        }
+
+        if let constantIndex = Int(trimmedIndex) {
+            return ArrayIndexMapping(text: "\(constantIndex + lowerBound)", fallbackComment: nil)
+        }
+
+        let adjusted = "\(parenthesizeIndexExpression(trimmedIndex)) + \(lowerBound)"
+        return ArrayIndexMapping(text: adjusted, fallbackComment: nil)
+    }
+
+    private func arrayIndexFallbackText(_ index: String, comment: String) -> String {
+        "\(index) (* \(comment) *)"
+    }
+
+    private func parenthesizeIndexExpression(_ index: String) -> String {
+        let operatorFragments = [" + ", " - ", " * ", " / ", " DIV ", " MOD "]
+        if operatorFragments.contains(where: { index.uppercased().contains($0) }) {
+            return "(\(index))"
+        }
+        return index
     }
 
     func scalarLiteralText(_ source: String, destinationType: String?) -> String {
