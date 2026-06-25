@@ -201,16 +201,16 @@ Suggested type cases:
 
 Tasks:
 
-- [ ] Add `PascalType`.
-- [ ] Add `PascalArrayType` with packed flag, index types, and element type.
-- [ ] Add `PascalSetType`.
-- [ ] Add `PascalPointerType`.
-- [ ] Add `PascalFileType`.
-- [ ] Add `PascalRecordType` and `PascalVariantRecordType`.
-- [ ] Add parser conversion from existing type strings to `PascalType`.
-- [ ] Add renderer conversion from `PascalType` to source text.
-- [ ] Keep raw string fallback for unknown metadata.
-- [ ] Add tests for every supported type category.
+- [x] Add `PascalType`.
+- [x] Add `PascalArrayType` with packed flag, index types, and element type.
+- [x] Add `PascalSetType`.
+- [x] Add `PascalPointerType`.
+- [x] Add `PascalFileType`.
+- [x] Add `PascalRecordType` and `PascalVariantRecordType`.
+- [x] Add parser conversion from existing type strings to `PascalType`.
+- [x] Add renderer conversion from `PascalType` to source text.
+- [x] Keep raw string fallback for unknown metadata.
+- [x] Add tests for every supported type category.
 
 ### 3.2 Improve array and packed array handling
 
