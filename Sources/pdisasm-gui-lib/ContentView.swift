@@ -90,7 +90,7 @@ public struct ContentView: View {
 
                 Menu {
                     Picker("Search Status Width", selection: $viewModel.searchStatusWidthPreset) {
-                        ForEach(DisassemblyViewModel.SearchStatusWidthPreset.allCases) { preset in
+                        ForEach(SearchStatusWidthPreset.allCases) { preset in
                             Text(preset.title).tag(preset)
                         }
                     }
@@ -107,15 +107,15 @@ public struct ContentView: View {
                 .disabled(viewModel.selectedOutputLineCount == 0)
 
                 Menu {
-                    Toggle("Markup", isOn: $viewModel.showMarkup)
-                    Toggle("P-Code", isOn: $viewModel.showPCode)
-                    Toggle("Stack State", isOn: $viewModel.showStackState)
-                    Toggle("Pseudocode", isOn: $viewModel.showPseudoCode)
-                    Toggle("Variables", isOn: $viewModel.showVariables)
+                    Toggle("Markup", isOn: $viewModel.display.showMarkup)
+                    Toggle("P-Code", isOn: $viewModel.display.showPCode)
+                    Toggle("Stack State", isOn: $viewModel.display.showStackState)
+                    Toggle("Pseudocode", isOn: $viewModel.display.showPseudoCode)
+                    Toggle("Variables", isOn: $viewModel.display.showVariables)
 
                     Divider()
 
-                    Toggle("Verbose Output", isOn: $viewModel.verbose)
+                    Toggle("Verbose Output", isOn: $viewModel.display.verbose)
                 } label: {
                     Label("Display", systemImage: "line.3.horizontal.decrease.circle")
                 }
@@ -154,12 +154,12 @@ public struct ContentView: View {
         }
         .focusedSceneValue(\.hasDisassemblySearchMatches, !viewModel.searchMatchIndices.isEmpty)
         .focusedSceneValue(\.disassemblyDisplayOptions, DisassemblyDisplayOptions(
-            showMarkup: $viewModel.showMarkup,
-            showPCode: $viewModel.showPCode,
-            showStackState: $viewModel.showStackState,
-            showPseudoCode: $viewModel.showPseudoCode,
-            showVariables: $viewModel.showVariables,
-            verbose: $viewModel.verbose
+            showMarkup: $viewModel.display.showMarkup,
+            showPCode: $viewModel.display.showPCode,
+            showStackState: $viewModel.display.showStackState,
+            showPseudoCode: $viewModel.display.showPseudoCode,
+            showVariables: $viewModel.display.showVariables,
+            verbose: $viewModel.display.verbose
         ))
         .onAppear {
             viewModel.restoreLastFile()

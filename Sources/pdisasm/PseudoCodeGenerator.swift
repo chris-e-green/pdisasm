@@ -152,8 +152,8 @@ struct PseudoCodeGenerator {
                     }
                 case "CHAR":
                     let (src, _) = stack.pop(true)
-                    if let ch = Int(src), ch >= 0x20 && ch <= 0x7E {
-                        return "\(destName) := '\(String(format: "%c", ch))'"
+                    if let ch = Int(src) {
+                        return "\(destName) := \(renderPascalCharLiteral(ch))"
                     } else {
                         return "\(destName) := \(src)"
                     }
@@ -715,11 +715,7 @@ struct PseudoCodeGenerator {
 
     private func chkCharType(_ loc: String) -> String {
         if let ch = Int(loc) {
-            if ch >= 0x20 && ch <= 0x7E {
-                return String(format: "'%c'", ch)
-            } else {
-                return String(format: "CHAR(%i)", ch)
-            }
+            return renderPascalCharLiteral(ch)
         } else {
             return loc
         }
@@ -792,7 +788,9 @@ struct PseudoCodeGenerator {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         let formatted = elements.map { element in
-            let rangeParts = element.components(separatedBy: "...")
+            let rangeParts = element.contains("...")
+                ? element.components(separatedBy: "...")
+                : element.components(separatedBy: "..")
             if rangeParts.count == 2,
                 let lower = Int(rangeParts[0]),
                 let upper = Int(rangeParts[1])
@@ -808,16 +806,7 @@ struct PseudoCodeGenerator {
     }
 
     private func charLiteral(_ value: Int) -> String {
-        guard value >= 0x20 && value <= 0x7E,
-            let scalar = UnicodeScalar(value)
-        else {
-            return "CHR(\(value))"
-        }
-        let character = String(Character(scalar))
-        if character == "'" {
-            return "''''"
-        }
-        return "'\(character)'"
+        renderPascalCharLiteral(value)
     }
 
 }

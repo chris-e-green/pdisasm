@@ -506,3 +506,30 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertFalse(out.contains("undefined type CHAR"))
     }
 }
+
+extension OutputFlagTests {
+    func testShowPascalSourceEmitsSourceLikeBlockWithoutChangingPseudocodeToggle() {
+        let (dict, codeSegs, locs, procs, callers) = makeMinimalInputs()
+        var stream = StringStream()
+        outputResults(
+            to: &stream,
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegs: codeSegs,
+            dataSegs: [],
+            allLocations: locs,
+            allProcedures: procs,
+            allCallers: callers,
+            showMarkup: false,
+            showPCode: false,
+            showPseudoCode: false,
+            showPascalSource: true
+        )
+
+        XCTAssertFalse(stream.text.contains("  MYPROC := 5\n"))
+        XCTAssertTrue(stream.text.contains("PROCEDURE MYPROC;"))
+        XCTAssertTrue(stream.text.contains("BEGIN"))
+        XCTAssertTrue(stream.text.contains("  MYPROC := 5;"))
+        XCTAssertTrue(stream.text.contains("END"))
+    }
+}

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A view for browsing and editing metadata files used by the disassembler.
+/// A low-level utility for browsing and editing raw metadata files used by the disassembler.
 public struct MetadataEditorView: View {
     var relevantFilenames: [String] = []
     @State private var viewModel = MetadataViewModel()
@@ -24,7 +24,7 @@ public struct MetadataEditorView: View {
                 ContentUnavailableView(
                     "No File Selected",
                     systemImage: "tablecells",
-                    description: Text("Select a metadata file from the sidebar to view and edit its contents.")
+                    description: Text("Select a raw metadata file from the sidebar to inspect or edit it directly.")
                 )
             } else {
                 VStack(spacing: 0) {

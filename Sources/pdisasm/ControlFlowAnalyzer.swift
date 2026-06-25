@@ -400,7 +400,7 @@ struct ControlFlowAnalyzer {
                             caseLabel.append("\(group[0])")
                         } else {
                             caseLabel.append(
-                                "\(group.first!)...\(group.last!)"
+                                "\(group.first!)..\(group.last!)"
                             )
                         }
                         caseValues = Array(

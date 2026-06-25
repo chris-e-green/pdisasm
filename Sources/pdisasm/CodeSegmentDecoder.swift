@@ -150,7 +150,8 @@ struct CodeSegmentDecoder {
                         code: segCodeBlock,
                         addr: procStartOffset,
                         assemblerEntryPoints: &asmEntryPoints,
-                        procedureBounds: procedureBounds
+                        procedureBounds: procedureBounds,
+                        cancellation: cancellation
                     )
                     if cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
                     if proc.segmentEndAddress == nil {

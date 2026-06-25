@@ -1,171 +1,174 @@
 # New architecture implementation verification
 
-Verification date: 2026-06-18.
+Verification date: 2026-06-20.
 
 ## Result
 
-The replacement architecture is **partially implemented**. The branch now has the first service-oriented seams from `docs/architecture-review.md`: canonical IDs, a shared `DisassemblyService`, immutable snapshot/document/index products, a metadata repository facade, and export renderers. However, much of the implementation is still an adapter over the legacy mutable disassembler rather than the deterministic staged architecture described in the review.
+The replacement architecture is **partially implemented and materially further along than the previous verification snapshot**. The branch has real service-oriented seams from `docs/architecture-review.md`: canonical IDs, a shared `DisassemblyService`, immutable snapshot/document/index products, a metadata repository facade, export renderers, typed metadata edit commands, coarse pipeline stage facades, provenance/status models, and source-map coverage metrics.
 
-The next work should therefore avoid a broad rewrite. The recommended path is to harden the existing seams, move remaining side effects out of callers, and then split the legacy runner into independently testable stages.
+The implementation is still transitional. The application boundary is now service-shaped, deterministic metadata can be injected, and tests cover important architecture seams, but the central decode/reference/analysis/signature work is still wrapped by a legacy mutable disassembler rather than split into the deterministic staged architecture described in the review.
+
+The next work should therefore avoid a broad rewrite. The recommended path is to keep hardening the existing seams, split the remaining legacy middle into independently testable stages, and then make document generation snapshot-first for normal runs. The document target should move beyond a single monolithic stream toward a document set with per-procedure P-code, pseudocode, and assembly representation documents that GUI surfaces can open independently while CLI rendering flattens them back into the current intertwined output.
 
 ## Implemented
 
 - Core package boundaries are in place inside the existing Swift package: `pdisasm` has no target dependencies, the CLI depends only on `pdisasm`, and the package has no external dependencies.
 - macOS-only GUI targets are guarded by `#if os(macOS)`, so Linux builds and tests compile only portable targets.
-- Canonical IDs exist for code files, segments, procedures, instructions, locations, call edges, metadata facts, documents, and document nodes.
-- `DisassemblyService` provides a shared application API that returns a legacy result, immutable `ProgramSnapshot`, `DisassemblyDocument`, `DocumentIndexes`, and `RunReport`.
-- `DisassemblyRunRequest` has source, metadata snapshot, optional workspace, options, and cancellation-token fields.
-- `ProgramSnapshot` includes code-file summary, segment dictionary summary, type-environment summary, segment/procedure/instruction/location facts, call indexes, and diagnostics.
-- `DisassemblyDocument` includes sections, document nodes, node lookup, and a source-map field.
+- Canonical IDs exist for code files, segments, procedures, instructions, locations, call edges, metadata facts, documents, and document nodes, with adapter initializers for legacy identifiers and references.
+- `DisassemblyService` provides a shared application API that returns a legacy result, immutable `ProgramSnapshot`, a single compatibility `DisassemblyDocument`, `DocumentIndexes`, and `RunReport`.
+- `DisassemblyRunRequest` has source, explicit metadata snapshot, optional workspace, options, and cancellation-token fields.
+- `RunStatus`, `StageStatus`, `StageReport`, and `RunReport` distinguish success, degraded success, cancellation, and fatal errors, and map run status to process exit codes.
+- `CodefileLoadStage`, `MetadataMergeStage`, `LegacyPipelineStages`, `SnapshotBuildStage`, and `DocumentBuildStage` provide coarse stage facades with typed inputs/outputs and metrics.
+- Deterministic metadata injection is now supported for service runs that provide an explicit `MetadataSnapshot`; workspace loading is an adapter that resolves metadata before the legacy analysis call.
+- `ProgramSnapshot` includes code-file summary, segment dictionary summary, type-environment summary, segment/procedure/instruction/location facts, call indexes, diagnostics, and selected provenance for user-visible facts.
+- `DisassemblyDocument` includes sections, document nodes, node lookup, a source-map field, comment patching support, and a source-map coverage metric; it is still a compatibility single-document product rather than the desired document set.
 - `DocumentIndexes` exposes procedure, location, instruction, symbol, and token search indexes.
-- Metadata persistence is isolated for labels, procedures, and comments behind `MetadataRepository`, `FileBackedMetadataRepository`, provenance-aware bundles/snapshots, and `MetadataEditingService` invalidation scopes.
-- The CLI is a thin adapter that parses fixed arguments, invokes `DisassemblyService` or `BatchDisassemblyService`, and selects text, JSON, or call-graph output.
+- Metadata persistence is isolated behind `MetadataRepository`, `FileBackedMetadataRepository`, `InMemoryMetadataRepository`, `MetadataScopeResolver`, provenance-aware bundles/snapshots, and `MetadataEditingService` invalidation scopes.
+- Typed metadata edit commands now exist for labels, procedure names, parameters, return types, and comments, with validation against a current `ProgramSnapshot` when available.
+- Metadata invalidation scopes now include document-only updates, document patches, procedure signatures, call-graph propagation, full disassembly, and no-op/error cases.
+- The CLI is a thin adapter that parses fixed arguments, invokes `DisassemblyService` or `BatchDisassemblyService`, selects text, JSON, or call-graph output, and exits using `RunStatus.processExitCode`.
 - Rendering/export seams exist for text documents, stable JSON export, and DOT call-graph export.
+- Architecture-focused tests cover deterministic byte-source runs with in-memory metadata, stage facades, source-map references, provenance, status semantics, metadata precedence, typed edit commands, invalidation, and consolidated-target dependency checks.
 - Linux test coverage currently passes for the portable targets.
 
 ## Remaining gaps
 
-### 1. Deterministic metadata injection is incomplete
+### 1. The middle of the analysis pipeline is still legacy-backed
 
-`DisassemblyRunRequest.metadata` exists, but `DisassemblyService` still delegates to the legacy `disassemble(...)` path, which resolves and loads metadata through a workspace. This means the service contract does not yet fully satisfy the architecture goal that bytes, metadata snapshot, options, and tool version determine the result.
-
-Required changes:
-
-- Add a legacy-runner entry point that accepts a fully merged `MetadataSnapshot` instead of deriving all metadata from file names and application-support paths.
-- Move file/version metadata name selection into an application-layer resolver that returns scopes plus provenance.
-- Add tests that run from `.bytes` plus in-memory metadata and assert no application-support metadata is read.
-- Keep workspace-based loading as an adapter that produces the snapshot before analysis.
-
-### 2. Pipeline stages are reported but not separated
-
-`RunReport` and `StageReport` exist, but the pipeline is still mostly one synchronous legacy operation plus snapshot/document build. The explicit stages in the architecture review are not separate units with typed inputs and outputs.
+`DisassemblyService` now calls separate codefile-load, metadata-merge, snapshot-build, and document-build stages, but the decode/reference/analysis/signature work still flows through `LegacyPipelineStages`, which delegates to `disassemble(...)`. This means the central domain work remains a mutable legacy operation with a new service boundary around it.
 
 Required changes:
 
-- Extract `CodefileLoadStage`, `MetadataMergeStage`, `SegmentDecodeStage`, `ReferenceResolutionStage`, `AnalysisStage`, `SignatureConvergenceStage`, `SnapshotBuildStage`, and `DocumentBuildStage` types.
-- Start by wrapping existing code in stage facades without changing algorithms.
-- Add per-stage unit tests using in-memory inputs.
-- Define stage fatality/completeness rules so malformed procedures degrade the run instead of being treated like infrastructure failures.
+- Extract `SegmentDecodeStage`, `ReferenceResolutionStage`, `AnalysisStage`, and `SignatureConvergenceStage` from the legacy runner.
+- Preserve current algorithms initially, but give each stage typed input/output values, metrics, diagnostics, and fatality/completeness rules.
+- Move stage report construction out of the legacy runner and into the stages that own the corresponding work.
+- Add in-memory unit tests for each extracted stage before attempting behavioral changes.
 
-### 3. Cancellation only works at service boundaries
+### 2. Deterministic metadata injection is mostly implemented but still coupled to legacy adapters
 
-The request supports `CancellationToken`, and `DisassemblyService` checks it before and after legacy work. The legacy disassembler remains synchronous and cannot be interrupted mid-decode or mid-analysis.
+Explicit `MetadataSnapshot` input now works and tests prove `.bytes` plus in-memory metadata can run without reading application-support metadata. However, the metadata snapshot is still translated into the legacy disassembler path, and some file/version metadata scope decisions remain close to compatibility logic.
 
 Required changes:
 
-- Thread a lightweight cancellation/progress context through the extracted stages.
-- Check cancellation at segment, procedure, and fixed-point-iteration boundaries.
-- Return a distinct cancelled result/error that callers can distinguish from malformed input.
+- Keep `MetadataScopeResolver` as the application-layer adapter for workspace/application-support metadata.
+- Continue removing filename-oriented metadata assumptions from analysis internals.
+- Ensure every metadata-dependent analysis path consumes the resolved `MetadataSnapshot`, not repository or file-system state.
+- Add regression tests for project/workspace/application-support precedence as new scopes are introduced.
+
+### 3. Cancellation is still boundary-oriented
+
+The request supports `CancellationToken`, and stages check cancellation at service/stage boundaries. The legacy disassembler remains mostly synchronous and cannot reliably stop in the middle of decode, reference resolution, stack simulation, type inference, or signature convergence.
+
+Required changes:
+
+- Thread a lightweight cancellation/progress context through the extracted decode and analysis stages.
+- Check cancellation at segment, procedure, instruction, and fixed-point-iteration boundaries.
+- Preserve the distinct cancelled status/error so CLI, batch, and GUI callers can distinguish cancellation from malformed input.
 - Update GUI loading paths to cancel obsolete runs when a new file or option set is selected.
 
-### 4. Metadata editing is still partly filename-oriented and not fully validated
+### 4. Document generation is not yet snapshot-first or representation-oriented for normal runs
 
-`MetadataEditingService` exists, but some APIs still require callers to pass file identifiers or metadata filenames. The GUI metadata editor still discovers, parses, and saves metadata files directly for general editing workflows.
-
-Required changes:
-
-- Replace filename parameters in edit commands with typed targets and metadata scopes.
-- Validate edit targets against the current `ProgramSnapshot` before writing.
-- Centralize CSV/JSON/Pascal metadata parsing and saving behind repository APIs.
-- Add atomic write-with-backup behavior for all file-backed saves.
-- Keep a separate advanced raw-file editor only if it is intentionally documented as a low-level utility.
-
-### 5. GUI architecture has not moved to session/controller ownership
-
-The GUI view models still own rerun orchestration, search state, metadata editor plumbing, and rendered-line navigation. The planned `DocumentSessionController`, `DocumentPresentationModel`, `SearchController`, and `MetadataEditCoordinator` are not implemented.
+The `DisassemblyDocument` contract is in place, source-map coverage is measured, and a snapshot-derived document builder exists. For normal disassembly runs, however, `DocumentBuildStage` still builds compatibility documents from legacy structured output lines and reverse-maps those lines to snapshot facts. It also still produces a single mixed document instead of the target `DisassemblyDocumentSet` described in the architecture review.
 
 Required changes:
 
-- Introduce `DocumentSessionController` as the only GUI-facing owner of open sessions, reruns, invalidation handling, and cancellation.
-- Move filtered-line construction and sidebar derivation into a presentation model built from `DisassemblyDocument` and `DocumentIndexes`.
-- Move search to the document index rather than scanning rendered lines as the primary path.
-- Convert selection/navigation to `DocumentNodeID`, `ProcedureID`, `LocationID`, and `InstructionID`; keep string anchors only for display compatibility.
-
-### 6. Source maps and document indexes need deeper population
-
-The document has a `sourceMap`, but its population depends on references exposed by the legacy renderer. Many document nodes cannot yet be mapped precisely back to source instructions, locations, or procedure facts.
-
-Required changes:
-
-- Build document nodes from `ProgramSnapshot` wherever possible instead of reverse-mapping rendered legacy lines.
+- Build normal document nodes from `ProgramSnapshot` wherever possible instead of from legacy structured lines.
+- Introduce `DisassemblyDocumentSet` as the run-level product, with Pascal procedures split into P-code and pseudocode documents and assembler procedures represented by a single assembly document.
+- Preserve CLI behavior through a flattening renderer that emits enabled representation documents in stable procedure order, rather than requiring the core document model to be intertwined.
+- Add explicit cross-document links for P-code↔pseudocode equivalence, instruction-to-derived-statement provenance, call-site-to-callee navigation, caller backlinks, location declarations/references, diagnostics, and comments.
 - Add source references for procedure headers, variable/location declarations, pseudocode statements, P-code instructions, assembler lines, diagnostics, and comments.
-- Add snapshot tests for source-map coverage on representative fixtures.
-- Use source-map coverage metrics in `RunReport` so regressions are visible.
+- Keep the current structured-line renderer as a compatibility renderer and regression oracle while the snapshot-first document-set renderer matures.
+- Add source-map and cross-document-link coverage thresholds for representative fixtures so regressions are visible in tests and `RunReport` metrics.
 
-### 7. Immutable snapshots lack complete provenance and status detail
+### 5. Metadata editing still has compatibility escape hatches
 
-`ProgramSnapshot` captures key facts, but not all useful facts carry provenance. `RunReport` does not yet fully distinguish fatal failures, degraded success, incomplete procedure analysis, metadata warnings, fixed-point non-convergence, and cancellation.
+Typed metadata commands and validation exist, but compatibility APIs still allow raw metadata filenames and the GUI metadata editor still supports direct raw-file discovery/editing workflows. This is useful for low-level maintenance, but it should not remain the primary edit path.
 
 Required changes:
 
-- Add provenance to user-visible names, types, signatures, comments, and inferred facts.
-- Expand run status into fatal/degraded/incomplete/cancelled categories.
+- Keep filename/raw-file APIs documented as advanced escape hatches only.
+- Route normal GUI metadata edits through typed `MetadataEditCommand` values and `MetadataEditingService`.
+- Validate edit targets against the current `ProgramSnapshot` before writing whenever a snapshot is available.
+- Centralize CSV/JSON/Pascal metadata parsing and saving behind repository APIs.
+- Ensure atomic write-with-backup behavior covers all file-backed saves used by typed edit commands.
+
+### 6. GUI architecture has not fully moved to session/controller ownership
+
+A `DocumentSessionController` exists, but the GUI is not yet fully reduced to a presentation layer over application services. View models still own some rerun orchestration, search state, metadata editor plumbing, rendered-line filtering, and navigation behavior.
+
+Required changes:
+
+- Make `DocumentSessionController` the only GUI-facing owner of open sessions, reruns, invalidation handling, and cancellation.
+- Move filtered-line construction and sidebar derivation into a presentation model built from `DisassemblyDocumentSet`, per-document indexes, and cross-document indexes.
+- Move search to `DocumentIndexes.search(_:)`, falling back to rendered text only for compatibility.
+- Convert selection/navigation to `DocumentNodeID`, `ProcedureID`, `LocationID`, `InstructionID`, and representation-aware navigation targets; keep string anchors only for display compatibility.
+
+### 7. Provenance and status are present but not complete
+
+`FactProvenance`, metadata provenance, `RunStatus`, and stage status are now in place. Snapshot facts carry selected provenance, and CLI exit mapping exists. The model still does not capture complete provenance for every user-visible name/type/signature/comment/inferred fact, and fixed-point convergence detail is still coarse.
+
+Required changes:
+
+- Add provenance to all user-visible names, types, signatures, comments, and inferred facts that can affect user trust.
 - Add bounded fixed-point convergence reporting for signature/type propagation.
-- Map report status to CLI exit behavior and GUI status messages.
+- Preserve fatal/degraded/incomplete/cancelled distinctions across batch and GUI reporting.
+- Make metadata warnings, malformed-procedure degradation, and non-convergence visible in both CLI and GUI status surfaces.
 
 ### 8. Physical target split remains deferred
 
-The logical architecture still lives inside the single `pdisasm` target. This is acceptable for now, but it allows accidental dependency drift.
+The logical architecture still lives inside the single `pdisasm` target. This remains acceptable while APIs churn, but it allows accidental dependency drift.
 
 Required changes:
 
 - Keep physical target splitting deferred until stage boundaries stabilize.
-- In the meantime, enforce directory/file-level dependency rules with tests or a lightweight architecture check script.
+- Continue enforcing directory/file-level dependency rules with tests or lightweight architecture checks while targets remain consolidated.
 - Split targets only after `domain`, `metadata`, `analysis`, `document`, `rendering`, and `application` APIs stop churning.
 
 ## Recommended implementation plan
 
-### Phase A: lock current seams and deterministic inputs
+### Phase A: finish splitting the legacy middle
 
-1. Add an in-memory metadata repository and tests for metadata precedence.
-2. Add a service test that runs from `.bytes` and an explicit metadata snapshot.
-3. Introduce a metadata scope resolver that converts workspace/project/application-support state into a `MetadataSnapshot` before analysis.
-4. Add a legacy adapter that accepts `MetadataSnapshot` directly.
-
-Exit criteria:
-
-- `DisassemblyService` can run without reading application-support metadata when metadata is provided explicitly.
-- CLI and GUI still support existing workspace metadata behavior through the resolver adapter.
-
-### Phase B: extract stage facades around the legacy pipeline
-
-1. Create stage input/output structs matching the review contract.
-2. Move codefile loading and metadata merge out of the legacy runner first.
-3. Wrap decode/reference/analysis/signature behavior as coarse stages while preserving legacy internals.
-4. Populate `RunReport` exclusively from stage results.
+1. Extract `SegmentDecodeStage`, `ReferenceResolutionStage`, `AnalysisStage`, and `SignatureConvergenceStage` as coarse wrappers around existing code.
+2. Define stage input/output structs matching the review contract.
+3. Preserve existing behavior and rendered output while relocating stage ownership and report construction.
+4. Add in-memory tests for each stage.
 
 Exit criteria:
 
-- Each stage can be invoked in a test with in-memory inputs.
-- Stage metrics and diagnostics identify where degraded output originated.
+- Each major analysis stage can be invoked in a test with in-memory inputs.
+- `RunReport` stage metrics and diagnostics identify where degraded output originated.
+- `LegacyPipelineStages` no longer hides decode/reference/analysis/signature work behind one opaque call.
 
-### Phase C: make document generation snapshot-first
+### Phase B: make document generation snapshot-first and document-set based
 
 1. Build procedure, variable, instruction, pseudocode, assembler, diagnostic, and comment nodes from `ProgramSnapshot`.
-2. Treat the current structured-line renderer as a compatibility renderer, not the document source of truth.
-3. Improve source-map and index coverage until GUI navigation no longer depends on rendered anchor strings.
-4. Keep text snapshots comparing the new document-derived renderer to current output.
+2. Introduce a `DisassemblyDocumentSet` that groups per-procedure representation documents: P-code and pseudocode for Pascal procedures, one assembly document for assembler procedures, plus any run-level/global documents.
+3. Add cross-document links and representation-aware navigation targets so the GUI can move between P-code and pseudocode, callers and callees, declarations and references, and diagnostics and sources.
+4. Treat the current structured-line renderer as a compatibility renderer, not the document source of truth.
+5. Improve source-map, link, and index coverage until GUI navigation no longer depends on rendered anchor strings.
+6. Keep text snapshots comparing the new document-set flattening renderer to current CLI output.
 
 Exit criteria:
 
-- Renderers no longer require mutable legacy procedures.
-- Source-map coverage is measured and tested.
+- Renderers no longer require mutable legacy procedures for normal output.
+- Source-map and cross-document-link coverage are measured, thresholded, and tested.
+- CLI output remains compatible by flattening the document set, while GUI presentation can open independent procedure representation documents.
 
-### Phase D: centralize metadata edits and invalidation
+### Phase C: centralize metadata edits and invalidation
 
-1. Define typed metadata edit commands for labels, procedure names, parameters, return types, and comments.
+1. Route normal GUI edits through typed metadata commands.
 2. Validate commands against `ProgramSnapshot` and return diagnostics with invalidation scope.
-3. Implement atomic file-backed saves with backups.
-4. Replace GUI metadata writes with `MetadataEditingService` commands.
+3. Ensure atomic file-backed saves with backups for all typed edit paths.
+4. Keep raw metadata file editing as an explicitly documented advanced utility.
 
 Exit criteria:
 
-- GUI edit paths no longer parse metadata files or choose metadata filenames.
+- GUI edit paths no longer choose metadata filenames for normal operations.
 - Comment edits patch documents; signature/type edits return procedure/call-graph/full-rerun scopes.
 
-### Phase E: add GUI session ownership
+### Phase D: add GUI session ownership and cancellation
 
-1. Implement `DocumentSessionController` for open/rerun/apply-edit/cancel behavior.
+1. Make `DocumentSessionController` own open/rerun/apply-edit/cancel behavior.
 2. Split current GUI state into session state, presentation model, search controller, and edit coordinator.
 3. Move search to `DocumentIndexes.search(_:)`, falling back to rendered text only for compatibility.
 4. Cancel stale runs when options or selected files change.
@@ -174,29 +177,41 @@ Exit criteria:
 
 - The GUI is a presentation layer over application services.
 - Rerun and invalidation policy exists in one place.
+- Stale background work is cancelled predictably.
 
-### Phase F: formalize status, provenance, and architecture enforcement
+### Phase E: formalize status, provenance, and architecture enforcement
 
-1. Expand `RunReport` status semantics and CLI exit mapping.
-2. Add provenance to all user-visible facts in snapshots/documents.
-3. Add architecture checks for forbidden imports/dependencies while targets remain consolidated.
-4. Create ADRs for metadata scopes, ID serialization, snapshot boundary, document contract, invalidation policy, and run status semantics.
+1. Complete provenance for user-visible facts in snapshots/documents.
+2. Add convergence/detail reporting for type and signature propagation.
+3. Expand architecture checks for forbidden imports/dependencies while targets remain consolidated.
+4. Keep ADRs updated as stage, metadata, document, invalidation, and status contracts evolve.
 
 Exit criteria:
 
-- Batch/CI callers can distinguish success, degraded success, cancellation, and fatal errors.
+- Batch/CI callers can distinguish success, degraded success, cancellation, fatal errors, non-convergence, and malformed-input degradation.
 - Future refactors have enforceable boundaries and documented decisions.
+
+### Phase F: split physical targets after boundaries stabilize
+
+1. Split `domain`, `metadata`, `analysis`, `document`, `rendering`, and `application` APIs into separate package targets only after stage APIs stop churning.
+2. Preserve existing CLI and GUI public behavior during the split.
+3. Keep architecture-boundary tests as package dependency tests once targets are separate.
+
+Exit criteria:
+
+- Target dependencies match the review's intended dependency direction.
+- Accidental dependency drift is prevented by Swift package structure instead of only tests.
 
 ## Suggested next pull requests
 
-1. **Deterministic metadata input PR:** in-memory repository, metadata scope resolver, direct snapshot injection into legacy runner, and tests proving no implicit app-support reads.
-2. **Stage facade PR:** codefile-load and metadata-merge stages plus coarse legacy decode/analyze stages and richer `RunReport` metrics.
-3. **Document source-map PR:** snapshot-first document nodes for procedure headers and instructions, source-map coverage metric, and fixture tests.
-4. **Typed metadata command PR:** edit-command model, snapshot validation, atomic writes, and GUI comment-edit migration.
-5. **Session controller PR:** GUI `DocumentSessionController`, cancellation of stale runs, and search via `DocumentIndexes`.
+1. **Legacy middle stage extraction PR:** split `LegacyPipelineStages` into `SegmentDecodeStage`, `ReferenceResolutionStage`, `AnalysisStage`, and `SignatureConvergenceStage` wrappers with typed outputs and per-stage tests.
+2. **Snapshot-first document-set PR:** make normal document generation use `ProgramSnapshot`, introduce per-procedure representation documents and cross-document links, add source-map/link coverage thresholds, and keep flattened renderer-output snapshots stable.
+3. **GUI typed-edit PR:** route normal label/procedure/comment edits through `MetadataEditingService` and reserve raw metadata editing for advanced workflows.
+4. **GUI session/cancellation PR:** consolidate open/rerun/apply-edit/cancel behavior in `DocumentSessionController` and cancel stale runs.
+5. **Provenance/status completion PR:** add full fact provenance and convergence/degradation reporting across CLI, batch, and GUI surfaces.
 
 ## Verification commands
 
-- `git status --short`
-- `rg -n "struct (CodeFileID|SegmentID|ProcedureID|InstructionID|LocationID|CallEdgeID)|struct DisassemblyRunRequest|struct ProgramSnapshot|struct DisassemblyDocument|struct DocumentIndexes|struct MetadataEditingService|protocol MetadataRepository|struct DisassemblyService|struct BatchDisassemblyService|JSONDocumentExporter|CallGraphExporter|renderDisassemblyDocument|#if os\\(macOS\\)|dependencies: \\[\\]" Sources Package.swift`
+- `git status --short --branch`
+- `rg -n "struct (CodeFileID|SegmentID|ProcedureID|InstructionID|LocationID|CallEdgeID)|struct DisassemblyRunRequest|struct ProgramSnapshot|struct DisassemblyDocument|struct DocumentIndexes|struct MetadataEditingService|protocol MetadataRepository|struct DisassemblyService|struct BatchDisassemblyService|JSONDocumentExporter|CallGraphExporter|renderDisassemblyDocument|struct CodefileLoadStage|struct MetadataMergeStage|struct LegacyPipelineStages|RunStatus|StageStatus|#if os\\(macOS\\)|dependencies: \\[\\]" Sources Package.swift`
 - `swift test`

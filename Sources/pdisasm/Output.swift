@@ -749,7 +749,16 @@ public func renderStructuredLines(
                             if showStackState {
                                 pcLine += " " + prettyStack(inst.stackState ?? [])
                             }
-                            addLine(.pcode, pcLine, location: inst.memLocation)
+                            addLine(
+                                .pcode,
+                                pcLine,
+                                location: inst.memLocation,
+                                commentReference: InstructionReference(
+                                    segment: s,
+                                    procedure: proc.identifier?.procedure,
+                                    addr: address
+                                )
+                            )
                             if paramStrings.count > 1 {
                                 for i in 1..<paramStrings.count {
                                     addLine(.pcode,
@@ -912,6 +921,7 @@ func outputResults(
     showPCode: Bool = true,
     showStackState: Bool = false,
     showPseudoCode: Bool = true,
+    showPascalSource: Bool = false,
     showDot: Bool = false
 ) {
     var stream = StdoutStream()
@@ -936,6 +946,7 @@ func outputResults(
         showPCode: showPCode,
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
+        showPascalSource: showPascalSource,
         showDot: showDot
     )
 }
@@ -962,6 +973,7 @@ func outputResults<Target: TextOutputStream>(
     showPCode: Bool = true,
     showStackState: Bool = false,
     showPseudoCode: Bool = true,
+    showPascalSource: Bool = false,
     showDot: Bool = false
 ) {
     if showDot {
@@ -1000,5 +1012,53 @@ func outputResults<Target: TextOutputStream>(
             )
         }
         .map(\.text)
-    writeLines(filteredLines, to: &stream)
+    var outputLines = filteredLines
+    if showPascalSource {
+        outputLines.append(contentsOf: renderPascalSourceLines(from: result, showMarkup: showMarkup))
+    }
+    writeLines(outputLines, to: &stream)
+}
+
+public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: Bool = true) -> [String] {
+    var lines: [String] = []
+    if showMarkup {
+        lines.append("#  Pascal source reconstruction for \(result.sourceFilename)")
+        lines.append("")
+    }
+
+    for (segmentNumber, codeSegment) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
+        let segmentName = result.segDictionary.segTable[segmentNumber]?.name ?? "SEG\(segmentNumber)"
+        if showMarkup {
+            lines.append("## Segment \(segmentName) (\(segmentNumber))")
+            lines.append("")
+        }
+
+        for procedure in codeSegment.procedures.sorted(by: { ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1) }) {
+            guard procedure.identifier?.isAssembly == false else { continue }
+            if let identifier = procedure.identifier {
+                lines.append("PROCEDURE \(renderPascalIdentifier(identifier.procName ?? "P\(identifier.procedure)"));")
+            } else {
+                lines.append("PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));")
+            }
+            if showMarkup { lines.append("```pascal") }
+            var statements: [PascalStmt] = []
+            for (_, instruction) in procedure.instructions.sorted(by: { $0.key < $1.key }) {
+                for pre in instruction.prePseudoCode.reversed() {
+                    statements.append(.raw(pre))
+                }
+                if let pseudo = instruction.pseudoCodeStatement {
+                    statements.append(pseudo.pascalSourceStatement)
+                } else if let pseudo = instruction.pseudoCode {
+                    statements.append(PseudoCodeStatement(renderedText: pseudo, locations: result.allLocations).pascalSourceStatement)
+                }
+            }
+            lines.append(contentsOf: PascalBlock(statements: statements).rendered())
+            lines.append(";")
+            if showMarkup {
+                lines.append("```")
+                lines.append("")
+            }
+        }
+    }
+    return lines
 }

@@ -9,6 +9,7 @@ struct PdisasmCLI {
   var showPcode = false
   var showStackState = false
   var showPseudocode = false
+  var showSource = false
   var showDot = false
   var workspaceDirectory: String?
   var jsonOutput: String?
@@ -26,6 +27,7 @@ struct PdisasmCLI {
       case "--show-pcode": showPcode = true
       case "--show-stack-state": showStackState = true
       case "--show-pseudocode": showPseudocode = true
+      case "--show-source", "--show-pascal-source": showSource = true
       case "--show-dot": showDot = true
       case "--batch": batchMode = true
       case "--workspace":
@@ -67,6 +69,7 @@ struct PdisasmCLI {
       showPCode: showPcode,
       showStackState: showStackState,
       showPseudoCode: showPseudocode,
+      showPascalSource: showSource,
       showDot: showDot
     )
 
@@ -96,13 +99,17 @@ struct PdisasmCLI {
     } else if let callGraphOutput {
       try CallGraphExporter().write(result.snapshot, to: URL(fileURLWithPath: callGraphOutput))
     } else {
-      print(
-        renderDisassemblyDocument(
-          result.document,
-          showMarkup: showMarkup,
-          showPCode: showPcode,
-          showPseudoCode: showPseudocode
-        ), terminator: "")
+      if showSource {
+        print(renderPascalSourceLines(from: result.legacyResult, showMarkup: showMarkup).joined(separator: "\n"))
+      } else {
+        print(
+          renderDisassemblyDocument(
+            result.document,
+            showMarkup: showMarkup,
+            showPCode: showPcode,
+            showPseudoCode: showPseudocode
+          ), terminator: "")
+      }
     }
     Foundation.exit(result.report.status.processExitCode)
   }
@@ -122,7 +129,7 @@ struct PdisasmCLI {
   }
 
   static let helpText = """
-    USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-dot]
+    USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
     """
 }
 

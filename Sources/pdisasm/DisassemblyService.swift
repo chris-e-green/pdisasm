@@ -4,19 +4,22 @@ public enum CodeFileSource: Sendable {
     case file(URL)
     case bytes(Data, suggestedFilename: String)
 
-    var filenameForLegacyRunner: String {
+    var sourceIdentity: String {
+        switch self {
+        case .file(let url):
+            return url.path
+        case .bytes(_, let suggestedFilename):
+            return suggestedFilename
+        }
+    }
+
+    var data: Data {
         get throws {
             switch self {
             case .file(let url):
-                return url.path
-            case .bytes(let data, let suggestedFilename):
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("pdisasm-")
-                    .appendingPathComponent(UUID().uuidString)
-                    .appendingPathComponent(suggestedFilename)
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: url)
-                return url.path
+                return try Data(contentsOf: url)
+            case .bytes(let data, _):
+                return data
             }
         }
     }
@@ -30,9 +33,10 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     public var showPCode: Bool
     public var showStackState: Bool
     public var showPseudoCode: Bool
+    public var showPascalSource: Bool
     public var showDot: Bool
 
-    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showDot: Bool = false) {
+    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showPascalSource: Bool = false, showDot: Bool = false) {
         self.verbose = verbose
         self.writeMetadata = writeMetadata
         self.overwriteMetadata = overwriteMetadata
@@ -40,6 +44,7 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
         self.showPCode = showPCode
         self.showStackState = showStackState
         self.showPseudoCode = showPseudoCode
+        self.showPascalSource = showPascalSource
         self.showDot = showDot
     }
 }
@@ -51,6 +56,14 @@ public protocol CancellationToken: Sendable {
 public struct DisassemblyCancelledError: Error, Sendable, CustomStringConvertible {
     public init() {}
     public var description: String { "Disassembly was cancelled" }
+}
+
+public extension CancellationToken {
+    func checkCancellation() throws {
+        if isCancellationRequested {
+            throw DisassemblyCancelledError()
+        }
+    }
 }
 
 public struct DisassemblyRunRequest: Sendable {
@@ -75,9 +88,7 @@ public struct DisassemblyRunRequest: Sendable {
     }
 
     public func checkCancellation() throws {
-        if cancellation?.isCancellationRequested == true {
-            throw DisassemblyCancelledError()
-        }
+        try cancellation?.checkCancellation()
     }
 }
 
@@ -487,6 +498,14 @@ public struct DisassemblyRunResult: @unchecked Sendable {
     public let document: DisassemblyDocument
     public let indexes: DocumentIndexes
     public let report: RunReport
+
+    public init(legacyResult: DisassemblyResult, snapshot: ProgramSnapshot, document: DisassemblyDocument, indexes: DocumentIndexes, report: RunReport) {
+        self.legacyResult = legacyResult
+        self.snapshot = snapshot
+        self.document = document
+        self.indexes = indexes
+        self.report = report
+    }
 }
 
 public struct DisassemblyService: Sendable {
@@ -519,30 +538,25 @@ public struct DisassemblyService: Sendable {
         let legacyResult = legacy.result
         try request.checkCancellation()
         let codeFileID = CodeFileID(legacyResult.sourceFilename)
-        let snapshot = ProgramSnapshot.build(from: legacyResult, codeFileID: codeFileID)
-        let structuredLines = renderStructuredLines(
-            from: legacyResult,
-            showStackState: request.options.showStackState,
-            verbose: request.options.verbose
+        let snapshotBuild = try SnapshotBuildStage().run(
+            SnapshotBuildStageInput(result: legacyResult, codeFileID: codeFileID, cancellation: request.cancellation)
         )
-        let document = DisassemblyDocument.build(from: structuredLines, snapshot: snapshot, id: DocumentID(codeFileID.value), title: legacyResult.sourceFilename)
-        let indexes = DocumentIndexes.build(document: document)
+        let snapshot = snapshotBuild.snapshot
+        let documentBuild = try DocumentBuildStage().run(
+            DocumentBuildStageInput(
+                result: legacyResult,
+                snapshot: snapshot,
+                id: DocumentID(codeFileID.value),
+                title: legacyResult.sourceFilename,
+                showStackState: request.options.showStackState,
+                verbose: request.options.verbose,
+                cancellation: request.cancellation
+            )
+        )
+        let document = documentBuild.document
+        let indexes = documentBuild.indexes
         try request.checkCancellation()
-        let snapshotReport = StageReport(name: "snapshotBuild", metrics: [
-            "segments": snapshot.segments.count,
-            "procedures": snapshot.procedures.count,
-            "instructions": snapshot.instructions.count,
-            "locations": snapshot.locations.count,
-        ])
-        let documentReport = StageReport(name: "documentBuild", metrics: [
-            "documentNodes": document.nodes.count,
-            "sourceMappedNodes": document.sourceMap.count,
-            "sourceMapCoveragePercent": document.sourceMapCoveragePercent,
-            "procedureNodes": indexes.procedureNodes.count,
-            "instructionNodes": indexes.instructionNodes.count,
-            "locationNodes": indexes.locationNodes.count,
-        ])
-        let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotReport, documentReport]
+        let stageReports = [codefileLoad.report, metadataMerge.report] + legacy.reports + [snapshotBuild.report, documentBuild.report]
         let metadataWarnings = metadataMerge.report.diagnostics
         let report = RunReport(
             stages: stageReports,
@@ -559,6 +573,110 @@ public struct DisassemblyService: Sendable {
             indexes: indexes,
             report: report
         )
+    }
+}
+
+
+public struct SnapshotBuildStageInput: @unchecked Sendable {
+    public let result: DisassemblyResult
+    public let codeFileID: CodeFileID
+    public let cancellation: CancellationToken?
+
+    public init(result: DisassemblyResult, codeFileID: CodeFileID, cancellation: CancellationToken? = nil) {
+        self.result = result
+        self.codeFileID = codeFileID
+        self.cancellation = cancellation
+    }
+}
+
+public struct SnapshotBuildStageOutput: Sendable {
+    public let snapshot: ProgramSnapshot
+    public let report: StageReport
+}
+
+public struct SnapshotBuildStage: Sendable {
+    public init() {}
+
+    public func run(_ input: SnapshotBuildStageInput) throws -> SnapshotBuildStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let snapshot = ProgramSnapshot.build(from: input.result, codeFileID: input.codeFileID)
+        let danglingCalls = input.result.allCallers.filter { call in
+            guard let targetProcedure = call.target.procedure else { return true }
+            let targetID = ProcedureID(segment: SegmentID(codeFile: input.codeFileID, number: call.target.segment), number: targetProcedure)
+            return snapshot.procedures[targetID] == nil
+        }.count
+        let diagnostics = danglingCalls == 0 ? [] : ["Snapshot contains \(danglingCalls) call references without decoded target procedures"]
+        return SnapshotBuildStageOutput(snapshot: snapshot, report: StageReport(name: "snapshotBuild", isComplete: diagnostics.isEmpty, metrics: [
+            "segments": snapshot.segments.count,
+            "procedures": snapshot.procedures.count,
+            "instructions": snapshot.instructions.count,
+            "locations": snapshot.locations.count,
+            "callEdges": snapshot.callsByOrigin.values.reduce(0) { $0 + $1.count },
+            "diagnostics": input.result.diagnostics.count,
+            "danglingCalls": danglingCalls,
+        ], diagnostics: diagnostics))
+    }
+}
+
+public struct DocumentBuildStageInput: @unchecked Sendable {
+    public let result: DisassemblyResult
+    public let snapshot: ProgramSnapshot
+    public let id: DocumentID
+    public let title: String
+    public let showStackState: Bool
+    public let verbose: Bool
+    public let cancellation: CancellationToken?
+
+    public init(result: DisassemblyResult, snapshot: ProgramSnapshot, id: DocumentID, title: String, showStackState: Bool, verbose: Bool, cancellation: CancellationToken? = nil) {
+        self.result = result
+        self.snapshot = snapshot
+        self.id = id
+        self.title = title
+        self.showStackState = showStackState
+        self.verbose = verbose
+        self.cancellation = cancellation
+    }
+}
+
+public struct DocumentBuildStageOutput: Sendable {
+    public let document: DisassemblyDocument
+    public let indexes: DocumentIndexes
+    public let report: StageReport
+}
+
+public struct DocumentBuildStage: Sendable {
+    public init() {}
+
+    public func run(_ input: DocumentBuildStageInput) throws -> DocumentBuildStageOutput {
+        if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
+        let document: DisassemblyDocument
+        if input.result.codeSegments.isEmpty && !input.snapshot.procedures.isEmpty {
+            document = DisassemblyDocument.build(from: input.snapshot, id: input.id, title: input.title)
+        } else {
+            let lines = renderStructuredLines(
+                from: input.result,
+                showStackState: input.showStackState,
+                verbose: input.verbose
+            )
+            document = DisassemblyDocument.build(
+                from: lines,
+                snapshot: input.snapshot,
+                id: input.id,
+                title: input.title
+            )
+        }
+        let indexes = DocumentIndexes.build(document: document)
+        let unmappedNodes = document.nodes.count - document.sourceMap.count
+        return DocumentBuildStageOutput(document: document, indexes: indexes, report: StageReport(name: "documentBuild", metrics: [
+            "documentNodes": document.nodes.count,
+            "sourceMappedNodes": document.sourceMap.count,
+            "unmappedNodes": unmappedNodes,
+            "sourceMapCoveragePercent": document.sourceMapCoveragePercent,
+            "procedureNodes": indexes.procedureNodes.count,
+            "instructionNodes": indexes.instructionNodes.count,
+            "locationNodes": indexes.locationNodes.count,
+            "searchTerms": indexes.searchIndex.count,
+        ]))
     }
 }
 
@@ -742,6 +860,87 @@ private extension ProgramSnapshot {
 }
 
 private extension DisassemblyDocument {
+    static func build(from snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
+        var lines: [OutputLine] = []
+        var nextID = 0
+
+        func addLine(
+            _ kind: LineKind,
+            _ text: String,
+            anchor: String? = nil,
+            locationID: LocationID? = nil,
+            instructionID: InstructionID? = nil
+        ) {
+            lines.append(OutputLine(
+                id: nextID,
+                kind: kind,
+                text: text,
+                anchor: anchor,
+                locationReference: locationID.map(legacyReference),
+                commentReference: instructionID.map(legacyReference)
+            ))
+            nextID += 1
+        }
+
+        addLine(.markup, "#  \(snapshot.file.sourceFilename) ")
+        addLine(.markup, "")
+        if !snapshot.diagnostics.isEmpty {
+            addLine(.markup, "## Diagnostics")
+            for diagnostic in snapshot.diagnostics {
+                addLine(.diagnostic, "\(diagnostic.severity.rawValue.uppercased()): \(diagnostic.message)")
+            }
+            addLine(.diagnostic, "")
+        }
+
+        addLine(.markup, "## Globals")
+        for location in snapshot.locations.values.sorted(by: locationSort) where location.id.segment.number == 0 {
+            addLine(.global, locationLine(prefix: "G", location: location), locationID: location.id)
+        }
+        addLine(.global, "")
+
+        let dataSegments = Set(snapshot.file.dataSegmentNumbers)
+        for segmentNumber in dataSegments.sorted() {
+            addLine(.variable, "## Data Segment \(segmentNumber)")
+            for location in snapshot.locations.values.sorted(by: locationSort) where location.id.segment.number == segmentNumber {
+                addLine(.variable, locationLine(prefix: "D", location: location), locationID: location.id)
+            }
+        }
+        addLine(.variable, "")
+
+        for segment in snapshot.segments.values.sorted(by: { $0.id.number < $1.id.number }) {
+            addLine(.markup, "## Segment \(segment.name) (\(segment.id.number))")
+            addLine(.markup, "")
+            for procedureID in segment.procedureIDs {
+                guard let procedure = snapshot.procedures[procedureID] else { continue }
+                let anchor = "\(procedureID.segment.number).\(procedureID.number)"
+                addLine(.header, procedureHeaderText(for: procedure), anchor: anchor)
+                let callers = (snapshot.callsByTarget[procedureID] ?? []).compactMap { edge in
+                    snapshot.procedures[edge.origin.procedure]?.name
+                }.sorted()
+                if !callers.isEmpty {
+                    addLine(.header, "Callers: \(callers.joined(separator: ", "))")
+                }
+                addLine(.markup, "```")
+                for location in snapshot.locations.values.sorted(by: locationSort) where location.id.procedure == procedureID {
+                    addLine(.variable, locationLine(prefix: "L", location: location), locationID: location.id)
+                }
+                addLine(.markup, "```")
+                addLine(.markup, procedure.isAssembly ? "```assembly" : "```pascal")
+                addLine(.pseudocode, procedure.isAssembly ? "; ASSEMBLER PROCEDURE" : "BEGIN")
+                for instructionID in procedure.instructionIDs {
+                    guard let instruction = snapshot.instructions[instructionID] else { continue }
+                    addLine(.pcode, instructionLine(instruction, snapshot: snapshot), locationID: instruction.locationID, instructionID: instructionID)
+                }
+                addLine(.pseudocode, procedure.isAssembly ? ".END" : "END")
+                addLine(.markup, "```")
+                addLine(.markup, "")
+            }
+        }
+
+        return build(from: lines, snapshot: snapshot, id: id, title: title)
+    }
+
+    /// Compatibility renderer path for legacy structured output. New document generation should use ProgramSnapshot.
     static func build(from lines: [OutputLine], snapshot: ProgramSnapshot, id: DocumentID, title: String) -> DisassemblyDocument {
         let nodes = lines.map { line in
             DocumentNode(id: nodeID(for: line, in: id, snapshot: snapshot), line: line)
@@ -758,6 +957,62 @@ private extension DisassemblyDocument {
             }
         }
         return DisassemblyDocument(id: id, title: title, nodes: nodes, sections: sections, sourceMap: sourceMap)
+    }
+
+
+    private static func legacyReference(for id: InstructionID) -> InstructionReference {
+        InstructionReference(segment: id.procedure.segment.number, procedure: id.procedure.number, addr: id.offset)
+    }
+
+    private static func legacyReference(for id: LocationID) -> LocationReference {
+        LocationReference(segment: id.segment.number, procedure: id.procedure?.number, lexLevel: id.lexicalLevel, addr: id.address)
+    }
+
+    private static func locationSort(_ lhs: LocationFact, _ rhs: LocationFact) -> Bool {
+        if lhs.id.segment.number != rhs.id.segment.number { return lhs.id.segment.number < rhs.id.segment.number }
+        if (lhs.id.procedure?.number ?? -1) != (rhs.id.procedure?.number ?? -1) {
+            return (lhs.id.procedure?.number ?? -1) < (rhs.id.procedure?.number ?? -1)
+        }
+        if (lhs.id.lexicalLevel ?? -1) != (rhs.id.lexicalLevel ?? -1) {
+            return (lhs.id.lexicalLevel ?? -1) < (rhs.id.lexicalLevel ?? -1)
+        }
+        return (lhs.id.address ?? -1) < (rhs.id.address ?? -1)
+    }
+
+    private static func locationLine(prefix: String, location: LocationFact) -> String {
+        "\(prefix)\(location.id.address ?? -1)=\(location.name):\(location.type)"
+    }
+
+    private static func procedureHeaderText(for procedure: ProcedureSnapshot) -> String {
+        let keyword = procedure.isFunction ? "FUNCTION" : "PROCEDURE"
+        let assembly = procedure.isAssembly ? " ASSEMBLY" : ""
+        return "\(keyword) \(procedure.name) (* S=\(procedure.id.segment.number), P=\(procedure.id.number), LL=\(procedure.lexicalLevel), D=\(procedure.dataSize) PAR=\(procedure.parameterSize)\(assembly) *)"
+    }
+
+    private static func instructionLine(_ instruction: InstructionSnapshot, snapshot: ProgramSnapshot) -> String {
+        var text = String(format: "   %04x: ", instruction.id.offset)
+            + instruction.mnemonic.padding(toLength: 8, withPad: " ", startingAt: 0)
+        let params = instruction.parameters.map { value in
+            value > 0xff ? String(format: "%04x", value) : String(format: "%02x", value)
+        }.joined(separator: " ")
+        text += params.padding(toLength: 16, withPad: " ", startingAt: 0)
+        let comments = [instruction.comment, instruction.userComment]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !comments.isEmpty {
+            text += "; " + comments.joined(separator: "; ")
+        }
+        if let locationID = instruction.locationID, let location = snapshot.locations[locationID] {
+            text += " " + location.name
+        }
+        if let destinationID = instruction.destinationID {
+            if let procedureID = destinationID.procedure, let procedure = snapshot.procedures[procedureID] {
+                text += " " + procedure.name
+            } else if let location = snapshot.locations[destinationID] {
+                text += " " + location.name
+            }
+        }
+        return text
     }
 
     private static func sourceReference(for line: OutputLine, snapshot: ProgramSnapshot) -> SourceReference {
@@ -818,7 +1073,7 @@ private func buildSections(nodes: [DocumentNode], title: String) -> [DocumentSec
     return sections.isEmpty ? [DocumentSection(id: "main", title: title.isEmpty ? "Disassembly" : title, nodeIDs: nodes.map(\.id))] : sections
 }
 
-private extension DocumentIndexes {
+public extension DocumentIndexes {
     static func build(document: DisassemblyDocument) -> DocumentIndexes {
         var procedureNodes: [ProcedureID: DocumentNodeID] = [:]
         var locationNodes: [LocationID: [DocumentNodeID]] = [:]
@@ -876,7 +1131,10 @@ public func renderDisassemblyDocument(
 
 
 public extension MetadataSnapshot {
-    var isEmpty: Bool { labels.isEmpty && procedures.isEmpty && comments.isEmpty }
+    var isEmpty: Bool {
+        labels.isEmpty && procedures.isEmpty && comments.isEmpty && records.isEmpty && typeAliases.isEmpty
+            && scalarTypes.isEmpty && constants.isEmpty && subrangeTypes.isEmpty && globals.isEmpty
+    }
 }
 
 public struct CodefileLoadStageInput: Sendable {
@@ -894,8 +1152,8 @@ public struct CodefileLoadStage: Sendable {
 
     public func run(_ input: CodefileLoadStageInput) throws -> CodefileLoadStageOutput {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
-        let filename = try input.source.filenameForLegacyRunner
-        let data = try Data(contentsOf: URL(fileURLWithPath: filename))
+        let filename = input.source.sourceIdentity
+        let data = try input.source.data
         let codeData = CodeData(data: data)
         let fileIdentifier = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
         var version = 0
@@ -962,6 +1220,12 @@ public struct MetadataMergeStage: Sendable {
             "labels": snapshot.labels.count,
             "procedures": snapshot.procedures.count,
             "comments": snapshot.comments.count,
+            "records": snapshot.records.count,
+            "typeAliases": snapshot.typeAliases.count,
+            "scalarTypes": snapshot.scalarTypes.count,
+            "constants": snapshot.constants.count,
+            "subrangeTypes": snapshot.subrangeTypes.count,
+            "globals": snapshot.globals.count,
         ]))
     }
 
@@ -1003,7 +1267,8 @@ public struct LegacyPipelineStages: Sendable {
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         let metadata = input.metadata.isEmpty ? nil : input.metadata
         let result = try disassemble(
-            filename: input.codefile.filename,
+            data: input.codefile.data,
+            sourceFilename: input.codefile.filename,
             verbose: input.options.verbose,
             writeMetadata: input.options.writeMetadata,
             overwriteMetadata: input.options.overwriteMetadata,

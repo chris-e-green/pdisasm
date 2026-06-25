@@ -341,7 +341,8 @@ func decodeAssemblerProcedure(
     code: Data,
     addr: Int,
     assemblerEntryPoints: inout Set<Int>,
-    procedureBounds: Range<Int>? = nil
+    procedureBounds: Range<Int>? = nil,
+    cancellation: CancellationToken? = nil
 ) throws {
 
     func isAssemblerDataInstruction(_ instruction: Instruction) -> Bool {
@@ -434,6 +435,7 @@ func decodeAssemblerProcedure(
     // start out being 'in-code'
     var inCode = true
     repeat {
+        try cancellation?.checkCancellation()
         if instructionPointer >= codeEnd { break }
         try decodeAssemblerCodeInstruction(
             opcodeByte: op,
@@ -478,6 +480,7 @@ func decodeAssemblerProcedure(
     var decodedBackwardEntryPoints: Set<Int> = []
 
     while let entryPoint = pendingBackwardEntryPoints.sorted().first {
+        try cancellation?.checkCancellation()
         pendingBackwardEntryPoints.remove(entryPoint)
         if decodedBackwardEntryPoints.contains(entryPoint) { continue }
         decodedBackwardEntryPoints.insert(entryPoint)
@@ -493,6 +496,7 @@ func decodeAssemblerProcedure(
         var backwardInstructionPointer = entryPoint
         var backwardInCode = true
         while backwardInstructionPointer < codeEnd && backwardInCode {
+            try cancellation?.checkCancellation()
             if let existing = proc.instructions[backwardInstructionPointer] {
                 if isAssemblerDataInstruction(existing) {
                     proc.instructions.removeValue(forKey: backwardInstructionPointer)

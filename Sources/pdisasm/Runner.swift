@@ -255,7 +255,7 @@ private struct MetadataContext {
         commentsFile = "comments_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
         self.workspace = workspace
-        appSupportDirectory = workspace?.writableDirectory ?? URL.applicationSupportDirectory
+        appSupportDirectory = workspace?.writableDirectory ?? URL.pdisasmApplicationSupportDirectory
             .appendingPathComponent("pdisasm")
         store = MetadataStore(
             appSupportDirectory: appSupportDirectory,
@@ -531,6 +531,163 @@ private func runPascalAnalysisPass(
     return typeConflicts
 }
 
+
+private struct SegmentDecodeStageOutput {
+    var codeSegments: [Int: CodeSegment]
+    var dataSegments: [Int]
+    var report: StageReport
+}
+
+private struct SegmentDecodeStageFacade {
+    func run(
+        segDict: SegDictionary,
+        binaryData: CodeData,
+        verbose: Bool,
+        allLocations: inout Set<Location>,
+        allProcedures: inout [ProcedureIdentifier],
+        allCallers: inout Set<Call>,
+        diagnostics: DiagnosticCollector,
+        cancellation: CancellationToken? = nil
+    ) throws -> SegmentDecodeStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        let locationsBefore = allLocations.count
+        let proceduresBefore = allProcedures.count
+        let callersBefore = allCallers.count
+        var dataSegments: [Int] = []
+        let codeSegments = try decodeCodeSegments(
+            segDict: segDict,
+            binaryData: binaryData,
+            verbose: verbose,
+            allLocations: &allLocations,
+            allProcedures: &allProcedures,
+            allCallers: &allCallers,
+            dataSegments: &dataSegments,
+            diagnostics: diagnostics,
+            cancellation: cancellation
+        )
+        let procedureCount = codeSegments.values.reduce(0) { $0 + $1.procedures.count }
+        let instructionCount = codeSegments.values.reduce(0) { total, segment in
+            total + segment.procedures.reduce(0) { $0 + $1.instructions.count }
+        }
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        return SegmentDecodeStageOutput(
+            codeSegments: codeSegments,
+            dataSegments: dataSegments,
+            report: StageReport(name: "decode", metrics: [
+                "segments": codeSegments.count,
+                "procedures": procedureCount,
+                "instructions": instructionCount,
+                "dataSegments": dataSegments.count,
+                "locationsAdded": allLocations.count - locationsBefore,
+                "proceduresAdded": allProcedures.count - proceduresBefore,
+                "callersAdded": allCallers.count - callersBefore,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message))
+        )
+    }
+}
+
+private struct ReferenceResolutionStageOutput {
+    var typeConflicts: [TypeConflict]
+    var report: StageReport
+}
+
+private struct ReferenceResolutionStageFacade {
+    func run(
+        codeSegments: [Int: CodeSegment],
+        lineComments: [InstructionReference: String],
+        allCallers: inout Set<Call>,
+        allLocations: inout Set<Location>,
+        diagnostics: DiagnosticCollector
+    ) -> ReferenceResolutionStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        let locationsBefore = allLocations.count
+        applyDisassemblyComments(lineComments, to: codeSegments)
+        let conflicts = prepareDecodedProgram(
+            codeSegments: codeSegments,
+            allCallers: &allCallers,
+            allLocations: &allLocations
+        )
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        return ReferenceResolutionStageOutput(
+            typeConflicts: conflicts,
+            report: StageReport(name: "referenceResolution", metrics: [
+                "callers": allCallers.count,
+                "locations": allLocations.count,
+                "locationsAdded": allLocations.count - locationsBefore,
+                "commentsApplied": lineComments.count,
+                "typeConflicts": conflicts.count,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message))
+        )
+    }
+}
+
+private struct AnalysisSignatureStageOutput {
+    var typeConflicts: [TypeConflict]
+    var converged: Bool
+    var iterations: Int
+    var report: StageReport
+}
+
+private struct AnalysisSignatureStageFacade {
+    let maxSignatureIterations = 4
+
+    func run(
+        codeSegments: [Int: CodeSegment],
+        knownRecords: Set<PascalRecord>,
+        typeAliases: [String: String],
+        scalarTypes: [String: PascalScalarType],
+        allProcedures: inout [ProcedureIdentifier],
+        allLocations: inout Set<Location>,
+        diagnostics: DiagnosticCollector,
+        cancellation: CancellationToken? = nil
+    ) throws -> AnalysisSignatureStageOutput {
+        let diagnosticsBefore = diagnostics.diagnostics.count
+        var typeConflicts: [TypeConflict] = []
+        var iterations = 0
+        var previousFingerprint: String?
+        var converged = false
+        while iterations < maxSignatureIterations {
+            try cancellation?.checkCancellation()
+            iterations += 1
+            typeConflicts.append(contentsOf: runPascalAnalysisPass(
+                codeSegments: codeSegments,
+                knownRecords: knownRecords,
+                typeAliases: typeAliases,
+                scalarTypes: scalarTypes,
+                allProcedures: &allProcedures,
+                allLocations: &allLocations,
+                diagnostics: diagnostics
+            ))
+            let fingerprint = analysisFingerprint(allProcedures: allProcedures, allLocations: allLocations)
+            if fingerprint == previousFingerprint {
+                converged = true
+                break
+            }
+            previousFingerprint = fingerprint
+        }
+        if !converged {
+            diagnostics.warning("Signature/type analysis did not converge after \(maxSignatureIterations) iterations")
+        }
+        let diagnosticsAdded = diagnostics.diagnostics.count - diagnosticsBefore
+        let stageDiagnostics = diagnostics.diagnostics.suffix(diagnosticsAdded).map(\.message)
+        return AnalysisSignatureStageOutput(
+            typeConflicts: typeConflicts,
+            converged: converged,
+            iterations: iterations,
+            report: StageReport(name: "analysis", isComplete: converged, metrics: [
+                "iterations": iterations,
+                "maxIterations": maxSignatureIterations,
+                "procedures": allProcedures.count,
+                "locations": allLocations.count,
+                "typeConflicts": typeConflicts.count,
+                "diagnosticsAdded": diagnosticsAdded,
+            ], diagnostics: stageDiagnostics)
+        )
+    }
+}
+
 /// Disassemble a binary file and return structured results without printing.
 public func disassemble(
     filename: String,
@@ -541,14 +698,32 @@ public func disassemble(
     metadataSnapshot: MetadataSnapshot? = nil,
     cancellation: CancellationToken? = nil
 ) throws -> DisassemblyResult {
-    var fileURL: URL
-    var binaryData: CodeData
-    do {
-        fileURL = URL(fileURLWithPath: filename)
-        binaryData = try CodeData(data: Data(contentsOf: fileURL))
-    } catch {
-        throw error
-    }
+    let data = try Data(contentsOf: URL(fileURLWithPath: filename))
+    return try disassemble(
+        data: data,
+        sourceFilename: filename,
+        verbose: verbose,
+        writeMetadata: writeMetadata,
+        overwriteMetadata: overwriteMetadata,
+        metadataWorkspace: metadataWorkspace,
+        metadataSnapshot: metadataSnapshot
+    )
+}
+
+/// Disassemble in-memory binary data and return structured results without printing.
+public func disassemble(
+    data: Data,
+    sourceFilename: String,
+    verbose: Bool = false,
+    writeMetadata: Bool = false,
+    overwriteMetadata: Bool = false,
+    metadataWorkspace: MetadataWorkspace? = nil,
+    metadataSnapshot: MetadataSnapshot? = nil,
+    cancellation: CancellationToken? = nil
+) throws -> DisassemblyResult {
+    try cancellation?.checkCancellation()
+    let fileURL = URL(fileURLWithPath: sourceFilename)
+    let binaryData = CodeData(data: data)
 
     let segDict = try readCodeFileStructure(codeData: binaryData)
     let diagnostics = DiagnosticCollector()
@@ -575,6 +750,12 @@ public func disassemble(
         for comment in metadataSnapshot.comments {
             lineComments[comment.value.reference] = comment.value.comment
         }
+        knownRecords.formUnion(metadataSnapshot.records.map(\.value))
+        typeAliases.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.typeAliases.map { ($0.value.name, $0.value.type) })) { _, new in new }
+        scalarTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.scalarTypes.map { ($0.value.name, $0.value) })) { _, new in new }
+        constants.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.constants.map { ($0.value.name, $0.value.value) })) { _, new in new }
+        subrangeTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.subrangeTypes.map { ($0.value.name, $0.value) })) { _, new in new }
+        globalNames.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.globals.map { ($0.value.address, $0.value.identifier) })) { _, new in new }
     } else {
         metadata.load(
             knownRecords: &knownRecords,
@@ -601,14 +782,17 @@ public func disassemble(
         diagnostics: diagnostics,
         cancellation: cancellation
     )
+    let allCodeSegs = decode.codeSegments
+    dataSegments = decode.dataSegments
 
-    applyDisassemblyComments(lineComments, to: allCodeSegs)
-
-    typeConflicts.append(contentsOf: prepareDecodedProgram(
+    let references = ReferenceResolutionStageFacade().run(
         codeSegments: allCodeSegs,
+        lineComments: lineComments,
         allCallers: &allCallers,
-        allLocations: &allLocations
-    ))
+        allLocations: &allLocations,
+        diagnostics: diagnostics
+    )
+    typeConflicts.append(contentsOf: references.typeConflicts)
 
     // Do stack simulation and pseudocode generation once we have all procedures decoded.
     // Signatures and inferred location types can improve after a pass, so keep running
@@ -650,21 +834,9 @@ public func disassemble(
             "typeAliases": typeAliases.count,
             "scalarTypes": scalarTypes.count,
         ]),
-        StageReport(name: "decode", metrics: [
-            "segments": allCodeSegs.count,
-            "procedures": allCodeSegs.values.reduce(0) { $0 + $1.procedures.count },
-            "dataSegments": dataSegments.count,
-        ]),
-        StageReport(name: "referenceResolution", metrics: [
-            "callers": allCallers.count,
-            "locations": allLocations.count,
-        ]),
-        StageReport(name: "analysis", isComplete: analysisConverged, metrics: [
-            "iterations": analysisIterations,
-            "maxIterations": maxSignatureIterations,
-            "typeConflicts": typeConflicts.count,
-            "diagnostics": diagnostics.diagnostics.count,
-        ], diagnostics: analysisConverged ? [] : ["Signature/type analysis did not converge after \(maxSignatureIterations) iterations"]),
+        decode.report,
+        references.report,
+        analysis.report,
     ]
     let result = DisassemblyResult(
         sourceFilename: metadata.fileIdentifier,
@@ -759,6 +931,7 @@ public func runPdisasm(
     showPCode: Bool = false,
     showStackState: Bool = false,
     showPseudoCode: Bool = false,
+    showPascalSource: Bool = false,
     showDot: Bool = false
 ) throws {
     let runResult = try DisassemblyService().run(DisassemblyRunRequest(
@@ -771,6 +944,7 @@ public func runPdisasm(
             showPCode: showPCode,
             showStackState: showStackState,
             showPseudoCode: showPseudoCode,
+            showPascalSource: showPascalSource,
             showDot: showDot
         )
     ))
@@ -796,6 +970,7 @@ public func runPdisasm(
         showPCode: showPCode,
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
+        showPascalSource: showPascalSource,
         showDot: showDot
     )
 }
