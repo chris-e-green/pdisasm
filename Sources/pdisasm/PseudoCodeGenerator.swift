@@ -325,75 +325,51 @@ struct PseudoCodeGenerator {
             // MARK: - Set opcodes
             
         case dif:
-            let (set1Len, set1) = stack.popSet()
-            let (set2Len, set2) = stack.popSet()
-            let maxLen = max(set1Len, set2Len)
-            for i in 0..<maxLen {
-                stack.push(("(\(set2) AND NOT \(set1)){\(i)}", "SET"))
-            }
-            stack.push(("\(maxLen)", "INTEGER"))
+            let rhs = stack.popSetValue()
+            let lhs = stack.popSetValue()
+            stack.pushSetValue(lhs.difference(rhs))
             return nil
         case inn:
-            let (_, set) = stack.popSet()
+            let set = stack.popSetValue()
             let (chkVal, chkType) = stack.pop()
             let elementType = chkType == "CHAR" ? "CHAR" : "INTEGER"
             setLocType(chkVal, elementType)
-            stack.push(("\(chkVal) IN \(formatSetMembership(set, elementType: elementType))", "BOOLEAN"))
+            stack.push(("\(chkVal) IN \(formatSetMembership(set.sourceText, elementType: elementType))", "BOOLEAN"))
             return nil
         case int:
-            let (set1Len, set1) = stack.popSet()
-            let (set2Len, set2) = stack.popSet()
-            let maxLen = max(set1Len, set2Len)
-            for i in 0..<maxLen {
-                stack.push(("(\(set1) AND \(set2)){\(i)}", "SET"))
-            }
-            stack.push(("\(maxLen)", "INTEGER"))
+            let rhs = stack.popSetValue()
+            let lhs = stack.popSetValue()
+            stack.pushSetValue(lhs.intersection(rhs))
             return nil
         case uni:
-            let (set1Len, set1) = stack.popSet()
-            let (set2Len, set2) = stack.popSet()
-            let maxLen = max(set1Len, set2Len)
-            for i in 0..<maxLen {
-                stack.push(("(\(set1) OR \(set2)){\(i)}", "SET"))
-            }
-            stack.push(("\(maxLen)", "INTEGER"))
+            let rhs = stack.popSetValue()
+            let lhs = stack.popSetValue()
+            stack.pushSetValue(lhs.union(rhs))
             return nil
         case srs:
             let (a, _) = stack.pop()
             let (b, _) = stack.pop()
-            if let av = Int(a) {
-                let wordsRequired = (av / 16) + 1
-                for i in 0..<wordsRequired {
-                    stack.push(("[\(b)..\(a)]{\(i)}", "SET"))
-                }
-                stack.push(("\(wordsRequired)", "INTEGER"))
-            } else {
-                stack.push(("\(b)..\(a)", "SET"))
-                stack.push(("1", "INTEGER"))
-            }
+            let wordsRequired = Int(a).map { ($0 / 16) + 1 } ?? 1
+            stack.pushSetValue(PascalSetValue.literal([
+                PascalSetElement(lower: b, upper: a)
+            ], wordCount: wordsRequired))
             return nil
         case sgs:
             let (a, _) = stack.pop("INTEGER", true)
-            if let av = Int(a) {
-                let wordsRequired = (av / 16) + 1
-                for i in 0..<wordsRequired {
-                    stack.push(("[\(a)]{\(i)}", "SET"))
-                }
-                stack.push(("\(wordsRequired)", "INTEGER"))
-            } else {
-                stack.push(("\(a)", "SET"))
-                stack.push(("1", "INTEGER"))
-            }
+            let wordsRequired = Int(a).map { ($0 / 16) + 1 } ?? 1
+            stack.pushSetValue(PascalSetValue.literal([
+                PascalSetElement(a)
+            ], wordCount: wordsRequired))
             return nil
         case adj:
             let count = inst.params[0]
-            let (_, set) = stack.popSet()
+            let set = stack.popSetValue()
             if count == 1 {
                 // special case where only one word is needed to represent the set, so we can just push the set itself without the word index
-                stack.push((set, "INTEGER"))
+                stack.push((set.sourceText, "INTEGER"))
             } else {
                 for i in 0..<count {
-                    stack.push(("\(set){\(i)}", "INTEGER"))
+                    stack.push(("\(set.sourceText){\(i)}", "INTEGER"))
                 }
             }
             return nil
@@ -692,9 +668,9 @@ struct PseudoCodeGenerator {
         _ opString: String
     ) {
         if dataType == "SET" {
-            let (_, a) = stack.popSet()
-            let (_, b) = stack.popSet()
-            stack.push(("\(b) \(opString) \(a)", "BOOLEAN"))
+            let a = stack.popSetValue()
+            let b = stack.popSetValue()
+            stack.push(("\(b.sourceText) \(opString) \(a.sourceText)", "BOOLEAN"))
         } else if dataType == "REAL" {
             inferRealOperand(stack, evidence: "REAL comparison operand")
             let (a, _) = stack.popReal()

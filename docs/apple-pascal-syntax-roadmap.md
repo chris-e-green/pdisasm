@@ -240,18 +240,18 @@ raw mode.
 
 Tasks:
 
-- [ ] Add an internal `PascalSetValue` representation.
-- [ ] Track set literals independently from set word fragments.
-- [ ] Render singleton sets as `[x]`.
-- [ ] Render range sets as `[a..b]`.
-- [ ] Render combined sets as `[a, b, c]` where possible.
-- [ ] Render set union, intersection, and difference as source-valid expressions
+- [x] Add an internal `PascalSetValue` representation.
+- [x] Track set literals independently from set word fragments.
+- [x] Render singleton sets as `[x]`.
+- [x] Render range sets as `[a..b]`.
+- [x] Render combined sets as `[a, b, c]` where possible.
+- [x] Render set union, intersection, and difference as source-valid expressions
       when operands are known.
-- [ ] Emit raw comments for irreducible set word operations.
-- [ ] Add tests for integer sets.
-- [ ] Add tests for character sets.
-- [ ] Add tests for enumerated sets.
-- [ ] Add tests for multi-word sets.
+- [x] Emit raw comments for irreducible set word operations.
+- [x] Add tests for integer sets.
+- [x] Add tests for character sets.
+- [x] Add tests for enumerated sets.
+- [x] Add tests for multi-word sets.
 
 ### 3.4 Emit declaration sections
 

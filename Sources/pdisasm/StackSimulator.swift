@@ -28,6 +28,7 @@ enum StackValuePayload {
         baseLocation: Location?,
         physicalLocation: Location?
     )
+    case setValue(PascalSetValue)
 
     var realWord: (
         baseText: String,
@@ -40,6 +41,17 @@ enum StackValuePayload {
             return nil
         case let .realWord(baseText, wordIndex, baseLocation, physicalLocation):
             return (baseText, wordIndex, baseLocation, physicalLocation)
+        case .setValue:
+            return nil
+        }
+    }
+
+    var setValue: PascalSetValue? {
+        switch self {
+        case .none, .realWord:
+            return nil
+        case .setValue(let value):
+            return value
         }
     }
 }
@@ -74,6 +86,9 @@ struct StackValue {
         }
         if let realWord = payload.realWord {
             fields.append("R: \(realWord.baseText)#\(realWord.wordIndex)")
+        }
+        if let setValue = payload.setValue {
+            fields.append("S: \(setValue.sourceText)")
         }
         return "{" + fields.joined(separator: ", ") + "}"
     }
@@ -111,6 +126,15 @@ struct StackSimulator {
 
     mutating func push(_ value: StackValue) {
         values.append(value)
+    }
+
+    mutating func pushSetValue(_ setValue: PascalSetValue) {
+        values.append(StackValue(
+            text: setValue.sourceText,
+            type: "SET",
+            kind: .value,
+            payload: .setValue(setValue)
+        ))
     }
 
     mutating func popStackValue() -> StackValue {
@@ -360,76 +384,32 @@ struct StackSimulator {
     /// Pops the top of the stack as a SET value.
     /// - Returns: a tuple with the length of the set and its string representation
     mutating func popSet() -> (len: Int, val: String) {
-        let (setLen, _) = self.pop()
-        var isNumeric = false // flag to track if we have numeric values in the set
-        // to hold string set values
-        var setData: [String] = []
-        // to hold numeric set values
-        var setVals: [Int] = []
-        var prevElement: String = ""
-        // if the set length is an integer, it's valid
-        if let len = Int(setLen) {
-            if len == 0 { // special case for empty set
-                return (0, "[]")
-            }
-            // for each element in the set
-            for i in 0..<len {
-                // pop the element
-                let (element, _) = self.pop(true)
-                // we use '{' to indicate words within an array of elements
-                // eg. SETDATA{0}, SETDATA{1}, and so on, so that counting the words
-                // on the stack still works
-                if !element.contains("{") {
-                    // if the element is an integer, we extract the bits set
-                    // and add the corresponding values to the numeric set values
-                    if let value = UInt64(element) {
-                        for j in 0..<16 {
-                            if (value >> j) & 1 == 1 {
-                                setVals.append(i * 16 + j)
-                            }
-                        }
-                    } else {
-                        // otherwise, we just add the element
-                        setData.append(element)
-                    }
-                } else {
-                    // if the element is part of an array, we only add the array name
-                    let elementParts = element.split(separator: "{")
-                    if String(elementParts[0]) != prevElement {
-                        prevElement = String(elementParts[0])
-                        setData.append(String(elementParts[0]))
-                    }
-                }
-            }
-            if !setVals.isEmpty {
-                isNumeric = true
-            }
+        let value = popSetValue()
+        return (value.wordCount, value.legacyText)
+    }
 
-            // if we have numeric set values, we convert them to ranges
-            while !setVals.isEmpty {
-                let first = setVals.first!  // we can force unwrap as we checked above
-                // group consecutive values
-                let group = setVals.prefix(while: {
-                    $0 == setVals.first! + (setVals.firstIndex(of: $0)!)
-                        - (setVals.firstIndex(of: first)!)
-                })
-                // if the group has only one value, add it as is
-                if group.count == 1 {
-                    setData.append("\(group[0])")
-                } else {
-                    // otherwise, add it as a range
-                    setData.append("\(group.first!)..\(group.last!)")
-                }
-                // remove the processed values from the setVals
-                setVals = Array(setVals.dropFirst(group.count))
-            }
-
-            if isNumeric {
-                return (len, "[" + setData.joined(separator: ", ") + "]")
-            } else {
-                return (len, setData.joined(separator: ", "))
-            }
+    @discardableResult
+    /// Pops the top of the stack as a structured SET value.
+    /// - Returns: a set value that preserves literal elements separately from
+    ///   legacy word fragments.
+    mutating func popSetValue() -> PascalSetValue {
+        let lengthValue = popStackValue()
+        if let setValue = lengthValue.payload.setValue {
+            return setValue
         }
-        return (0, "Set has no length!")
+
+        let setLen = assignmentSourceText(lengthValue, withoutParentheses: true)
+        guard let len = Int(setLen) else {
+            return .malformed("Set has no length!")
+        }
+        guard len > 0 else {
+            return .empty
+        }
+
+        var words: [String] = []
+        for _ in 0..<len {
+            words.append(pop(true).val)
+        }
+        return PascalSetValue.fromLegacyWords(wordCount: len, words: words)
     }
 }

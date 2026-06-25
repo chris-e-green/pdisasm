@@ -230,6 +230,24 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertTrue(str.contains("4"))
     }
 
+    func testPopSetValueTracksNumericLiteralRanges() {
+        var sim = StackSimulator()
+        sim.push(("23", "INTEGER"))
+        sim.push(("1", "INTEGER"))
+
+        let set = sim.popSetValue()
+
+        XCTAssertEqual(set.wordCount, 1)
+        XCTAssertTrue(set.isLiteral)
+        XCTAssertEqual(set.sourceText, "[0..2, 4]")
+        XCTAssertEqual(set.legacyText, "[0..2, 4]")
+        XCTAssertEqual(set.elements, [
+            PascalSetElement(lower: "0", upper: "2"),
+            PascalSetElement("4")
+        ])
+        XCTAssertTrue(set.wordFragments.isEmpty)
+    }
+
     func testPopSetWithSymbolicElements() {
         var sim = StackSimulator()
         sim.push(("MYVAR", "SET"))
@@ -237,6 +255,21 @@ final class StackSimulatorTests: XCTestCase {
         let (len, str) = sim.popSet()
         XCTAssertEqual(len, 1)
         XCTAssertTrue(str.contains("MYVAR"))
+    }
+
+    func testPopSetValueTracksSymbolicLiteralSeparatelyFromLegacyText() {
+        var sim = StackSimulator()
+        sim.push(("MYVAR", "SET"))
+        sim.push(("1", "INTEGER"))
+
+        let set = sim.popSetValue()
+
+        XCTAssertEqual(set.wordCount, 1)
+        XCTAssertTrue(set.isLiteral)
+        XCTAssertEqual(set.sourceText, "[MYVAR]")
+        XCTAssertEqual(set.legacyText, "MYVAR")
+        XCTAssertEqual(set.elements, [PascalSetElement("MYVAR")])
+        XCTAssertTrue(set.wordFragments.isEmpty)
     }
 
     func testPopSetArrayElements() {
@@ -251,11 +284,56 @@ final class StackSimulatorTests: XCTestCase {
         XCTAssertEqual(str, "DATA")
     }
 
+    func testPopSetValueTracksWordFragmentsSeparatelyFromLiterals() {
+        var sim = StackSimulator()
+        sim.push(("DATA{0}", "SET"))
+        sim.push(("DATA{1}", "SET"))
+        sim.push(("2", "INTEGER"))
+
+        let set = sim.popSetValue()
+
+        XCTAssertEqual(set.wordCount, 2)
+        XCTAssertFalse(set.isLiteral)
+        XCTAssertEqual(set.sourceText, "DATA")
+        XCTAssertEqual(set.legacyText, "DATA")
+        XCTAssertTrue(set.elements.isEmpty)
+        XCTAssertEqual(set.wordFragments, [
+            PascalSetWordFragment(baseText: "DATA", wordIndex: 1, text: "DATA{1}"),
+            PascalSetWordFragment(baseText: "DATA", wordIndex: 0, text: "DATA{0}")
+        ])
+    }
+
     func testPopSetMalformed() {
         var sim = StackSimulator()
         sim.push(("notanumber", "STRING"))
         let (len, str) = sim.popSet()
         XCTAssertEqual(len, 0)
         XCTAssertEqual(str, "Set has no length!")
+    }
+
+    func testPopSetValueMalformed() {
+        var sim = StackSimulator()
+        sim.push(("notanumber", "STRING"))
+
+        let set = sim.popSetValue()
+
+        XCTAssertEqual(set.wordCount, 0)
+        XCTAssertTrue(set.isMalformed)
+        XCTAssertEqual(set.sourceText, "Set has no length!")
+        XCTAssertEqual(set.legacyText, "Set has no length!")
+    }
+
+    func testPushSetValueRoundTripsStructuredPayload() {
+        let original = PascalSetValue.literal([
+            PascalSetElement("1"),
+            PascalSetElement(lower: "3", upper: "5")
+        ])
+        var sim = StackSimulator()
+        sim.pushSetValue(original)
+
+        let set = sim.popSetValue()
+
+        XCTAssertEqual(set, original)
+        XCTAssertEqual(set.sourceText, "[1, 3..5]")
     }
 }

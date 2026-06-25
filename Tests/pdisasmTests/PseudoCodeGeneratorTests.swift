@@ -1134,6 +1134,175 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(type, "BOOLEAN")
     }
 
+    func testSGSPushesStructuredSingletonSet() {
+        var stack = StackSimulator()
+        stack.push(("5", "INTEGER"))
+        let inst = Instruction(opcode: sgs, mnemonic: "SGS")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[5]")
+        XCTAssertEqual(set.wordCount, 1)
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testSGSTracksMultiWordSetWidth() {
+        var stack = StackSimulator()
+        stack.push(("20", "INTEGER"))
+        let inst = Instruction(opcode: sgs, mnemonic: "SGS")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[20]")
+        XCTAssertEqual(set.wordCount, 2)
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testSRSPushesStructuredRangeSet() {
+        var stack = StackSimulator()
+        stack.push(("1", "INTEGER"))
+        stack.push(("5", "INTEGER"))
+        let inst = Instruction(opcode: srs, mnemonic: "SRS")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[1..5]")
+        XCTAssertEqual(set.wordCount, 1)
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testUNICombinesKnownIntegerSetLiterals() {
+        var stack = StackSimulator()
+        stack.pushSetValue(.literal([
+            PascalSetElement("1"),
+            PascalSetElement(lower: "3", upper: "4")
+        ]))
+        stack.pushSetValue(.literal([
+            PascalSetElement("2"),
+            PascalSetElement("4")
+        ]))
+        let inst = Instruction(opcode: uni, mnemonic: "UNI")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[1..4]")
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testUNICombinesSymbolicSetLiterals() {
+        var stack = StackSimulator()
+        stack.pushSetValue(.literal([
+            PascalSetElement("RED")
+        ]))
+        stack.pushSetValue(.literal([
+            PascalSetElement("BLUE")
+        ]))
+        let inst = Instruction(opcode: uni, mnemonic: "UNI")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[RED, BLUE]")
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testINTComputesKnownIntegerSetIntersection() {
+        var stack = StackSimulator()
+        stack.pushSetValue(.literal([
+            PascalSetElement(lower: "1", upper: "4")
+        ]))
+        stack.pushSetValue(.literal([
+            PascalSetElement(lower: "3", upper: "6")
+        ]))
+        let inst = Instruction(opcode: int, mnemonic: "INT")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[3..4]")
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testDIFComputesKnownIntegerSetDifference() {
+        var stack = StackSimulator()
+        stack.pushSetValue(.literal([
+            PascalSetElement(lower: "1", upper: "4")
+        ]))
+        stack.pushSetValue(.literal([
+            PascalSetElement(lower: "2", upper: "3")
+        ]))
+        let inst = Instruction(opcode: dif, mnemonic: "DIF")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "[1, 4]")
+        XCTAssertTrue(set.isLiteral)
+    }
+
+    func testUNIFallsBackWithRawCommentForWordFragments() {
+        var stack = StackSimulator()
+        stack.push(("DATA{0}", "SET"))
+        stack.push(("1", "INTEGER"))
+        stack.pushSetValue(.literal([
+            PascalSetElement("3")
+        ]))
+        let inst = Instruction(opcode: uni, mnemonic: "UNI")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let set = stack.popSetValue()
+        XCTAssertEqual(set.sourceText, "DATA + [3] (* raw set word operation *)")
+        XCTAssertFalse(set.isLiteral)
+    }
+
+    func testINNUsesStructuredSetValue() {
+        var stack = StackSimulator()
+        stack.push(("VALUE", "INTEGER"))
+        stack.pushSetValue(.literal([
+            PascalSetElement("1"),
+            PascalSetElement(lower: "3", upper: "5")
+        ]))
+        let inst = Instruction(opcode: inn, mnemonic: "INN")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop("BOOLEAN", true)
+        XCTAssertEqual(val, "VALUE IN [1, 3..5]")
+        XCTAssertEqual(type, "BOOLEAN")
+    }
+
+    func testSETComparisonUsesStructuredSetText() {
+        var stack = StackSimulator()
+        stack.pushSetValue(.literal([
+            PascalSetElement("1")
+        ]))
+        stack.pushSetValue(.literal([
+            PascalSetElement("1")
+        ]))
+        let inst = Instruction(opcode: eql, mnemonic: "EQL", comparatorDataType: "SET")
+        var gen = makeGenerator()
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let (val, type) = stack.pop("BOOLEAN", true)
+        XCTAssertEqual(val, "[1] = [1]")
+        XCTAssertEqual(type, "BOOLEAN")
+    }
+
     func testNEQI() {
         var stack = StackSimulator()
         stack.push(("A", "INTEGER"))
