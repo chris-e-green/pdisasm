@@ -60,6 +60,23 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(result, "DISPSTATE_COPY.LEFT := 0")
     }
 
+    func testSASPreservesPackedCharArrayDestinationType() {
+        var stack = StackSimulator()
+        stack.push(("DEST", "ALPHA"), kind: .address)
+        stack.push(("'ABC'", "PACKED ARRAY OF CHAR"), kind: .constant)
+        let inst = Instruction(opcode: sas, mnemonic: "SAS")
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "DEST := 'ABC'")
+        XCTAssertTrue(gen.typeConflicts.isEmpty)
+        XCTAssertEqual(gen.stringLikeAssignmentType(for: "ALPHA"), "PACKED ARRAY[1..8] OF CHAR")
+        XCTAssertEqual(gen.stringLikeAssignmentType(for: "STRING"), "STRING")
+    }
+
     // MARK: - MOV generates assignment
 
     func testMOVAssignment() {
@@ -141,6 +158,21 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(result, "ADDR[5] := 88")
+    }
+
+    func testSTBUsesByteAccessForTypedArrayDestination() {
+        var stack = StackSimulator()
+        stack.push(("A", "ALPHA"), kind: .address)
+        stack.push(("5", "INTEGER"), kind: .constant)
+        stack.push(("88", "BYTE"), kind: .constant)
+        let inst = Instruction(opcode: stb, mnemonic: "STB")
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(result, "BYTE_AT(A, 5) := 88")
     }
 
     func testSTBUsesRealRepresentationTarget() {
@@ -1173,7 +1205,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         let (val, type) = stack.pop()
         XCTAssertEqual(val, "'ABC'")
-        XCTAssertEqual(type, "PACKED ARRAY")
+        XCTAssertEqual(type, "PACKED ARRAY OF CHAR")
     }
 
     func testLAOWithMemLocation() {
@@ -1210,6 +1242,22 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         let (val, _) = stack.pop()
         XCTAssertEqual(val, "^(PTR + 4)")
+    }
+
+    func testINCUsesStructuredArrayAliasElementType() {
+        var stack = StackSimulator()
+        stack.push(("A", "ALPHA"), kind: .address)
+        let inst = Instruction(opcode: inc, mnemonic: "INC", params: [4])
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "A[5]")
+        XCTAssertEqual(value.type, "CHAR")
+        XCTAssertEqual(value.kind, .address)
     }
 
     func testIND() {
@@ -1294,7 +1342,7 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(definitions.aliases["SEGNO"], "INTEGER")
         XCTAssertEqual(definitions.aliases["WORDREF"], "^WORD")
         XCTAssertEqual(definitions.aliases["ITEMREF"], "^ITEM")
-        XCTAssertEqual(definitions.aliases["ALPHA"], "ARRAY OF CHAR")
+        XCTAssertEqual(definitions.aliases["ALPHA"], "PACKED ARRAY[1..8] OF CHAR")
         XCTAssertNil(definitions.aliases["SEGKINDS"])
         XCTAssertEqual(definitions.scalarTypes["SEGKINDS"]?.namesByValue[0], "LINKED")
         XCTAssertEqual(definitions.scalarTypes["SEGKINDS"]?.namesByValue[2], "SEGPROC")
@@ -1454,6 +1502,56 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(value.type, "CHAR")
     }
 
+    func testIXAUsesStructuredArrayAliasElementType() {
+        var stack = StackSimulator()
+        stack.push(("A", "ALPHA"), kind: .address)
+        stack.push(("I", "INTEGER"))
+        let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [1])
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "A[I + 1]")
+        XCTAssertEqual(value.type, "CHAR")
+        XCTAssertEqual(value.kind, .address)
+    }
+
+    func testIXAEmitsFallbackForMultidimensionalArrayAlias() {
+        var stack = StackSimulator()
+        stack.push(("A", "GRID"), kind: .address)
+        stack.push(("I", "INTEGER"))
+        let inst = Instruction(opcode: ixa, mnemonic: "IXA", params: [1])
+        var gen = makeGenerator(typeAliases: [
+            "GRID": "ARRAY[1..2, 1..3] OF CHAR"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "A[I (* IXA linear index for ARRAY[1..2, 1..3] OF CHAR *)]")
+        XCTAssertEqual(value.type, "CHAR")
+        XCTAssertEqual(value.kind, .address)
+    }
+
+    func testSINDUsesStructuredArrayAliasElementType() {
+        var stack = StackSimulator()
+        stack.push(("A", "ALPHA"), kind: .address)
+        let inst = Instruction(opcode: sind0 + 2, mnemonic: "SIND2", params: [2])
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "A[3]")
+        XCTAssertEqual(value.type, "CHAR")
+        XCTAssertEqual(value.kind, .value)
+    }
+
     func testIXPPreservesBaseAddressKind() {
         var stack = StackSimulator()
         stack.push(("BASE", "POINTER"), kind: .address)
@@ -1501,6 +1599,38 @@ final class PseudoCodeGeneratorTests: XCTestCase {
 
         let value = stack.popStackValue()
         XCTAssertEqual(value.text, "S[1]")
+        XCTAssertEqual(value.type, "CHAR")
+    }
+
+    func testLDBUsesByteAccessForTypedByteArray() {
+        var stack = StackSimulator()
+        stack.push(("B", "BYTES"))
+        stack.push(("5", "INTEGER"))
+        let inst = Instruction(opcode: ldb, mnemonic: "LDB")
+        var gen = makeGenerator(typeAliases: [
+            "BYTES": "ARRAY[1..8] OF BYTE"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "BYTE_AT(B, 5)")
+        XCTAssertEqual(value.type, "BYTE")
+    }
+
+    func testLDBUsesByteAccessForPackedCharArray() {
+        var stack = StackSimulator()
+        stack.push(("A", "ALPHA"))
+        stack.push(("5", "INTEGER"))
+        let inst = Instruction(opcode: ldb, mnemonic: "LDB")
+        var gen = makeGenerator(typeAliases: [
+            "ALPHA": "PACKED ARRAY[1..8] OF CHAR"
+        ])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        let value = stack.popStackValue()
+        XCTAssertEqual(value.text, "BYTE_AT(A, 5)")
         XCTAssertEqual(value.type, "CHAR")
     }
 

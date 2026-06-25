@@ -55,7 +55,7 @@ extension PseudoCodeGenerator {
                 setLocType(destName, type)
             }
         }
-        if let type = assignmentDestType, type.starts(with: "ARRAY") {
+        if arrayElementType(for: assignmentDestType) != nil {
             destName = "\(destName)[0]"  // for now just show the first element being assigned
         }
         return .assignment(targetValue: destValue, targetText: destName, source: src)
@@ -68,8 +68,10 @@ extension PseudoCodeGenerator {
         let destValue = stack.popStackValue()
         let src = stack.assignmentSourceText(srcValue)
         let dest = stack.assignmentTargetText(destValue)
-        setLocType(src, "STRING")
-        setLocType(dest, "STRING")
+        let srcType = stringLikeAssignmentType(for: srcValue.type)
+        let destType = stringLikeAssignmentType(for: destValue.type)
+        setLocType(src, srcType)
+        setLocType(dest, destType)
         return .assignment(targetValue: destValue, targetText: dest, source: src)
     }
 
@@ -118,7 +120,14 @@ extension PseudoCodeGenerator {
            let ch = Int(src) {
             src = renderPascalCharLiteral(ch)
         }
-        let target = dstaddrValue.type == "REAL" ? dstaddr : "\(dstaddr)[\(dstoffs)]"
+        let target: String
+        if dstaddrtype == "STRING" {
+            target = "\(dstaddr)[\(dstoffs)]"
+        } else if dstaddrValue.type == "REAL" {
+            target = dstaddr
+        } else {
+            target = byteAccessText(dstaddrValue, offset: dstoffs, stack: stack)
+        }
         return .assignment(targetValue: dstaddrValue, targetText: target, source: src)
     }
 }

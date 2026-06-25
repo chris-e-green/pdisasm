@@ -368,15 +368,80 @@ enum PascalTypeDefinitionParser {
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let upper = collapsed.uppercased()
-        if upper.contains("ARRAY"), let ofRange = upper.range(of: " OF ") {
-            let elementType = upper[ofRange.upperBound...]
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return "ARRAY OF \(normalizeType(String(elementType), constants: constants))"
+        if let arrayType = normalizeArrayType(upper, constants: constants) {
+            return arrayType
         }
         if let bounds = parseSubrange(upper, constants: constants) {
             return "\(bounds.lower)..\(bounds.upper)"
         }
         return upper
+    }
+
+    private static func normalizeArrayType(_ typeText: String, constants: [String: Int]) -> String? {
+        let prefix: String
+        var rest: String
+        if typeText.hasPrefix("PACKED ARRAY") {
+            prefix = "PACKED ARRAY"
+            rest = String(typeText.dropFirst("PACKED ARRAY".count))
+        } else if typeText.hasPrefix("ARRAY") {
+            prefix = "ARRAY"
+            rest = String(typeText.dropFirst("ARRAY".count))
+        } else {
+            return nil
+        }
+
+        rest = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        if rest.hasPrefix("["),
+           let closeBracket = matchingBracketIndex(in: Array(rest), from: 0) {
+            let chars = Array(rest)
+            let indexText = String(chars[1..<closeBracket])
+            let afterBracket = String(chars[(closeBracket + 1)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard afterBracket.hasPrefix("OF ") else {
+                return typeText
+            }
+            let elementText = String(afterBracket.dropFirst("OF ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedIndexes = indexText.split(separator: ",").map {
+                normalizeArrayIndexType(String($0), constants: constants)
+            }.joined(separator: ", ")
+            return "\(prefix)[\(normalizedIndexes)] OF \(normalizeType(elementText, constants: constants))"
+        }
+
+        guard rest.hasPrefix("OF ") else {
+            return typeText
+        }
+        let elementText = String(rest.dropFirst("OF ".count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(prefix) OF \(normalizeType(elementText, constants: constants))"
+    }
+
+    private static func normalizeArrayIndexType(_ typeText: String, constants: [String: Int]) -> String {
+        let upper = typeText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        if let bounds = parseSubrange(upper, constants: constants) {
+            return "\(bounds.lower)..\(bounds.upper)"
+        }
+        return normalizeType(upper, constants: constants)
+    }
+
+    private static func matchingBracketIndex(in chars: [Character], from start: Int) -> Int? {
+        guard start < chars.count, chars[start] == "[" else { return nil }
+        var depth = 0
+        var index = start
+        while index < chars.count {
+            if chars[index] == "[" {
+                depth += 1
+            } else if chars[index] == "]" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+            index += 1
+        }
+        return nil
     }
 
     private static func parseIntegerConstant(_ text: String) -> Int? {
