@@ -1283,6 +1283,68 @@ private func gotoLabels(inRawText text: String) -> [String] {
     }
 }
 
+private func sourceSignatureParameters(for procedure: ProcedureIdentifier) -> [Identifier] {
+    guard procedure.parameterLocations.count == procedure.parameters.count else {
+        return procedure.parameters
+    }
+    return procedure.parameterLocations.map {
+        Identifier(name: $0.name, type: $0.type, typeSource: $0.typeSource)
+    }
+}
+
+private func renderPascalSourceHeader(for procedure: ProcedureIdentifier) -> String {
+    let name = renderPascalIdentifier(defaultProcedureName(for: procedure))
+    var header = procedure.isFunction ? "FUNCTION \(name)" : "PROCEDURE \(name)"
+    let parameters = sourceSignatureParameters(for: procedure)
+    var parameterGroups: [(names: [String], type: String)] = []
+    var uncertainty: [String] = []
+
+    for parameter in parameters {
+        let parameterName = renderPascalIdentifier(parameter.name)
+        let trimmedType = parameter.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = trimmedType.isEmpty ? "UNKNOWN" : trimmedType
+        if parameterGroups.last?.type == type {
+            parameterGroups[parameterGroups.count - 1].names.append(parameterName)
+        } else {
+            parameterGroups.append(([parameterName], type))
+        }
+
+        if type == "UNKNOWN" || parameter.typeSource == .unknown {
+            uncertainty.append("\(parameterName) type unknown")
+        } else if parameter.typeSource == .inferred {
+            uncertainty.append("\(parameterName) type inferred")
+        }
+    }
+
+    if !parameterGroups.isEmpty {
+        header += "(" + parameterGroups.map {
+            "\($0.names.joined(separator: ", ")): \($0.type)"
+        }.joined(separator: "; ") + ")"
+    }
+
+    if procedure.isFunction {
+        let trimmedReturnType = procedure.returnType?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let returnType = trimmedReturnType.isEmpty ? "UNKNOWN" : trimmedReturnType
+        header += ": \(returnType)"
+        if returnType == "UNKNOWN" || procedure.returnTypeSource == .unknown {
+            uncertainty.append("return type unknown")
+        } else if procedure.returnTypeSource == .inferred {
+            uncertainty.append("return type inferred")
+        }
+    }
+
+    if procedure.procName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+        uncertainty.insert("name generated", at: 0)
+    }
+
+    header += ";"
+    if !uncertainty.isEmpty {
+        header += " (* uncertain signature: \(uncertainty.joined(separator: "; ")) *)"
+    }
+    return header
+}
+
 public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: Bool = true) -> [String] {
     var lines: [String] = []
     if showMarkup {
@@ -1314,9 +1376,12 @@ public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: 
         for procedure in codeSegment.procedures.sorted(by: { ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1) }) {
             guard procedure.identifier?.isAssembly == false else { continue }
             if let identifier = procedure.identifier {
-                lines.append("PROCEDURE \(renderPascalIdentifier(identifier.procName ?? "P\(identifier.procedure)"));")
+                lines.append(renderPascalSourceHeader(for: identifier))
             } else {
-                lines.append("PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));")
+                lines.append(
+                    "PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));"
+                        + " (* uncertain signature: procedure metadata unavailable *)"
+                )
             }
             if showMarkup { lines.append("```pascal") }
             var statements: [PascalStmt] = []
