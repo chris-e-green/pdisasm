@@ -1414,7 +1414,12 @@ public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: 
                     statements.append(.raw(pre))
                 }
                 if let pseudo = instruction.pseudoCodeStatement {
-                    statements.append(pseudo.pascalSourceStatement)
+                    statements.append(pseudo.pascalSourceStatement(
+                        functionResultStorage: procedure.identifier?.functionResultStorage,
+                        functionName: procedure.identifier.map {
+                            $0.procName ?? defaultProcedureName(for: $0)
+                        }
+                    ))
                 } else if let pseudo = instruction.pseudoCode {
                     statements.append(PseudoCodeStatement(renderedText: pseudo, locations: result.allLocations).pascalSourceStatement)
                 }

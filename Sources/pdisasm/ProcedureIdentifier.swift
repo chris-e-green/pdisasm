@@ -203,6 +203,13 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     public var procName: String?
     public var parameters: [Identifier] = []
     var signatureSlots: [ProcedureSignatureSlot] = []
+    public var functionResultStorage: FunctionResultStorage? {
+        guard isFunction else { return nil }
+        return FunctionResultStorage(
+            returnType: returnType,
+            baseLocation: returnLocation
+        )
+    }
     public var returnLocation: Location? {
         get {
             signatureSlots.first {

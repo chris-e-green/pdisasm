@@ -48,9 +48,15 @@ final class OutputFlagTests: XCTestCase {
         return (dict, codeSegs, [], allProcedures, [])
     }
 
-    private func pascalSourceLines(for identifier: ProcedureIdentifier) -> [String] {
+    private func pascalSourceLines(
+        for identifier: ProcedureIdentifier,
+        configureProcedure: ((Procedure) -> Void)? = nil
+    ) -> [String] {
         let (dict, codeSegments, locations, _, callers) = makeMinimalInputs()
-        codeSegments[0]?.procedures[0].identifier = identifier
+        if let procedure = codeSegments[0]?.procedures[0] {
+            procedure.identifier = identifier
+            configureProcedure?(procedure)
+        }
         let result = DisassemblyResult(
             sourceFilename: "test",
             segDictionary: dict,
@@ -442,6 +448,43 @@ final class OutputFlagTests: XCTestCase {
                     + " (* uncertain signature: COUNT mode inferred as value *)"
             )
         )
+    }
+
+    func testPascalSourceCanonicalizesFunctionResultAssignment() {
+        let resultLocation = Location(
+            segment: 0,
+            procedure: 7,
+            lexLevel: 1,
+            addr: 1,
+            isParam: true,
+            name: "TEST.CALCULATE",
+            type: "INTEGER"
+        )
+        let identifier = ProcedureIdentifier(
+            isFunction: true,
+            segment: 0,
+            procedure: 7,
+            procName: "CALCULATE",
+            returnType: "INTEGER"
+        )
+        identifier.returnLocation = resultLocation
+
+        let lines = pascalSourceLines(for: identifier) { procedure in
+            procedure.instructions[0]?.pseudoCodeStatement = .assignment(
+                targetValue: StackValue(
+                    text: resultLocation.displayName,
+                    type: "INTEGER",
+                    kind: .address,
+                    location: resultLocation
+                ),
+                targetText: resultLocation.displayName,
+                source: "42"
+            )
+        }
+
+        XCTAssertTrue(lines.contains("FUNCTION CALCULATE: INTEGER;"))
+        XCTAssertTrue(lines.contains("  CALCULATE := 42;"))
+        XCTAssertFalse(lines.contains("  TEST.CALCULATE := 42;"))
     }
 
     // MARK: - showDot

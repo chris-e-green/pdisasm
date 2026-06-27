@@ -301,13 +301,26 @@ struct PascalBlock: Sendable {
 
 extension PseudoCodeStatement {
     var pascalSourceStatement: PascalStmt {
+        pascalSourceStatement(functionResultStorage: nil, functionName: nil)
+    }
+
+    func pascalSourceStatement(
+        functionResultStorage: FunctionResultStorage?,
+        functionName: String?
+    ) -> PascalStmt {
         switch self {
         case .rendered(let text):
             return .raw(text)
         case .assignment(let targetLocation, let targetText, let source):
-            let target = targetLocation?.displayName.isEmpty == false
-                ? targetLocation?.displayName ?? targetText
-                : targetText
+            let isFunctionResult = targetLocation != nil
+                && targetLocation == functionResultStorage?.baseLocation
+            let target = if isFunctionResult, let functionName {
+                functionName
+            } else if targetLocation?.displayName.isEmpty == false {
+                targetLocation?.displayName ?? targetText
+            } else {
+                targetText
+            }
             return .assignment(target: .raw(target), source: .raw(source))
         }
     }

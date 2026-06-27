@@ -335,14 +335,14 @@ should render function results in source-valid form.
 
 Tasks:
 
-- [ ] Model hidden result storage separately from explicit parameters.
-- [ ] Avoid rendering hidden result slots as normal arguments.
-- [ ] Detect assignments to the function name inside function bodies.
-- [ ] Render function return assignments as `FunctionName := value` when
+- [x] Model hidden result storage separately from explicit parameters.
+- [x] Avoid rendering hidden result slots as normal arguments.
+- [x] Detect assignments to the function name inside function bodies.
+- [x] Render function return assignments as `FunctionName := value` when
       appropriate.
-- [ ] Add tests for scalar function returns.
-- [ ] Add tests for real function returns.
-- [ ] Add tests for record/string aggregate returns if supported by the target
+- [x] Add tests for scalar function returns.
+- [x] Add tests for real function returns.
+- [x] Add tests for record/string aggregate returns if supported by the target
       dialect.
 
 ### 4.4 Reconstruct module/unit scaffolding

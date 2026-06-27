@@ -159,6 +159,66 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(legacy.parameters[0].parameterModeSource, .unknown)
     }
 
+    func testFunctionResultStorageDistinguishesScalarAndRealWidths() {
+        let scalar = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            returnType: "INTEGER"
+        )
+        let real = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 3,
+            returnType: "REAL"
+        )
+
+        XCTAssertEqual(scalar.functionResultStorage?.baseAddress, 1)
+        XCTAssertEqual(scalar.functionResultStorage?.reservedWordCount, 2)
+        XCTAssertEqual(scalar.functionResultStorage?.valueWordCount, 1)
+        XCTAssertEqual(scalar.functionResultStorage?.representation, .scalar)
+        XCTAssertEqual(scalar.functionResultStorage?.nextParameterAddress, 3)
+
+        XCTAssertEqual(real.functionResultStorage?.reservedWordCount, 2)
+        XCTAssertEqual(real.functionResultStorage?.valueWordCount, 2)
+        XCTAssertEqual(real.functionResultStorage?.representation, .real)
+    }
+
+    func testAggregateFunctionResultStorageKeepsUnknownWidth() {
+        let function = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            returnType: "STRING"
+        )
+
+        XCTAssertEqual(function.functionResultStorage?.representation, .aggregate)
+        XCTAssertNil(function.functionResultStorage?.valueWordCount)
+        XCTAssertEqual(function.functionResultStorage?.reservedWordCount, 2)
+    }
+
+    func testNamedFunctionResultStorageKeepsUnknownRepresentation() {
+        let function = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            procedure: 2,
+            returnType: "CUSTOM_RESULT"
+        )
+
+        XCTAssertEqual(function.functionResultStorage?.representation, .unknown)
+        XCTAssertNil(function.functionResultStorage?.valueWordCount)
+    }
+
+    func testProcedureHasNoFunctionResultStorage() {
+        let procedure = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2
+        )
+
+        XCTAssertNil(procedure.functionResultStorage)
+    }
+
     func testDecodeNormalizesArbitraryPointerParameterType() throws {
         let json = """
         {

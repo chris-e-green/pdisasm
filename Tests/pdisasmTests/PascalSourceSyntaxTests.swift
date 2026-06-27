@@ -2,6 +2,45 @@ import XCTest
 @testable import pdisasm
 
 final class PascalSourceSyntaxTests: XCTestCase {
+    func testFunctionResultAssignmentUsesLocalFunctionName() {
+        let resultLocation = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 1,
+            addr: 1,
+            isParam: true,
+            name: "MATH.CALCULATE",
+            type: "INTEGER"
+        )
+        let function = ProcedureIdentifier(
+            isFunction: true,
+            segment: 1,
+            segmentName: "MATH",
+            procedure: 2,
+            procName: "CALCULATE",
+            returnType: "INTEGER"
+        )
+        function.returnLocation = resultLocation
+        let statement = PseudoCodeStatement.assignment(
+            targetValue: StackValue(
+                text: resultLocation.displayName,
+                type: "INTEGER",
+                kind: .address,
+                location: resultLocation
+            ),
+            targetText: resultLocation.displayName,
+            source: "42"
+        )
+
+        XCTAssertEqual(
+            statement.pascalSourceStatement(
+                functionResultStorage: function.functionResultStorage,
+                functionName: "CALCULATE"
+            ).rendered(),
+            ["CALCULATE := 42;"]
+        )
+    }
+
     func testBinaryExpressionRendererPreservesPrecedence() {
         let expr = PascalExpr.binary(
             .multiply,
