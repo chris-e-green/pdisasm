@@ -107,6 +107,7 @@ struct MetadataStore {
         aliases: inout [String: String],
         scalarTypes: inout [String: PascalScalarType],
         constants: inout [String: Int],
+        constantValues: inout [String: PascalConstantValue],
         subrangeTypes: inout [String: PascalSubrangeType],
         isSystemRecord: Bool = false
     ) {
@@ -120,7 +121,16 @@ struct MetadataStore {
             aliases.merge(definitions.aliases) { _, new in new }
             scalarTypes.merge(definitions.scalarTypes) { _, new in new }
             constants.merge(definitions.constants) { _, new in new }
+            constantValues.merge(definitions.constantValues) { _, new in new }
             subrangeTypes.merge(definitions.subrangeTypes) { _, new in new }
+            for diagnostic in definitions.diagnostics {
+                switch diagnostic.severity {
+                case .warning:
+                    diagnostics?.warning(diagnostic.message)
+                case .error:
+                    diagnostics?.error(diagnostic.message)
+                }
+            }
         } catch {
             diagnostics?.error("Error reading \(file).pas: \(error)")
         }

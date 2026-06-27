@@ -34,30 +34,74 @@ public struct PascalSubrangeType: Hashable, Sendable, Codable {
     }
 }
 
+public enum PascalConstantValue: Hashable, Sendable, Codable {
+    case integer(Int)
+    case real(String)
+    case character(String)
+    case string(String)
+    case boolean(Bool)
+    case identifier(String)
+    case raw(String)
+
+    public var sourceText: String {
+        switch self {
+        case .integer(let value):
+            return "\(value)"
+        case .real(let value), .character(let value), .string(let value), .raw(let value):
+            return value
+        case .boolean(let value):
+            return value ? "TRUE" : "FALSE"
+        case .identifier(let value):
+            return value
+        }
+    }
+
+    public var integerValue: Int? {
+        guard case .integer(let value) = self else {
+            return nil
+        }
+        return value
+    }
+}
+
 struct PascalTypeDefinitions: Sendable {
     var aliases: [String: String] = [:]
     var records: Set<PascalRecord> = []
     var scalarTypes: [String: PascalScalarType] = [:]
     var constants: [String: Int] = [:]
+    var constantValues: [String: PascalConstantValue] = [:]
     var subrangeTypes: [String: PascalSubrangeType] = [:]
+    var diagnostics: [Diagnostic] = []
 }
 
 enum PascalTypeDefinitionParser {
     static func parse(_ source: String, isSystemRecord: Bool = false) -> PascalTypeDefinitions {
-        let declarations = parseDeclarations(source)
+        let parsedDeclarations = parseDeclarations(source)
+        let declarations = parsedDeclarations.declarations
         var definitions = PascalTypeDefinitions()
+        definitions.diagnostics = parsedDeclarations.diagnostics
 
-        for declaration in declarations {
+        for declaration in declarations
+        where declaration.section == .constant
+            || declaration.section == .unknown
+                && parseIntegerConstant(declaration.typeText) != nil
+        {
             let rhs = declaration.typeText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let value = parseIntegerConstant(rhs) {
-                definitions.constants[declaration.name] = value
+            let value = parseConstantValue(rhs)
+            definitions.constantValues[declaration.name] = value
+            if let integer = value.integerValue {
+                definitions.constants[declaration.name] = integer
             }
         }
 
-        for declaration in declarations {
+        for declaration in declarations
+        where declaration.section == .type
+            || declaration.section == .unknown
+                && definitions.constants[declaration.name] == nil
+        {
             let rhs = declaration.typeText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if definitions.constants[declaration.name] != nil {
-                continue
+            if let diagnostic = unsupportedTypeDiagnostic(name: declaration.name, typeText: rhs) {
+                definitions.diagnostics.append(diagnostic)
             }
             if isRecordType(rhs) {
                 let allMembers = parseRecordAllMembers(rhs, constants: definitions.constants)
@@ -90,31 +134,55 @@ enum PascalTypeDefinitionParser {
         return definitions
     }
 
+    private enum DeclarationSection {
+        case constant
+        case type
+        case unknown
+    }
+
     private struct Declaration {
         let name: String
         let typeText: String
+        let section: DeclarationSection
     }
 
-    private static func parseDeclarations(_ source: String) -> [Declaration] {
+    private struct ParsedDeclarations {
+        var declarations: [Declaration]
+        var diagnostics: [Diagnostic]
+    }
+
+    private static func parseDeclarations(_ source: String) -> ParsedDeclarations {
         let cleaned = stripComments(source)
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let scanner = Array(cleaned)
         var index = 0
         var declarations: [Declaration] = []
+        var diagnostics: [Diagnostic] = []
+        var section = DeclarationSection.unknown
 
         while index < scanner.count {
             skipSeparators(scanner, &index)
             if startsWithWord("TYPE", scanner, index) {
                 index += 4
+                section = .type
                 continue
             }
             if startsWithWord("CONST", scanner, index) {
                 index += 5
+                section = .constant
                 continue
             }
 
             guard let equalsIndex = nextIndex(of: "=", in: scanner, from: index) else {
+                let trailing = String(scanner[index...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trailing.isEmpty {
+                    diagnostics.append(Diagnostic(
+                        severity: .warning,
+                        message: "Unsupported or malformed declaration: \(trailing)"
+                    ))
+                }
                 break
             }
             let name = String(scanner[index..<equalsIndex])
@@ -128,25 +196,38 @@ enum PascalTypeDefinitionParser {
                 if let endRange = findRecordEnd(in: scanner, from: index) {
                     index = endRange.upperBound
                 } else {
+                    diagnostics.append(Diagnostic(
+                        severity: .error,
+                        message: "Record declaration \(name) is missing END."
+                    ))
                     index = scanner.count
                 }
-            } else if let semicolon = nextIndex(of: ";", in: scanner, from: index) {
+            } else if let semicolon = nextTopLevelIndex(of: ";", in: scanner, from: index) {
                 index = semicolon
             } else {
+                diagnostics.append(Diagnostic(
+                    severity: .warning,
+                    message: "Declaration \(name) is missing a terminating semicolon."
+                ))
                 index = scanner.count
             }
 
             let typeText = String(scanner[typeStart..<index])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !name.isEmpty, !typeText.isEmpty {
-                declarations.append(Declaration(name: name, typeText: typeText))
+                declarations.append(Declaration(name: name, typeText: typeText, section: section))
+            } else {
+                diagnostics.append(Diagnostic(
+                    severity: .warning,
+                    message: "Ignored an incomplete declaration near \(name.isEmpty ? "<unknown>" : name)."
+                ))
             }
             if index < scanner.count, scanner[index] == ";" {
                 index += 1
             }
         }
 
-        return declarations
+        return ParsedDeclarations(declarations: declarations, diagnostics: diagnostics)
     }
 
     private static func stripComments(_ source: String) -> String {
@@ -452,6 +533,78 @@ enum PascalTypeDefinitionParser {
         return Int(trimmed)
     }
 
+    private static func parseConstantValue(_ text: String) -> PascalConstantValue {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let integer = parseIntegerConstant(trimmed) {
+            return .integer(integer)
+        }
+        if trimmed.range(
+            of: #"^[+-]?(?:[0-9]+\.[0-9]*|[0-9]*\.[0-9]+)(?:[Ee][+-]?[0-9]+)?$"#,
+            options: .regularExpression
+        ) != nil {
+            return .real(trimmed.uppercased())
+        }
+        if trimmed.hasPrefix("'"), trimmed.hasSuffix("'"), trimmed.count >= 2 {
+            let body = String(trimmed.dropFirst().dropLast())
+                .replacingOccurrences(of: "''", with: "'")
+            return body.count == 1 ? .character(trimmed) : .string(trimmed)
+        }
+        if trimmed.uppercased() == "TRUE" {
+            return .boolean(true)
+        }
+        if trimmed.uppercased() == "FALSE" {
+            return .boolean(false)
+        }
+        if isIdentifierText(trimmed) {
+            return .identifier(trimmed.uppercased())
+        }
+        return .raw(trimmed)
+    }
+
+    private static func unsupportedTypeDiagnostic(
+        name: String,
+        typeText: String
+    ) -> Diagnostic? {
+        let upper = typeText
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .uppercased()
+
+        if (upper.hasPrefix("ARRAY") || upper.hasPrefix("PACKED ARRAY")),
+           !upper.contains(" OF ") {
+            return Diagnostic(
+                severity: .warning,
+                message: "Array declaration \(name) is missing OF."
+            )
+        }
+        if upper.hasPrefix("SET"), !upper.hasPrefix("SET OF ") {
+            return Diagnostic(
+                severity: .warning,
+                message: "Set declaration \(name) is missing OF."
+            )
+        }
+        if upper.hasPrefix("FILE"), !upper.hasPrefix("FILE OF ") {
+            return Diagnostic(
+                severity: .warning,
+                message: "File declaration \(name) is missing OF."
+            )
+        }
+        if upper.hasPrefix("PROCEDURE"), upper.contains("("), !upper.contains(")") {
+            return Diagnostic(
+                severity: .warning,
+                message: "Procedure type declaration \(name) has an unterminated parameter list."
+            )
+        }
+        if upper.hasPrefix("FUNCTION"), upper.contains("("), !upper.contains(")") {
+            return Diagnostic(
+                severity: .warning,
+                message: "Function type declaration \(name) has an unterminated parameter list."
+            )
+        }
+        return nil
+    }
+
     private static func parseSubrange(
         _ text: String,
         constants: [String: Int]
@@ -521,9 +674,30 @@ enum PascalTypeDefinitionParser {
 
     private static func findRecordEnd(in chars: [Character], from start: Int) -> Range<Int>? {
         var index = start
+        var recordDepth = 0
+        var inString = false
         while index < chars.count {
-            if startsWithWord("END", chars, index) {
-                return index..<(index + 3)
+            if chars[index] == "'" {
+                if inString, index + 1 < chars.count, chars[index + 1] == "'" {
+                    index += 2
+                    continue
+                }
+                inString.toggle()
+                index += 1
+                continue
+            }
+            if !inString, startsWithWord("RECORD", chars, index) {
+                recordDepth += 1
+                index += "RECORD".count
+                continue
+            }
+            if !inString, startsWithWord("END", chars, index) {
+                recordDepth -= 1
+                if recordDepth == 0 {
+                    return index..<(index + 3)
+                }
+                index += "END".count
+                continue
             }
             index += 1
         }
@@ -548,12 +722,27 @@ enum PascalTypeDefinitionParser {
     ) -> Int? {
         var index = start
         var parenDepth = 0
+        var bracketDepth = 0
+        var inString = false
         while index < chars.count {
-            if chars[index] == "(" {
+            if chars[index] == "'" {
+                if inString, index + 1 < chars.count, chars[index + 1] == "'" {
+                    index += 2
+                    continue
+                }
+                inString.toggle()
+            } else if !inString, chars[index] == "(" {
                 parenDepth += 1
-            } else if chars[index] == ")" {
+            } else if !inString, chars[index] == ")" {
                 parenDepth = max(parenDepth - 1, 0)
-            } else if chars[index] == character && parenDepth == 0 {
+            } else if !inString, chars[index] == "[" {
+                bracketDepth += 1
+            } else if !inString, chars[index] == "]" {
+                bracketDepth = max(bracketDepth - 1, 0)
+            } else if !inString,
+                      chars[index] == character,
+                      parenDepth == 0,
+                      bracketDepth == 0 {
                 return index
             }
             index += 1

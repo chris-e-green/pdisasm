@@ -56,10 +56,48 @@ public struct MetadataTypeAlias: Hashable, Codable, Sendable {
 
 public struct MetadataConstant: Hashable, Codable, Sendable {
     public let name: String
-    public let value: Int
+    public let constantValue: PascalConstantValue
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case value
+        case constantValue
+    }
+
+    public var value: Int {
+        constantValue.integerValue ?? 0
+    }
+
     public init(name: String, value: Int) {
         self.name = name
-        self.value = value
+        self.constantValue = .integer(value)
+    }
+
+    public init(name: String, constantValue: PascalConstantValue) {
+        self.name = name
+        self.constantValue = constantValue
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        if let constantValue = try container.decodeIfPresent(
+            PascalConstantValue.self,
+            forKey: .constantValue
+        ) {
+            self.constantValue = constantValue
+        } else {
+            self.constantValue = .integer(try container.decode(Int.self, forKey: .value))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(constantValue, forKey: .constantValue)
+        if let integerValue = constantValue.integerValue {
+            try container.encode(integerValue, forKey: .value)
+        }
     }
 }
 
@@ -73,6 +111,20 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
     public var constants: [ProvenancedMetadataFact<MetadataConstant>]
     public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
     public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
+    public var diagnostics: [Diagnostic]
+
+    private enum CodingKeys: String, CodingKey {
+        case labels
+        case procedures
+        case comments
+        case records
+        case typeAliases
+        case scalarTypes
+        case constants
+        case subrangeTypes
+        case globals
+        case diagnostics
+    }
 
     public init(
         labels: [ProvenancedMetadataFact<Location>] = [],
@@ -83,7 +135,8 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         scalarTypes: [ProvenancedMetadataFact<PascalScalarType>] = [],
         constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
         subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
-        globals: [ProvenancedMetadataFact<MetadataGlobal>] = []
+        globals: [ProvenancedMetadataFact<MetadataGlobal>] = [],
+        diagnostics: [Diagnostic] = []
     ) {
         self.labels = labels
         self.procedures = procedures
@@ -94,6 +147,21 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         self.constants = constants
         self.subrangeTypes = subrangeTypes
         self.globals = globals
+        self.diagnostics = diagnostics
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        labels = try container.decode([ProvenancedMetadataFact<Location>].self, forKey: .labels)
+        procedures = try container.decode([ProvenancedMetadataFact<ProcedureIdentifier>].self, forKey: .procedures)
+        comments = try container.decode([ProvenancedMetadataFact<DisassemblyComment>].self, forKey: .comments)
+        records = try container.decode([ProvenancedMetadataFact<PascalRecord>].self, forKey: .records)
+        typeAliases = try container.decode([ProvenancedMetadataFact<MetadataTypeAlias>].self, forKey: .typeAliases)
+        scalarTypes = try container.decode([ProvenancedMetadataFact<PascalScalarType>].self, forKey: .scalarTypes)
+        constants = try container.decode([ProvenancedMetadataFact<MetadataConstant>].self, forKey: .constants)
+        subrangeTypes = try container.decode([ProvenancedMetadataFact<PascalSubrangeType>].self, forKey: .subrangeTypes)
+        globals = try container.decode([ProvenancedMetadataFact<MetadataGlobal>].self, forKey: .globals)
+        diagnostics = try container.decodeIfPresent([Diagnostic].self, forKey: .diagnostics) ?? []
     }
 }
 
@@ -107,6 +175,20 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
     public var constants: [ProvenancedMetadataFact<MetadataConstant>]
     public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
     public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
+    public var diagnostics: [Diagnostic]
+
+    private enum CodingKeys: String, CodingKey {
+        case labels
+        case procedures
+        case comments
+        case records
+        case typeAliases
+        case scalarTypes
+        case constants
+        case subrangeTypes
+        case globals
+        case diagnostics
+    }
 
     public init(
         labels: [ProvenancedMetadataFact<Location>] = [],
@@ -117,7 +199,8 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         scalarTypes: [ProvenancedMetadataFact<PascalScalarType>] = [],
         constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
         subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
-        globals: [ProvenancedMetadataFact<MetadataGlobal>] = []
+        globals: [ProvenancedMetadataFact<MetadataGlobal>] = [],
+        diagnostics: [Diagnostic] = []
     ) {
         self.labels = labels
         self.procedures = procedures
@@ -128,6 +211,21 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         self.constants = constants
         self.subrangeTypes = subrangeTypes
         self.globals = globals
+        self.diagnostics = diagnostics
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        labels = try container.decode([ProvenancedMetadataFact<Location>].self, forKey: .labels)
+        procedures = try container.decode([ProvenancedMetadataFact<ProcedureIdentifier>].self, forKey: .procedures)
+        comments = try container.decode([ProvenancedMetadataFact<DisassemblyComment>].self, forKey: .comments)
+        records = try container.decode([ProvenancedMetadataFact<PascalRecord>].self, forKey: .records)
+        typeAliases = try container.decode([ProvenancedMetadataFact<MetadataTypeAlias>].self, forKey: .typeAliases)
+        scalarTypes = try container.decode([ProvenancedMetadataFact<PascalScalarType>].self, forKey: .scalarTypes)
+        constants = try container.decode([ProvenancedMetadataFact<MetadataConstant>].self, forKey: .constants)
+        subrangeTypes = try container.decode([ProvenancedMetadataFact<PascalSubrangeType>].self, forKey: .subrangeTypes)
+        globals = try container.decode([ProvenancedMetadataFact<MetadataGlobal>].self, forKey: .globals)
+        diagnostics = try container.decodeIfPresent([Diagnostic].self, forKey: .diagnostics) ?? []
     }
 
     public init(merging bundles: [MetadataBundle]) {
@@ -140,6 +238,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         var constants: [String: ProvenancedMetadataFact<MetadataConstant>] = [:]
         var subranges: [String: ProvenancedMetadataFact<PascalSubrangeType>] = [:]
         var globals: [Int: ProvenancedMetadataFact<MetadataGlobal>] = [:]
+        var diagnostics: [Diagnostic] = []
         for bundle in bundles {
             for fact in bundle.labels { labels.mergeKeepingHighestPrecedence(fact, key: LocationReference(fact.value)) }
             for fact in bundle.procedures { procedures.mergeKeepingHighestPrecedence(fact, key: ProcedureKey(fact.value)) }
@@ -150,6 +249,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
             for fact in bundle.constants { constants.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
             for fact in bundle.subrangeTypes { subranges.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
             for fact in bundle.globals { globals.mergeKeepingHighestPrecedence(fact, key: fact.value.address) }
+            diagnostics.append(contentsOf: bundle.diagnostics)
         }
         self.labels = labels.values.sorted { $0.value < $1.value }
         self.procedures = procedures.values.sorted { lhs, rhs in
@@ -167,6 +267,12 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         self.constants = constants.values.sorted { $0.value.name < $1.value.name }
         self.subrangeTypes = subranges.values.sorted { $0.value.name < $1.value.name }
         self.globals = globals.values.sorted { $0.value.address < $1.value.address }
+        self.diagnostics = Array(Set(diagnostics)).sorted {
+            if $0.severity != $1.severity {
+                return $0.severity.rawValue < $1.severity.rawValue
+            }
+            return $0.message < $1.message
+        }
     }
 }
 
@@ -530,8 +636,14 @@ public struct FileBackedMetadataRepository: MetadataRepository {
                 records: definitions.records.map { ProvenancedMetadataFact(value: $0, provenance: source) },
                 typeAliases: definitions.aliases.map { ProvenancedMetadataFact(value: MetadataTypeAlias(name: $0.key, type: $0.value), provenance: source) },
                 scalarTypes: definitions.scalarTypes.map { ProvenancedMetadataFact(value: $0.value, provenance: source) },
-                constants: definitions.constants.map { ProvenancedMetadataFact(value: MetadataConstant(name: $0.key, value: $0.value), provenance: source) },
-                subrangeTypes: definitions.subrangeTypes.map { ProvenancedMetadataFact(value: $0.value, provenance: source) }
+                constants: definitions.constantValues.map {
+                    ProvenancedMetadataFact(
+                        value: MetadataConstant(name: $0.key, constantValue: $0.value),
+                        provenance: source
+                    )
+                },
+                subrangeTypes: definitions.subrangeTypes.map { ProvenancedMetadataFact(value: $0.value, provenance: source) },
+                diagnostics: definitions.diagnostics
             )
         }
     }

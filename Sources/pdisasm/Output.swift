@@ -131,6 +131,7 @@ private func runLevelDeclarationLines(from result: DisassemblyResult) -> [String
         aliases: result.typeAliases,
         scalarTypes: result.scalarTypes,
         constants: result.constants,
+        constantValues: result.constantValues,
         subrangeTypes: result.subrangeTypes,
         variables: accessedSystemGlobalLocations(in: result)
             + dataSegmentGlobalLocations(in: result)
@@ -316,7 +317,7 @@ private func renderKnownTypeDefinitionLines(
     records: Set<PascalRecord>,
     aliases: [String: String],
     scalarTypes: [String: PascalScalarType],
-    constants: [String: Int],
+    constants: [String: PascalConstantValue],
     subrangeTypes: [String: PascalSubrangeType]
 ) -> [String] {
     guard !records.isEmpty || !aliases.isEmpty || !scalarTypes.isEmpty || !constants.isEmpty || !subrangeTypes.isEmpty else {
@@ -329,7 +330,7 @@ private func renderKnownTypeDefinitionLines(
         lines.append("CONST")
         for constant in constants.keys.sorted() {
             if let value = constants[constant] {
-                lines.append("  \(constant) = \(value);")
+                lines.append("  \(constant) = \(value.sourceText);")
             }
         }
         lines.append("")
@@ -388,6 +389,7 @@ func renderPascalDeclarationSectionLines(
     aliases: [String: String] = [:],
     scalarTypes: [String: PascalScalarType] = [:],
     constants: [String: Int] = [:],
+    constantValues: [String: PascalConstantValue] = [:],
     subrangeTypes: [String: PascalSubrangeType] = [:],
     variables: [Location] = []
 ) -> [String] {
@@ -402,11 +404,14 @@ func renderPascalDeclarationSectionLines(
         lines.append("")
     }
 
-    if !constants.isEmpty {
+    let renderedConstants = constants.reduce(into: constantValues) {
+        $0[$1.key] = .integer($1.value)
+    }
+    if !renderedConstants.isEmpty {
         lines.append("CONST")
-        for constant in constants.keys.sorted() {
-            if let value = constants[constant] {
-                lines.append("  \(renderPascalIdentifier(constant)) = \(value);")
+        for constant in renderedConstants.keys.sorted() {
+            if let value = renderedConstants[constant] {
+                lines.append("  \(renderPascalIdentifier(constant)) = \(value.sourceText);")
             }
         }
         lines.append("")
@@ -727,7 +732,7 @@ public func renderStructuredLines(
         records: result.knownRecords,
         aliases: result.typeAliases,
         scalarTypes: result.scalarTypes,
-        constants: result.constants,
+        constants: result.constantValues,
         subrangeTypes: result.subrangeTypes
     ) {
         addLine(line.hasPrefix("##") ? .markup : .variable, line)

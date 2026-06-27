@@ -89,6 +89,7 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let typeAliases: [String: String]
     public let scalarTypes: [String: PascalScalarType]
     public let constants: [String: Int]
+    public let constantValues: [String: PascalConstantValue]
     public let subrangeTypes: [String: PascalSubrangeType]
     public let typeConflicts: [TypeConflict]
     public let diagnostics: [Diagnostic]
@@ -106,6 +107,7 @@ public struct DisassemblyResult: @unchecked Sendable {
         typeAliases: [String: String],
         scalarTypes: [String: PascalScalarType],
         constants: [String: Int],
+        constantValues: [String: PascalConstantValue] = [:],
         subrangeTypes: [String: PascalSubrangeType],
         typeConflicts: [TypeConflict],
         diagnostics: [Diagnostic],
@@ -122,6 +124,9 @@ public struct DisassemblyResult: @unchecked Sendable {
         self.typeAliases = typeAliases
         self.scalarTypes = scalarTypes
         self.constants = constants
+        self.constantValues = constantValues.isEmpty
+            ? constants.mapValues(PascalConstantValue.integer)
+            : constantValues
         self.subrangeTypes = subrangeTypes
         self.typeConflicts = typeConflicts
         self.diagnostics = diagnostics
@@ -269,6 +274,7 @@ private struct MetadataContext {
         typeAliases: inout [String: String],
         scalarTypes: inout [String: PascalScalarType],
         constants: inout [String: Int],
+        constantValues: inout [String: PascalConstantValue],
         subrangeTypes: inout [String: PascalSubrangeType],
         allLocations: inout Set<Location>,
         allProcedures: inout [ProcedureIdentifier],
@@ -286,6 +292,7 @@ private struct MetadataContext {
             aliases: &typeAliases,
             scalarTypes: &scalarTypes,
             constants: &constants,
+            constantValues: &constantValues,
             subrangeTypes: &subrangeTypes,
             isSystemRecord: true
         )
@@ -295,6 +302,7 @@ private struct MetadataContext {
             aliases: &typeAliases,
             scalarTypes: &scalarTypes,
             constants: &constants,
+            constantValues: &constantValues,
             subrangeTypes: &subrangeTypes
         )
         store.importLabels(fromCSV: allLabelsCSVFile, to: &allLocations)
@@ -738,6 +746,7 @@ public func disassemble(
     var typeAliases: [String: String] = [:]
     var scalarTypes: [String: PascalScalarType] = [:]
     var constants: [String: Int] = [:]
+    var constantValues: [String: PascalConstantValue] = [:]
     var subrangeTypes: [String: PascalSubrangeType] = [:]
     var lineComments: [InstructionReference: String] = [:]
 
@@ -753,7 +762,23 @@ public func disassemble(
         knownRecords.formUnion(metadataSnapshot.records.map(\.value))
         typeAliases.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.typeAliases.map { ($0.value.name, $0.value.type) })) { _, new in new }
         scalarTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.scalarTypes.map { ($0.value.name, $0.value) })) { _, new in new }
-        constants.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.constants.map { ($0.value.name, $0.value.value) })) { _, new in new }
+        constantValues.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.constants.map {
+            ($0.value.name, $0.value.constantValue)
+        })) { _, new in new }
+        constants.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.constants.compactMap {
+            guard let integer = $0.value.constantValue.integerValue else {
+                return nil
+            }
+            return ($0.value.name, integer)
+        })) { _, new in new }
+        for diagnostic in metadataSnapshot.diagnostics {
+            switch diagnostic.severity {
+            case .warning:
+                diagnostics.warning(diagnostic.message)
+            case .error:
+                diagnostics.error(diagnostic.message)
+            }
+        }
         subrangeTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.subrangeTypes.map { ($0.value.name, $0.value) })) { _, new in new }
         globalNames.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.globals.map { ($0.value.address, $0.value.identifier) })) { _, new in new }
     } else {
@@ -762,6 +787,7 @@ public func disassemble(
             typeAliases: &typeAliases,
             scalarTypes: &scalarTypes,
             constants: &constants,
+            constantValues: &constantValues,
             subrangeTypes: &subrangeTypes,
             allLocations: &allLocations,
             allProcedures: &allProcedures,
@@ -831,6 +857,7 @@ public func disassemble(
         typeAliases: typeAliases,
         scalarTypes: scalarTypes,
         constants: constants,
+        constantValues: constantValues,
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics.diagnostics,
