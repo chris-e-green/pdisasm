@@ -120,6 +120,45 @@ final class ProcedureIdentifierTests: XCTestCase {
         XCTAssertEqual(decoded.parameters[0].name, "X")
     }
 
+    func testParameterModeCodableRoundTripAndLegacyDefault() throws {
+        let original = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 2,
+            parameters: [
+                Identifier(
+                    name: "VALUE",
+                    type: "INTEGER",
+                    parameterMode: .variable,
+                    parameterModeSource: .user
+                )
+            ]
+        )
+
+        let decoded = try JSONDecoder().decode(
+            ProcedureIdentifier.self,
+            from: JSONEncoder().encode(original)
+        )
+        XCTAssertEqual(decoded.parameters[0].parameterMode, .variable)
+        XCTAssertEqual(decoded.parameters[0].parameterModeSource, .user)
+
+        let legacy = try JSONDecoder().decode(
+            ProcedureIdentifier.self,
+            from: """
+            {
+              "segmentNumber": 1,
+              "procNumber": 2,
+              "parameters": "VALUE:INTEGER",
+              "returnType": null,
+              "isAssembly": false,
+              "isFunction": false
+            }
+            """.data(using: .utf8)!
+        )
+        XCTAssertEqual(legacy.parameters[0].parameterMode, .unknown)
+        XCTAssertEqual(legacy.parameters[0].parameterModeSource, .unknown)
+    }
+
     func testDecodeNormalizesArbitraryPointerParameterType() throws {
         let json = """
         {

@@ -346,9 +346,9 @@ final class OutputFlagTests: XCTestCase {
             procedure: 2,
             procName: "UPDATE",
             parameters: [
-                Identifier(name: "X", type: "INTEGER"),
-                Identifier(name: "Y", type: "INTEGER"),
-                Identifier(name: "FLAG", type: "BOOLEAN")
+                Identifier(name: "X", type: "INTEGER", parameterMode: .value),
+                Identifier(name: "Y", type: "INTEGER", parameterMode: .value),
+                Identifier(name: "FLAG", type: "BOOLEAN", parameterMode: .value)
             ]
         )
 
@@ -365,7 +365,9 @@ final class OutputFlagTests: XCTestCase {
             segment: 0,
             procedure: 3,
             procName: "LOOKUP",
-            parameters: [Identifier(name: "INDEX", type: "INTEGER")],
+            parameters: [
+                Identifier(name: "INDEX", type: "INTEGER", parameterMode: .value)
+            ],
             returnType: "CHAR"
         )
 
@@ -394,7 +396,13 @@ final class OutputFlagTests: XCTestCase {
             procedure: 5,
             parameters: [
                 Identifier(name: "VALUE", type: "UNKNOWN"),
-                Identifier(name: "COUNT", type: "INTEGER", typeSource: .inferred)
+                Identifier(
+                    name: "COUNT",
+                    type: "INTEGER",
+                    typeSource: .inferred,
+                    parameterMode: .value,
+                    parameterModeSource: .inferred
+                )
             ],
             returnType: "REAL",
             returnTypeSource: .inferred
@@ -404,7 +412,34 @@ final class OutputFlagTests: XCTestCase {
             pascalSourceLines(for: identifier).contains(
                 "FUNCTION FUNC5(VALUE: UNKNOWN; COUNT: INTEGER): REAL;"
                     + " (* uncertain signature: name generated; VALUE type unknown;"
-                    + " COUNT type inferred; return type inferred *)"
+                    + " VALUE mode unknown; COUNT type inferred;"
+                    + " COUNT mode inferred as value; return type inferred *)"
+            )
+        )
+    }
+
+    func testPascalSourceRendersExplicitAndInferredVariableModes() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 6,
+            procName: "SWAP",
+            parameters: [
+                Identifier(name: "LEFT", type: "INTEGER", parameterMode: .variable),
+                Identifier(name: "RIGHT", type: "INTEGER", parameterMode: .variable),
+                Identifier(
+                    name: "COUNT",
+                    type: "INTEGER",
+                    parameterMode: .value,
+                    parameterModeSource: .inferred
+                )
+            ]
+        )
+
+        XCTAssertTrue(
+            pascalSourceLines(for: identifier).contains(
+                "PROCEDURE SWAP(VAR LEFT, RIGHT: INTEGER; COUNT: INTEGER);"
+                    + " (* uncertain signature: COUNT mode inferred as value *)"
             )
         )
     }

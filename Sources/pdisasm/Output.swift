@@ -1287,8 +1287,15 @@ private func sourceSignatureParameters(for procedure: ProcedureIdentifier) -> [I
     guard procedure.parameterLocations.count == procedure.parameters.count else {
         return procedure.parameters
     }
-    return procedure.parameterLocations.map {
-        Identifier(name: $0.name, type: $0.type, typeSource: $0.typeSource)
+    return procedure.parameterLocations.enumerated().map { index, location in
+        let signatureParameter = procedure.parameters[index]
+        return Identifier(
+            name: location.name,
+            type: location.type,
+            typeSource: location.typeSource,
+            parameterMode: signatureParameter.parameterMode,
+            parameterModeSource: signatureParameter.parameterModeSource
+        )
     }
 }
 
@@ -1296,17 +1303,18 @@ private func renderPascalSourceHeader(for procedure: ProcedureIdentifier) -> Str
     let name = renderPascalIdentifier(defaultProcedureName(for: procedure))
     var header = procedure.isFunction ? "FUNCTION \(name)" : "PROCEDURE \(name)"
     let parameters = sourceSignatureParameters(for: procedure)
-    var parameterGroups: [(names: [String], type: String)] = []
+    var parameterGroups: [(names: [String], type: String, mode: ParameterMode)] = []
     var uncertainty: [String] = []
 
     for parameter in parameters {
         let parameterName = renderPascalIdentifier(parameter.name)
         let trimmedType = parameter.type.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = trimmedType.isEmpty ? "UNKNOWN" : trimmedType
-        if parameterGroups.last?.type == type {
+        if parameterGroups.last?.type == type,
+           parameterGroups.last?.mode == parameter.parameterMode {
             parameterGroups[parameterGroups.count - 1].names.append(parameterName)
         } else {
-            parameterGroups.append(([parameterName], type))
+            parameterGroups.append(([parameterName], type, parameter.parameterMode))
         }
 
         if type == "UNKNOWN" || parameter.typeSource == .unknown {
@@ -1314,11 +1322,27 @@ private func renderPascalSourceHeader(for procedure: ProcedureIdentifier) -> Str
         } else if parameter.typeSource == .inferred {
             uncertainty.append("\(parameterName) type inferred")
         }
+        switch parameter.parameterModeSource {
+        case .unknown:
+            uncertainty.append("\(parameterName) mode unknown")
+        case .inferred:
+            if parameter.parameterMode == .unknown {
+                uncertainty.append("\(parameterName) mode ambiguous")
+            } else {
+                uncertainty.append(
+                    "\(parameterName) mode inferred as "
+                        + (parameter.parameterMode == .variable ? "VAR" : "value")
+                )
+            }
+        case .metadata, .user:
+            break
+        }
     }
 
     if !parameterGroups.isEmpty {
         header += "(" + parameterGroups.map {
-            "\($0.names.joined(separator: ", ")): \($0.type)"
+            ($0.mode == .variable ? "VAR " : "")
+                + "\($0.names.joined(separator: ", ")): \($0.type)"
         }.joined(separator: "; ") + ")"
     }
 
