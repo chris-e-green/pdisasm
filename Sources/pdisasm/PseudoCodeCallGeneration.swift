@@ -1,10 +1,13 @@
 import Foundation
 
 extension PseudoCodeGenerator {
-    private func discardFunctionReturnSpace(from stack: inout StackSimulator) {
-        // Function calls reserve two words for the callee result before arguments.
-        _ = stack.pop()
-        _ = stack.pop()
+    private func discardFunctionReturnSpace(
+        for called: ProcedureIdentifier,
+        from stack: inout StackSimulator
+    ) {
+        for _ in 0..<(called.functionResultStorage?.reservedWordCount ?? 0) {
+            _ = stack.pop()
+        }
     }
 
     private mutating func callArguments(
@@ -215,7 +218,7 @@ extension PseudoCodeGenerator {
         }
 
         if called.isFunction {
-            discardFunctionReturnSpace(from: &stack)
+            discardFunctionReturnSpace(for: called, from: &stack)
         }
         let aParams = callArguments(for: called, stack: &stack)
 
@@ -230,7 +233,7 @@ extension PseudoCodeGenerator {
                 location: called.returnLocation ?? Location(
                     segment: called.segment,
                     procedure: called.procedure,
-                    addr: 1
+                    addr: called.functionResultStorage?.baseAddress
                 )
             ))
             return nil

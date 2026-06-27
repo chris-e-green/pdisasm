@@ -205,9 +205,8 @@ func decodePascalProcedure(
         )
         if proc.parameterSize > 0 {
             var paramCount = proc.parameterSize
-            if proc.identifier?.isFunction == true {
-                // functions have an extra two words for the return value
-                paramCount -= 2
+            if let resultStorage = proc.identifier?.functionResultStorage {
+                paramCount -= resultStorage.reservedWordCount
             }
             if paramCount > 0 {
                 for parmnum in 1...paramCount {
