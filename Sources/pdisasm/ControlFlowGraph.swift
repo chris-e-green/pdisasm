@@ -61,6 +61,18 @@ public struct ControlFlowEdge: Hashable, Sendable {
     }
 }
 
+public struct ConditionalControlFlow: Hashable, Sendable {
+    public let conditionBlock: Int
+    public let trueBlock: Int
+    public let falseBlock: Int
+
+    public init(conditionBlock: Int, trueBlock: Int, falseBlock: Int) {
+        self.conditionBlock = conditionBlock
+        self.trueBlock = trueBlock
+        self.falseBlock = falseBlock
+    }
+}
+
 public struct BasicBlock: Hashable, Sendable {
     public let startAddress: Int
     public let instructionAddresses: [Int]
@@ -319,6 +331,36 @@ public struct ControlFlowGraph {
         postDominators[block]?.contains(postDominator) ?? false
     }
 
+    public func immediateDominator(of block: Int) -> Int? {
+        Self.immediateRelation(of: block, relations: dominators)
+    }
+
+    public func immediatePostDominator(of block: Int) -> Int? {
+        Self.immediateRelation(of: block, relations: postDominators)
+    }
+
+    public func conditionalControlFlow(
+        from block: Int
+    ) -> ConditionalControlFlow? {
+        let outgoing = edges.filter { $0.source == block }
+        let trueBlocks = outgoing.compactMap { edge -> Int? in
+            guard edge.kind == .fallthrough else { return nil }
+            return edge.destination
+        }
+        let falseBlocks = outgoing.compactMap { edge -> Int? in
+            guard edge.kind == .conditionalBranch else { return nil }
+            return edge.destination
+        }
+        guard trueBlocks.count == 1, falseBlocks.count == 1 else {
+            return nil
+        }
+        return ConditionalControlFlow(
+            conditionBlock: block,
+            trueBlock: trueBlocks[0],
+            falseBlock: falseBlocks[0]
+        )
+    }
+
     private static func branchTargets(for instruction: Instruction) -> Set<Int> {
         guard instruction.isPascal else { return [] }
         switch instruction.opcode {
@@ -420,6 +462,23 @@ public struct ControlFlowGraph {
             }
         }
         return result
+    }
+
+    private static func immediateRelation(
+        of node: Int,
+        relations: [Int: Set<Int>]
+    ) -> Int? {
+        guard let related = relations[node]?.subtracting([node]) else {
+            return nil
+        }
+        return related.first { candidate in
+            guard let candidateRelations = relations[candidate] else {
+                return false
+            }
+            return related.allSatisfy {
+                $0 == candidate || candidateRelations.contains($0)
+            }
+        }
     }
 
     private static func reachableNodes(
