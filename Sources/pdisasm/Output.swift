@@ -1369,78 +1369,200 @@ private func renderPascalSourceHeader(for procedure: ProcedureIdentifier) -> Str
     return header
 }
 
-public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: Bool = true) -> [String] {
+private func renderPascalProcedureLines(
+    _ procedure: Procedure,
+    segmentNumber: Int,
+    result: DisassemblyResult
+) -> [String] {
+    guard procedure.identifier?.isAssembly == false else { return [] }
     var lines: [String] = []
-    if showMarkup {
-        lines.append("#  Pascal source reconstruction for \(result.sourceFilename)")
-        lines.append("")
+    if let identifier = procedure.identifier {
+        lines.append(renderPascalSourceHeader(for: identifier))
+    } else {
+        lines.append(
+            "PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));"
+                + " (* uncertain signature: procedure metadata unavailable *)"
+        )
     }
 
-    let runLevelDeclarations = runLevelDeclarationLines(from: result)
-    if !runLevelDeclarations.isEmpty {
-        if showMarkup {
-            lines.append("## Declarations")
-            lines.append("")
-            lines.append("```pascal")
+    var statements: [PascalStmt] = []
+    for (_, instruction) in procedure.instructions.sorted(by: { $0.key < $1.key }) {
+        for pre in instruction.prePseudoCode.reversed() {
+            statements.append(.raw(pre))
         }
-        lines.append(contentsOf: runLevelDeclarations)
-        if showMarkup {
-            lines.append("```")
+        if let pseudo = instruction.pseudoCodeStatement {
+            statements.append(pseudo.pascalSourceStatement(
+                functionResultStorage: procedure.identifier?.functionResultStorage,
+                functionName: procedure.identifier.map {
+                    $0.procName ?? defaultProcedureName(for: $0)
+                }
+            ))
+        } else if let pseudo = instruction.pseudoCode {
+            statements.append(
+                PseudoCodeStatement(
+                    renderedText: pseudo,
+                    locations: result.allLocations
+                ).pascalSourceStatement
+            )
         }
+    }
+    let declarationLines = procedureDeclarationLines(
+        for: procedure,
+        segmentNumber: segmentNumber,
+        statements: statements,
+        result: result
+    )
+    if !declarationLines.isEmpty {
+        lines.append(contentsOf: declarationLines)
         lines.append("")
     }
+    let body = PascalBlock(statements: statements).rendered()
+    lines.append(contentsOf: body.dropLast())
+    lines.append((body.last ?? "END") + ";")
+    return lines
+}
 
-    for (segmentNumber, codeSegment) in result.codeSegments.sorted(by: { $0.key < $1.key }) {
-        let segmentName = result.segDictionary.segTable[segmentNumber]?.name ?? "SEG\(segmentNumber)"
-        if showMarkup {
-            lines.append("## Segment \(segmentName) (\(segmentNumber))")
-            lines.append("")
-        }
+private func segmentAnnotation(
+    number: Int,
+    result: DisassemblyResult
+) -> String {
+    let segment = result.segDictionary.segTable[number]
+    let name = segment?.name ?? "SEG\(number)"
+    if segment?.segmentKind == .segproc {
+        return "(* SEGMENT PROCEDURE \(renderPascalIdentifier(name)) [\(number)] *)"
+    }
+    return "(* Segment \(renderPascalIdentifier(name)) [\(number)] *)"
+}
 
-        for procedure in codeSegment.procedures.sorted(by: { ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1) }) {
-            guard procedure.identifier?.isAssembly == false else { continue }
-            if let identifier = procedure.identifier {
-                lines.append(renderPascalSourceHeader(for: identifier))
-            } else {
-                lines.append(
-                    "PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));"
-                        + " (* uncertain signature: procedure metadata unavailable *)"
-                )
-            }
-            if showMarkup { lines.append("```pascal") }
-            var statements: [PascalStmt] = []
-            for (_, instruction) in procedure.instructions.sorted(by: { $0.key < $1.key }) {
-                for pre in instruction.prePseudoCode.reversed() {
-                    statements.append(.raw(pre))
-                }
-                if let pseudo = instruction.pseudoCodeStatement {
-                    statements.append(pseudo.pascalSourceStatement(
-                        functionResultStorage: procedure.identifier?.functionResultStorage,
-                        functionName: procedure.identifier.map {
-                            $0.procName ?? defaultProcedureName(for: $0)
-                        }
-                    ))
-                } else if let pseudo = instruction.pseudoCode {
-                    statements.append(PseudoCodeStatement(renderedText: pseudo, locations: result.allLocations).pascalSourceStatement)
-                }
-            }
-            let declarationLines = procedureDeclarationLines(
-                for: procedure,
+private func renderSegmentImplementations(
+    _ segmentNumbers: [Int],
+    result: DisassemblyResult
+) -> [String] {
+    var lines: [String] = []
+    for segmentNumber in segmentNumbers {
+        guard let codeSegment = result.codeSegments[segmentNumber] else { continue }
+        lines.append(segmentAnnotation(number: segmentNumber, result: result))
+        lines.append("")
+        for procedure in codeSegment.procedures.sorted(by: {
+            ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1)
+        }) {
+            let procedureLines = renderPascalProcedureLines(
+                procedure,
                 segmentNumber: segmentNumber,
-                statements: statements,
                 result: result
             )
-            if !declarationLines.isEmpty {
-                lines.append(contentsOf: declarationLines)
-                lines.append("")
-            }
-            lines.append(contentsOf: PascalBlock(statements: statements).rendered())
-            lines.append(";")
-            if showMarkup {
-                lines.append("```")
-                lines.append("")
-            }
+            guard !procedureLines.isEmpty else { continue }
+            lines.append(contentsOf: procedureLines)
+            lines.append("")
         }
     }
+    if lines.last == "" {
+        lines.removeLast()
+    }
     return lines
+}
+
+private func renderInterfaceHeaders(
+    _ segmentNumbers: [Int],
+    result: DisassemblyResult
+) -> [String] {
+    var lines: [String] = []
+    for segmentNumber in segmentNumbers {
+        guard let codeSegment = result.codeSegments[segmentNumber] else { continue }
+        lines.append(segmentAnnotation(number: segmentNumber, result: result))
+        for procedure in codeSegment.procedures.sorted(by: {
+            ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1)
+        }) where procedure.identifier?.isAssembly == false {
+            if let identifier = procedure.identifier {
+                lines.append(renderPascalSourceHeader(for: identifier))
+            }
+        }
+        lines.append("")
+    }
+    if lines.last == "" {
+        lines.removeLast()
+    }
+    return lines
+}
+
+private func renderUsesClause(_ units: [String]) -> [String] {
+    guard !units.isEmpty else { return [] }
+    return [
+        "USES",
+        "  \(units.map(renderPascalIdentifier).joined(separator: ", "));"
+    ]
+}
+
+private func renderPascalCompilationUnitLines(
+    from result: DisassemblyResult
+) -> [String] {
+    let sourceUnit = PascalSourceUnit(result: result)
+    let name = renderPascalIdentifier(sourceUnit.name)
+    var lines = [
+        sourceUnit.kind == .unit ? "UNIT \(name);" : "PROGRAM \(name);",
+        ""
+    ]
+    let runLevelDeclarations = runLevelDeclarationLines(from: result)
+    let usesLines = renderUsesClause(sourceUnit.uses)
+
+    if sourceUnit.kind == .unit {
+        lines.append("INTERFACE")
+        if !usesLines.isEmpty {
+            lines.append(contentsOf: usesLines)
+            lines.append("")
+        }
+        if sourceUnit.interfaceSegments.isEmpty {
+            lines.append(
+                "(* Original INTERFACE declarations are not recoverable;"
+                    + " procedures are placed in IMPLEMENTATION. *)"
+            )
+        } else {
+            lines.append(contentsOf: renderInterfaceHeaders(
+                sourceUnit.interfaceSegments,
+                result: result
+            ))
+        }
+        lines.append("")
+        lines.append("IMPLEMENTATION")
+        lines.append("")
+    } else if !usesLines.isEmpty {
+        lines.append(contentsOf: usesLines)
+        lines.append("")
+    }
+
+    if !runLevelDeclarations.isEmpty {
+        lines.append(contentsOf: runLevelDeclarations)
+        lines.append("")
+    }
+
+    let implementationSegments = sourceUnit.implementationSegments.isEmpty
+        ? sourceUnit.segmentNumbers
+        : sourceUnit.implementationSegments
+    lines.append(contentsOf: renderSegmentImplementations(
+        implementationSegments,
+        result: result
+    ))
+    if lines.last != "" {
+        lines.append("")
+    }
+    if sourceUnit.kind == .program {
+        lines.append("BEGIN")
+        lines.append("END.")
+    } else {
+        lines.append("END.")
+    }
+    return lines
+}
+
+public func renderPascalSourceLines(
+    from result: DisassemblyResult,
+    showMarkup: Bool = true
+) -> [String] {
+    let sourceLines = renderPascalCompilationUnitLines(from: result)
+    guard showMarkup else { return sourceLines }
+    return [
+        "#  Pascal source reconstruction for \(result.sourceFilename)",
+        "",
+        "```pascal"
+    ] + sourceLines + ["```", ""]
 }

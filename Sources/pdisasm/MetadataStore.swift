@@ -80,6 +80,19 @@ struct MetadataStore {
         }
     }
 
+    func importSourceMetadata(
+        fromJson file: String,
+        to sourceMetadata: inout PascalSourceMetadata?
+    ) {
+        do {
+            if let loaded: PascalSourceMetadata = try readJSON(file) {
+                sourceMetadata = loaded
+            }
+        } catch {
+            diagnostics?.error("Error reading \(file): \(error)")
+        }
+    }
+
     func exportKnownRecords(
         toJson file: String,
         from knownRecords: Set<PascalRecord>,
