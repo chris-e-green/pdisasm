@@ -279,17 +279,17 @@ more complete Apple Pascal declaration subset.
 
 Tasks:
 
-- [ ] Parse `FILE OF` types.
-- [ ] Parse `TEXT` file aliases where appropriate.
-- [ ] Parse `SET OF` types.
-- [ ] Parse pointer types with named and forward-referenced pointees.
-- [ ] Parse mutually recursive pointer/record declarations.
-- [ ] Parse packed records where supported.
-- [ ] Parse packed arrays with arbitrary index types.
-- [ ] Parse named constants beyond simple integers where useful.
-- [ ] Parse procedure/function type aliases if encountered in metadata.
-- [ ] Add parser diagnostics for unsupported declaration forms.
-- [ ] Add fixture metadata files covering each declaration form.
+- [x] Parse `FILE OF` types.
+- [x] Parse `TEXT` file aliases where appropriate.
+- [x] Parse `SET OF` types.
+- [x] Parse pointer types with named and forward-referenced pointees.
+- [x] Parse mutually recursive pointer/record declarations.
+- [x] Parse packed records where supported.
+- [x] Parse packed arrays with arbitrary index types.
+- [x] Parse named constants beyond simple integers where useful.
+- [x] Parse procedure/function type aliases if encountered in metadata.
+- [x] Add parser diagnostics for unsupported declaration forms.
+- [x] Add fixture metadata files covering each declaration form.
 
 ## Phase 4: Procedure, Function, and Unit Structure
 

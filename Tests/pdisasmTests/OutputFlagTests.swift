@@ -104,6 +104,23 @@ final class OutputFlagTests: XCTestCase {
         ])
     }
 
+    func testPascalDeclarationSectionsRenderRichConstants() {
+        let lines = renderPascalDeclarationSectionLines(
+            constantValues: [
+                "ENABLED": .boolean(true),
+                "GREETING": .string("'HELLO'"),
+                "RATIO": .real("3.125")
+            ]
+        )
+
+        XCTAssertEqual(lines, [
+            "CONST",
+            "  ENABLED = TRUE;",
+            "  GREETING = 'HELLO';",
+            "  RATIO = 3.125;"
+        ])
+    }
+
     func testPascalDeclarationSectionsSkipParameterLocationsAndDeduplicateVariables() {
         let param = Location(
             segment: 1,
