@@ -304,6 +304,9 @@ final class StackSimulationIntegrationTests: XCTestCase {
         ))
 
         XCTAssertEqual(proc.instructions[5]?.pseudoCode, "FOR I := 1 TO LIMIT DO BEGIN")
+        XCTAssertEqual(proc.instructions[5]?.forLoopEvidence?.startExpression, "1")
+        XCTAssertEqual(proc.instructions[5]?.forLoopEvidence?.limitExpression, "LIMIT")
+        XCTAssertEqual(proc.instructions[5]?.forLoopEvidence?.direction, .to)
         XCTAssertNil(proc.instructions[1]?.pseudoCode)
         XCTAssertNil(proc.instructions[10]?.pseudoCode)
         XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* FOR I := 1 TO LIMIT *)")
@@ -320,6 +323,7 @@ final class StackSimulationIntegrationTests: XCTestCase {
         ))
 
         XCTAssertEqual(proc.instructions[5]?.pseudoCode, "FOR I := 8 DOWNTO LIMIT DO BEGIN")
+        XCTAssertEqual(proc.instructions[5]?.forLoopEvidence?.direction, .downto)
         XCTAssertNil(proc.instructions[1]?.pseudoCode)
         XCTAssertNil(proc.instructions[10]?.pseudoCode)
         XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* FOR I := 8 DOWNTO LIMIT *)")

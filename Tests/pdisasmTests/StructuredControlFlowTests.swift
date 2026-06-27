@@ -6,14 +6,16 @@ final class StructuredControlFlowTests: XCTestCase {
         _ opcode: UInt8 = nop,
         params: [Int] = [],
         location: Location? = nil,
-        pseudoCode: String? = nil
+        pseudoCode: String? = nil,
+        forLoopEvidence: ForLoopEvidence? = nil
     ) -> Instruction {
         Instruction(
             opcode: opcode,
             mnemonic: "",
             params: params,
             memLocation: location,
-            pseudoCode: pseudoCode
+            pseudoCode: pseudoCode,
+            forLoopEvidence: forLoopEvidence
         )
     }
 
@@ -441,7 +443,19 @@ final class StructuredControlFlowTests: XCTestCase {
             4: instruction(ldl, location: variable),
             6: instruction(ldci, params: [10]),
             8: instruction(leqi),
-            9: instruction(fjp, params: [20]),
+            9: instruction(
+                fjp,
+                params: [20],
+                forLoopEvidence: ForLoopEvidence(
+                    direction: .to,
+                    variable: StructuredForVariable(variable),
+                    startExpression: "1",
+                    limitExpression: "10",
+                    initializationStoreAddress: 2,
+                    setupAddresses: [2],
+                    updateStoreAddress: 17
+                )
+            ),
             11: instruction(),
             12: instruction(ldl, location: variable),
             14: instruction(ldci, params: [1]),
@@ -476,7 +490,19 @@ final class StructuredControlFlowTests: XCTestCase {
             4: instruction(ldl, location: variable),
             6: instruction(ldci, params: [1]),
             8: instruction(geqi),
-            9: instruction(fjp, params: [20]),
+            9: instruction(
+                fjp,
+                params: [20],
+                forLoopEvidence: ForLoopEvidence(
+                    direction: .downto,
+                    variable: StructuredForVariable(variable),
+                    startExpression: "10",
+                    limitExpression: "1",
+                    initializationStoreAddress: 2,
+                    setupAddresses: [2],
+                    updateStoreAddress: 17
+                )
+            ),
             11: instruction(),
             12: instruction(ldl, location: variable),
             14: instruction(ldci, params: [1]),

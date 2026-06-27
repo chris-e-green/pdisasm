@@ -24,10 +24,12 @@ struct ControlFlowAnalyzer {
     }
 
     private struct ForLoopMatch {
+        let variableLocation: Location
         let variable: String
         let start: String
         let limit: String
         let direction: ForLoopDirection
+        let initializationAddress: Int
         let updateAddress: Int
         let setupAddresses: Set<Int>
     }
@@ -125,6 +127,20 @@ struct ControlFlowAnalyzer {
                                 updateStoreIdx: prevIdx - 1,
                                 sortedInstructions: sortedInstructions
                             ) {
+                                inst.forLoopEvidence = ForLoopEvidence(
+                                    direction: forLoop.direction == .to
+                                        ? .to
+                                        : .downto,
+                                    variable: StructuredForVariable(
+                                        forLoop.variableLocation
+                                    ),
+                                    startExpression: forLoop.start,
+                                    limitExpression: forLoop.limit,
+                                    initializationStoreAddress:
+                                        forLoop.initializationAddress,
+                                    setupAddresses: forLoop.setupAddresses,
+                                    updateStoreAddress: forLoop.updateAddress
+                                )
                                 pseudoCode =
                                     "FOR \(forLoop.variable) := \(forLoop.start) \(forLoop.direction.keyword) \(forLoop.limit) DO BEGIN"
                                 pseudoCodeAddressesToSkip.insert(forLoop.updateAddress)
@@ -244,10 +260,12 @@ struct ControlFlowAnalyzer {
         }
 
         return ForLoopMatch(
+            variableLocation: loopVariable,
             variable: variableName,
             start: startAssignment.value,
             limit: limit,
             direction: direction,
+            initializationAddress: startAssignment.address,
             updateAddress: updateStore.key,
             setupAddresses: setupAddresses
         )
