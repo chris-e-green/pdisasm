@@ -604,6 +604,7 @@ func resolveAssemblerProcedureTargets(
             if crossesProcedure && [0x20, 0x4c].contains(instruction.opcode)
             {
                 targetProcedure.entryPoints.insert(targetAddress)
+                targetProcedure.externalEntryPoints.insert(targetAddress)
 
                 allCallers.insert(
                     Call(

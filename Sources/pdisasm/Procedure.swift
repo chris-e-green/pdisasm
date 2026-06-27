@@ -9,6 +9,7 @@ public class Procedure {
     public var identifier: ProcedureIdentifier?
     public var instructions: [Int: Instruction] = [:]
     public var entryPoints: Set<Int> = []
+    public var externalEntryPoints: Set<Int> = []
     
     public init() {}
     
