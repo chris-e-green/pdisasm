@@ -300,15 +300,15 @@ headers.
 
 Tasks:
 
-- [ ] Render `PROCEDURE Name(...);` headers.
-- [ ] Render `FUNCTION Name(...): ReturnType;` headers.
-- [ ] Render empty parameter lists correctly.
-- [ ] Render grouped parameters with the same type where useful.
-- [ ] Render return types from metadata/inference.
-- [ ] Add tests for procedure headers.
-- [ ] Add tests for function headers.
-- [ ] Add tests for missing/unknown parameter types.
-- [ ] Add fallback comments for uncertain signatures.
+- [x] Render `PROCEDURE Name(...);` headers.
+- [x] Render `FUNCTION Name(...): ReturnType;` headers.
+- [x] Render empty parameter lists correctly.
+- [x] Render grouped parameters with the same type where useful.
+- [x] Render return types from metadata/inference.
+- [x] Add tests for procedure headers.
+- [x] Add tests for function headers.
+- [x] Add tests for missing/unknown parameter types.
+- [x] Add fallback comments for uncertain signatures.
 
 ### 4.2 Infer and render parameter modes
 

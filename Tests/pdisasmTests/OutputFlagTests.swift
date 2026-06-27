@@ -48,6 +48,28 @@ final class OutputFlagTests: XCTestCase {
         return (dict, codeSegs, [], allProcedures, [])
     }
 
+    private func pascalSourceLines(for identifier: ProcedureIdentifier) -> [String] {
+        let (dict, codeSegments, locations, _, callers) = makeMinimalInputs()
+        codeSegments[0]?.procedures[0].identifier = identifier
+        let result = DisassemblyResult(
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegments: codeSegments,
+            dataSegments: [],
+            allLocations: locations,
+            allProcedures: [identifier],
+            allCallers: callers,
+            knownRecords: [],
+            typeAliases: [:],
+            scalarTypes: [:],
+            constants: [:],
+            subrangeTypes: [:],
+            typeConflicts: [],
+            diagnostics: []
+        )
+        return renderPascalSourceLines(from: result, showMarkup: false)
+    }
+
     // MARK: - Pascal declaration sections
 
     func testPascalDeclarationSectionsRenderLabelsConstantsTypesAndVariables() {
@@ -315,6 +337,76 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertFalse(lines.contains("  OTHER_LOCAL: CHAR;"))
         XCTAssertLessThan(lines.firstIndex(of: "LABEL")!, lines.firstIndex(of: "BEGIN")!)
         XCTAssertLessThan(lines.firstIndex(of: "VAR")!, lines.firstIndex(of: "BEGIN")!)
+    }
+
+    func testPascalSourceRendersGroupedProcedureParameters() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 2,
+            procName: "UPDATE",
+            parameters: [
+                Identifier(name: "X", type: "INTEGER"),
+                Identifier(name: "Y", type: "INTEGER"),
+                Identifier(name: "FLAG", type: "BOOLEAN")
+            ]
+        )
+
+        XCTAssertTrue(
+            pascalSourceLines(for: identifier).contains(
+                "PROCEDURE UPDATE(X, Y: INTEGER; FLAG: BOOLEAN);"
+            )
+        )
+    }
+
+    func testPascalSourceRendersFunctionReturnType() {
+        let identifier = ProcedureIdentifier(
+            isFunction: true,
+            segment: 0,
+            procedure: 3,
+            procName: "LOOKUP",
+            parameters: [Identifier(name: "INDEX", type: "INTEGER")],
+            returnType: "CHAR"
+        )
+
+        XCTAssertTrue(
+            pascalSourceLines(for: identifier).contains(
+                "FUNCTION LOOKUP(INDEX: INTEGER): CHAR;"
+            )
+        )
+    }
+
+    func testPascalSourceRendersEmptyProcedureParameterListWithoutParentheses() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 4,
+            procName: "RESET"
+        )
+
+        XCTAssertTrue(pascalSourceLines(for: identifier).contains("PROCEDURE RESET;"))
+    }
+
+    func testPascalSourceAnnotatesUncertainSignatureParts() {
+        let identifier = ProcedureIdentifier(
+            isFunction: true,
+            segment: 0,
+            procedure: 5,
+            parameters: [
+                Identifier(name: "VALUE", type: "UNKNOWN"),
+                Identifier(name: "COUNT", type: "INTEGER", typeSource: .inferred)
+            ],
+            returnType: "REAL",
+            returnTypeSource: .inferred
+        )
+
+        XCTAssertTrue(
+            pascalSourceLines(for: identifier).contains(
+                "FUNCTION FUNC5(VALUE: UNKNOWN; COUNT: INTEGER): REAL;"
+                    + " (* uncertain signature: name generated; VALUE type unknown;"
+                    + " COUNT type inferred; return type inferred *)"
+            )
+        )
     }
 
     // MARK: - showDot
