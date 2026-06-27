@@ -6,6 +6,7 @@ import Foundation
 struct OpcodeDecoder {
     let codeData: CodeData
     var diagnostics: DiagnosticCollector? = nil
+    var dialect: ApplePascalDialect = .applePascal
 
     // MARK: - Trivial single-byte opcode table
     // Opcodes that decode to just a mnemonic and comment with bytesConsumed=1, no params/locations.
@@ -209,7 +210,7 @@ struct OpcodeDecoder {
                 params: [procNum],
                 bytesConsumed: 2,
                 comment:
-                    "Call standard procedure \(cspProcs[procNum]?.0 ?? String(procNum))"
+                    "Call standard procedure \(standardProcedures(for: dialect)[procNum]?.0 ?? String(procNum))"
             )
         case adj:
             let count = Int(try codeData.readByte(at: ic + 1))

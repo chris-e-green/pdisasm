@@ -95,6 +95,7 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let diagnostics: [Diagnostic]
     public let sourceMetadata: PascalSourceMetadata?
     public let runReport: RunReport
+    public let dialect: ApplePascalDialect
 
     public init(
         sourceFilename: String,
@@ -113,7 +114,8 @@ public struct DisassemblyResult: @unchecked Sendable {
         typeConflicts: [TypeConflict],
         diagnostics: [Diagnostic],
         sourceMetadata: PascalSourceMetadata? = nil,
-        runReport: RunReport = RunReport()
+        runReport: RunReport = RunReport(),
+        dialect: ApplePascalDialect = .applePascal
     ) {
         self.sourceFilename = sourceFilename
         self.segDictionary = segDictionary
@@ -134,6 +136,7 @@ public struct DisassemblyResult: @unchecked Sendable {
         self.diagnostics = diagnostics
         self.sourceMetadata = sourceMetadata
         self.runReport = runReport
+        self.dialect = dialect
     }
 }
 
@@ -432,7 +435,8 @@ private func simulatePascalProcedures(
     scalarTypes: [String: PascalScalarType],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
-    diagnostics: DiagnosticCollector
+    diagnostics: DiagnosticCollector,
+    dialect: ApplePascalDialect
 ) -> [TypeConflict] {
     var typeConflicts: [TypeConflict] = []
 
@@ -448,7 +452,8 @@ private func simulatePascalProcedures(
                 scalarTypes: scalarTypes,
                 allProcedures: &allProcedures,
                 allLocations: &allLocations,
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                dialect: dialect
             ))
         }
     }
@@ -465,14 +470,16 @@ private func decodeCodeSegments(
     allCallers: inout Set<Call>,
     dataSegments: inout [Int],
     diagnostics: DiagnosticCollector,
-    cancellation: CancellationToken? = nil
+    cancellation: CancellationToken? = nil,
+    dialect: ApplePascalDialect
 ) throws -> [Int: CodeSegment] {
     try CodeSegmentDecoder(
         segDict: segDict,
         binaryData: binaryData,
         verbose: verbose,
         diagnostics: diagnostics,
-        cancellation: cancellation
+        cancellation: cancellation,
+        dialect: dialect
     ).decode(
         allLocations: &allLocations,
         allProcedures: &allProcedures,
@@ -527,7 +534,8 @@ private func runPascalAnalysisPass(
     scalarTypes: [String: PascalScalarType],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
-    diagnostics: DiagnosticCollector
+    diagnostics: DiagnosticCollector,
+    dialect: ApplePascalDialect
 ) -> [TypeConflict] {
     var typeConflicts = simulatePascalProcedures(
         codeSegments: codeSegments,
@@ -536,7 +544,8 @@ private func runPascalAnalysisPass(
         scalarTypes: scalarTypes,
         allProcedures: &allProcedures,
         allLocations: &allLocations,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        dialect: dialect
     )
     typeConflicts.append(contentsOf: synchronizeSignaturesAndLocations(
         allProcedures: allProcedures,
@@ -562,7 +571,8 @@ private struct SegmentDecodeStageFacade {
         allProcedures: inout [ProcedureIdentifier],
         allCallers: inout Set<Call>,
         diagnostics: DiagnosticCollector,
-        cancellation: CancellationToken? = nil
+        cancellation: CancellationToken? = nil,
+        dialect: ApplePascalDialect
     ) throws -> SegmentDecodeStageOutput {
         let diagnosticsBefore = diagnostics.diagnostics.count
         let locationsBefore = allLocations.count
@@ -578,7 +588,8 @@ private struct SegmentDecodeStageFacade {
             allCallers: &allCallers,
             dataSegments: &dataSegments,
             diagnostics: diagnostics,
-            cancellation: cancellation
+            cancellation: cancellation,
+            dialect: dialect
         )
         let procedureCount = codeSegments.values.reduce(0) { $0 + $1.procedures.count }
         let instructionCount = codeSegments.values.reduce(0) { total, segment in
@@ -656,7 +667,8 @@ private struct AnalysisSignatureStageFacade {
         allProcedures: inout [ProcedureIdentifier],
         allLocations: inout Set<Location>,
         diagnostics: DiagnosticCollector,
-        cancellation: CancellationToken? = nil
+        cancellation: CancellationToken? = nil,
+        dialect: ApplePascalDialect
     ) throws -> AnalysisSignatureStageOutput {
         let diagnosticsBefore = diagnostics.diagnostics.count
         var typeConflicts: [TypeConflict] = []
@@ -673,7 +685,8 @@ private struct AnalysisSignatureStageFacade {
                 scalarTypes: scalarTypes,
                 allProcedures: &allProcedures,
                 allLocations: &allLocations,
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                dialect: dialect
             ))
             let fingerprint = analysisFingerprint(allProcedures: allProcedures, allLocations: allLocations)
             if fingerprint == previousFingerprint {
@@ -711,7 +724,8 @@ public func disassemble(
     overwriteMetadata: Bool = false,
     metadataWorkspace: MetadataWorkspace? = nil,
     metadataSnapshot: MetadataSnapshot? = nil,
-    cancellation: CancellationToken? = nil
+    cancellation: CancellationToken? = nil,
+    dialect: ApplePascalDialect = .applePascal
 ) throws -> DisassemblyResult {
     let data = try Data(contentsOf: URL(fileURLWithPath: filename))
     return try disassemble(
@@ -721,7 +735,8 @@ public func disassemble(
         writeMetadata: writeMetadata,
         overwriteMetadata: overwriteMetadata,
         metadataWorkspace: metadataWorkspace,
-        metadataSnapshot: metadataSnapshot
+        metadataSnapshot: metadataSnapshot,
+        dialect: dialect
     )
 }
 
@@ -734,7 +749,8 @@ public func disassemble(
     overwriteMetadata: Bool = false,
     metadataWorkspace: MetadataWorkspace? = nil,
     metadataSnapshot: MetadataSnapshot? = nil,
-    cancellation: CancellationToken? = nil
+    cancellation: CancellationToken? = nil,
+    dialect: ApplePascalDialect = .applePascal
 ) throws -> DisassemblyResult {
     try cancellation?.checkCancellation()
     let fileURL = URL(fileURLWithPath: sourceFilename)
@@ -814,7 +830,8 @@ public func disassemble(
         allProcedures: &allProcedures,
         allCallers: &allCallers,
         diagnostics: diagnostics,
-        cancellation: cancellation
+        cancellation: cancellation,
+        dialect: dialect
     )
     let allCodeSegs = decode.codeSegments
     dataSegments = decode.dataSegments
@@ -836,7 +853,8 @@ public func disassemble(
         allProcedures: &allProcedures,
         allLocations: &allLocations,
         diagnostics: diagnostics,
-        cancellation: cancellation
+        cancellation: cancellation,
+        dialect: dialect
     )
     typeConflicts.append(contentsOf: analysis.typeConflicts)
     let analysisConverged = analysis.converged
@@ -872,7 +890,8 @@ public func disassemble(
         typeConflicts: typeConflicts,
         diagnostics: diagnostics.diagnostics,
         sourceMetadata: sourceMetadata,
-        runReport: RunReport(stages: baseStages, isComplete: analysisConverged)
+        runReport: RunReport(stages: baseStages, isComplete: analysisConverged),
+        dialect: dialect
     )
 
     if writeMetadata {
