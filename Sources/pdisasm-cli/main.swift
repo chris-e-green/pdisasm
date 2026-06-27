@@ -15,6 +15,7 @@ struct PdisasmCLI {
   var jsonOutput: String?
   var callGraphOutput: String?
   var batchMode = false
+  var dialect: ApplePascalDialect = .applePascal
 
   init(arguments: [String]) throws {
     var positional: [String] = []
@@ -30,6 +31,12 @@ struct PdisasmCLI {
       case "--show-source", "--show-pascal-source": showSource = true
       case "--show-dot": showDot = true
       case "--batch": batchMode = true
+      case "--dialect":
+        let value = try Self.requireValue(after: argument, from: &iterator)
+        guard let parsed = ApplePascalDialect(rawValue: value) else {
+          throw CLIError.invalidDialect(value)
+        }
+        dialect = parsed
       case "--workspace":
         workspaceDirectory = try Self.requireValue(after: argument, from: &iterator)
       case "--json", "--export-json":
@@ -70,7 +77,8 @@ struct PdisasmCLI {
       showStackState: showStackState,
       showPseudoCode: showPseudocode,
       showPascalSource: showSource,
-      showDot: showDot
+      showDot: showDot,
+      dialect: dialect
     )
 
     if batchMode {
@@ -129,7 +137,7 @@ struct PdisasmCLI {
   }
 
   static let helpText = """
-    USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
+    USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--dialect apple-pascal|ucsd-p-system] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
     """
 }
 
@@ -137,12 +145,15 @@ enum CLIError: Error, CustomStringConvertible {
   case unknownOption(String)
   case missingValue(String)
   case optionRequiresSingleFile(String)
+  case invalidDialect(String)
   var description: String {
     switch self {
     case .unknownOption(let option): return "Unknown option: \(option)"
     case .missingValue(let option): return "Missing value for option: \(option)"
     case .optionRequiresSingleFile(let option):
       return "\(option) can only be used with one input file"
+    case .invalidDialect(let value):
+      return "Unknown dialect: \(value)"
     }
   }
 }

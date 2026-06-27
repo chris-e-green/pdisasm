@@ -134,7 +134,8 @@ private func runLevelDeclarationLines(from result: DisassemblyResult) -> [String
         constantValues: result.constantValues,
         subrangeTypes: result.subrangeTypes,
         variables: accessedSystemGlobalLocations(in: result)
-            + dataSegmentGlobalLocations(in: result)
+            + dataSegmentGlobalLocations(in: result),
+        dialect: result.dialect
     )
 }
 
@@ -391,12 +392,16 @@ func renderPascalDeclarationSectionLines(
     constants: [String: Int] = [:],
     constantValues: [String: PascalConstantValue] = [:],
     subrangeTypes: [String: PascalSubrangeType] = [:],
-    variables: [Location] = []
+    variables: [Location] = [],
+    dialect: ApplePascalDialect = .applePascal
 ) -> [String] {
     var lines: [String] = []
 
     let renderedLabels = Array(Set(labels.map {
-        renderPascalIdentifier($0.trimmingCharacters(in: .whitespacesAndNewlines))
+        renderPascalIdentifier(
+            $0.trimmingCharacters(in: .whitespacesAndNewlines),
+            dialect: dialect
+        )
     }.filter { !$0.isEmpty })).sorted()
     if !renderedLabels.isEmpty {
         lines.append("LABEL")
@@ -411,7 +416,7 @@ func renderPascalDeclarationSectionLines(
         lines.append("CONST")
         for constant in renderedConstants.keys.sorted() {
             if let value = renderedConstants[constant] {
-                lines.append("  \(renderPascalIdentifier(constant)) = \(value.sourceText);")
+                lines.append("  \(renderPascalIdentifier(constant, dialect: dialect)) = \(value.sourceText);")
             }
         }
         lines.append("")
@@ -421,7 +426,8 @@ func renderPascalDeclarationSectionLines(
         records: records,
         aliases: aliases,
         scalarTypes: scalarTypes,
-        subrangeTypes: subrangeTypes
+        subrangeTypes: subrangeTypes,
+        dialect: dialect
     )
     if !typeLines.isEmpty {
         lines.append("TYPE")
@@ -429,7 +435,10 @@ func renderPascalDeclarationSectionLines(
         lines.append("")
     }
 
-    let variableLines = renderPascalVariableDeclarationLines(variables)
+    let variableLines = renderPascalVariableDeclarationLines(
+        variables,
+        dialect: dialect
+    )
     if !variableLines.isEmpty {
         lines.append("VAR")
         lines.append(contentsOf: variableLines)
@@ -446,7 +455,8 @@ private func renderPascalTypeDeclarationLines(
     records: Set<PascalRecord>,
     aliases: [String: String],
     scalarTypes: [String: PascalScalarType],
-    subrangeTypes: [String: PascalSubrangeType]
+    subrangeTypes: [String: PascalSubrangeType],
+    dialect: ApplePascalDialect
 ) -> [String] {
     guard !records.isEmpty || !aliases.isEmpty || !scalarTypes.isEmpty || !subrangeTypes.isEmpty else {
         return []
@@ -459,13 +469,13 @@ private func renderPascalTypeDeclarationLines(
 
     for scalarName in scalarTypes.keys.sorted() {
         if let scalarType = scalarTypes[scalarName] {
-            lines.append("  \(renderPascalIdentifier(scalarName)) = (\(scalarType.cases.map(renderPascalIdentifier).joined(separator: ", ")));")
+            lines.append("  \(renderPascalIdentifier(scalarName, dialect: dialect)) = (\(scalarType.cases.map { renderPascalIdentifier($0, dialect: dialect) }.joined(separator: ", ")));")
         }
     }
 
     for subrangeName in subrangeTypes.keys.sorted() {
         if let subrangeType = subrangeTypes[subrangeName] {
-            lines.append("  \(renderPascalIdentifier(subrangeName)) = \(subrangeType.renderedType);")
+            lines.append("  \(renderPascalIdentifier(subrangeName, dialect: dialect)) = \(subrangeType.renderedType);")
         }
     }
 
@@ -477,11 +487,11 @@ private func renderPascalTypeDeclarationLines(
         else {
             continue
         }
-        lines.append("  \(renderPascalIdentifier(alias)) = \(type);")
+        lines.append("  \(renderPascalIdentifier(alias, dialect: dialect)) = \(type);")
     }
 
     for record in records.sorted(by: { $0.name < $1.name }) {
-        lines.append("  \(renderPascalIdentifier(record.name)) = RECORD")
+        lines.append("  \(renderPascalIdentifier(record.name, dialect: dialect)) = RECORD")
         let renderedMembers = record.allMembers.isEmpty
             ? record.members.keys.sorted().compactMap { offset in
                 record.members[offset].map {
@@ -498,7 +508,7 @@ private func renderPascalTypeDeclarationLines(
             let identifier = member.identifier
             let type = identifier.type.isEmpty ? "UNKNOWN" : identifier.type
             let variant = member.variantLabel.map { " variant \($0)," } ?? ""
-            lines.append("    \(renderPascalIdentifier(identifier.name)): \(type); (*\(variant) offset \(member.offset) *)")
+            lines.append("    \(renderPascalIdentifier(identifier.name, dialect: dialect)): \(type); (*\(variant) offset \(member.offset) *)")
         }
         lines.append("  END;")
     }
@@ -506,10 +516,16 @@ private func renderPascalTypeDeclarationLines(
     return lines
 }
 
-private func renderPascalVariableDeclarationLines(_ variables: [Location]) -> [String] {
+private func renderPascalVariableDeclarationLines(
+    _ variables: [Location],
+    dialect: ApplePascalDialect
+) -> [String] {
     var declarationsByName: [String: String] = [:]
     for variable in variables where !variable.isParam {
-        let name = renderPascalIdentifier(variable.displayName)
+        let name = renderPascalIdentifier(
+            variable.displayName,
+            dialect: dialect
+        )
         guard !name.isEmpty else {
             continue
         }
@@ -1214,7 +1230,8 @@ private func procedureDeclarationLines(
 
     return renderPascalDeclarationSectionLines(
         labels: referencedGotoLabels(in: statements),
-        variables: variables
+        variables: variables,
+        dialect: result.dialect
     )
 }
 
@@ -1299,15 +1316,24 @@ private func sourceSignatureParameters(for procedure: ProcedureIdentifier) -> [I
     }
 }
 
-private func renderPascalSourceHeader(for procedure: ProcedureIdentifier) -> String {
-    let name = renderPascalIdentifier(defaultProcedureName(for: procedure))
+private func renderPascalSourceHeader(
+    for procedure: ProcedureIdentifier,
+    dialect: ApplePascalDialect = .applePascal
+) -> String {
+    let name = renderPascalIdentifier(
+        defaultProcedureName(for: procedure),
+        dialect: dialect
+    )
     var header = procedure.isFunction ? "FUNCTION \(name)" : "PROCEDURE \(name)"
     let parameters = sourceSignatureParameters(for: procedure)
     var parameterGroups: [(names: [String], type: String, mode: ParameterMode)] = []
     var uncertainty: [String] = []
 
     for parameter in parameters {
-        let parameterName = renderPascalIdentifier(parameter.name)
+        let parameterName = renderPascalIdentifier(
+            parameter.name,
+            dialect: dialect
+        )
         let trimmedType = parameter.type.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = trimmedType.isEmpty ? "UNKNOWN" : trimmedType
         if parameterGroups.last?.type == type,
@@ -1377,10 +1403,15 @@ private func renderPascalProcedureLines(
     guard procedure.identifier?.isAssembly == false else { return [] }
     var lines: [String] = []
     if let identifier = procedure.identifier {
-        lines.append(renderPascalSourceHeader(for: identifier))
+        lines.append(
+            renderPascalSourceHeader(
+                for: identifier,
+                dialect: result.dialect
+            )
+        )
     } else {
         lines.append(
-            "PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)"));"
+            "PROCEDURE \(renderPascalIdentifier("P\(procedure.enterIC)", dialect: result.dialect));"
                 + " (* uncertain signature: procedure metadata unavailable *)"
         )
     }
@@ -1425,7 +1456,9 @@ private func renderPascalProcedureLines(
         lines.append(contentsOf: declarationLines)
         lines.append("")
     }
-    let body = PascalBlock(statements: statements).rendered()
+    let body = PascalBlock(statements: statements).rendered(
+        dialect: result.dialect
+    )
     lines.append(contentsOf: body.dropLast())
     lines.append((body.last ?? "END") + ";")
     return lines
@@ -1438,9 +1471,9 @@ private func segmentAnnotation(
     let segment = result.segDictionary.segTable[number]
     let name = segment?.name ?? "SEG\(number)"
     if segment?.segmentKind == .segproc {
-        return "(* SEGMENT PROCEDURE \(renderPascalIdentifier(name)) [\(number)] *)"
+        return "(* SEGMENT PROCEDURE \(renderPascalIdentifier(name, dialect: result.dialect)) [\(number)] *)"
     }
-    return "(* Segment \(renderPascalIdentifier(name)) [\(number)] *)"
+    return "(* Segment \(renderPascalIdentifier(name, dialect: result.dialect)) [\(number)] *)"
 }
 
 private func renderSegmentImplementations(
@@ -1483,7 +1516,12 @@ private func renderInterfaceHeaders(
             ($0.identifier?.procedure ?? -1) < ($1.identifier?.procedure ?? -1)
         }) where procedure.identifier?.isAssembly == false {
             if let identifier = procedure.identifier {
-                lines.append(renderPascalSourceHeader(for: identifier))
+                lines.append(
+                    renderPascalSourceHeader(
+                        for: identifier,
+                        dialect: result.dialect
+                    )
+                )
             }
         }
         lines.append("")
@@ -1494,11 +1532,14 @@ private func renderInterfaceHeaders(
     return lines
 }
 
-private func renderUsesClause(_ units: [String]) -> [String] {
+private func renderUsesClause(
+    _ units: [String],
+    dialect: ApplePascalDialect
+) -> [String] {
     guard !units.isEmpty else { return [] }
     return [
         "USES",
-        "  \(units.map(renderPascalIdentifier).joined(separator: ", "));"
+        "  \(units.map { renderPascalIdentifier($0, dialect: dialect) }.joined(separator: ", "));"
     ]
 }
 
@@ -1506,13 +1547,19 @@ private func renderPascalCompilationUnitLines(
     from result: DisassemblyResult
 ) -> [String] {
     let sourceUnit = PascalSourceUnit(result: result)
-    let name = renderPascalIdentifier(sourceUnit.name)
+    let name = renderPascalIdentifier(
+        sourceUnit.name,
+        dialect: result.dialect
+    )
     var lines = [
         sourceUnit.kind == .unit ? "UNIT \(name);" : "PROGRAM \(name);",
         ""
     ]
     let runLevelDeclarations = runLevelDeclarationLines(from: result)
-    let usesLines = renderUsesClause(sourceUnit.uses)
+    let usesLines = renderUsesClause(
+        sourceUnit.uses,
+        dialect: result.dialect
+    )
 
     if sourceUnit.kind == .unit {
         lines.append("INTERFACE")

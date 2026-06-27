@@ -11,6 +11,7 @@ struct PseudoCodeGenerator {
     var allLocations: Set<Location>
     var labelLookup: [String: Location]
     var typeConflicts: [TypeConflict] = []
+    let dialect: ApplePascalDialect
 
 //    init(allProcedures: [ProcedureIdentifier], knownRecords: Set<PascalRecord>, allLocations: Set<Location>, labelLookup: [String: Location]) {
 //        self.allProcedures = allProcedures
@@ -24,13 +25,15 @@ struct PseudoCodeGenerator {
         knownRecords: Set<PascalRecord>,
         typeAliases: [String: String] = [:],
         scalarTypes: [String: PascalScalarType] = [:],
-        allLocations: Set<Location>
+        allLocations: Set<Location>,
+        dialect: ApplePascalDialect = .applePascal
     ) {
         self.allProcedures = allProcedures
         self.knownRecords = knownRecords
         self.typeAliases = typeAliases
         self.scalarTypes = scalarTypes
         self.allLocations = allLocations
+        self.dialect = dialect
         var lookup: [String: Location] = [:]
         for label in allLocations {
             let key = "\(label.segment):\(label.procedure ?? -1):\(label.addr ?? -1)"
@@ -633,7 +636,9 @@ struct PseudoCodeGenerator {
 
         case csp:
             let procNum = inst.params[0]
-            if let (cspName, parms, returnType) = cspProcs[procNum] {
+            if let (cspName, parms, returnType) =
+                standardProcedures(for: dialect)[procNum]
+            {
                 var callParms: [String] = []
                 for p in parms {
                     var parm: String = ""

@@ -15,7 +15,11 @@ public struct PascalSourceUnit: Sendable {
         let inferredUnitSegment = sortedSegments.first {
             result.segDictionary.segTable[$0]?.segmentKind == .unitseg
         }
-        kind = metadata?.kind ?? (inferredUnitSegment == nil ? .program : .unit)
+        kind = if result.dialect.policy.supportsUnitSyntax {
+            metadata?.kind ?? (inferredUnitSegment == nil ? .program : .unit)
+        } else {
+            .program
+        }
 
         let fallbackName: String
         if let inferredUnitSegment {
@@ -27,7 +31,9 @@ public struct PascalSourceUnit: Sendable {
         let metadataName = metadata?.name?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         name = metadataName?.isEmpty == false ? metadataName! : fallbackName
-        uses = Array(Set(metadata?.uses ?? [])).sorted()
+        uses = result.dialect.policy.supportsUnitSyntax
+            ? Array(Set(metadata?.uses ?? [])).sorted()
+            : []
         segmentNumbers = sortedSegments
         interfaceSegments = metadata?.interfaceSegments.filter(
             result.codeSegments.keys.contains
@@ -39,14 +45,6 @@ public struct PascalSourceUnit: Sendable {
             && (!interfaceSegments.isEmpty || !implementationSegments.isEmpty)
     }
 }
-
-private let pascalKeywords: Set<String> = [
-    "AND", "ARRAY", "BEGIN", "CASE", "CONST", "DIV", "DO", "DOWNTO", "ELSE",
-    "END", "FILE", "FOR", "FUNCTION", "GOTO", "IF", "IN", "LABEL", "MOD",
-    "NIL", "NOT", "OF", "OR", "OTHERWISE", "PACKED", "PROCEDURE", "PROGRAM",
-    "RECORD", "REPEAT", "SET", "THEN", "TO", "TYPE", "UNTIL", "VAR", "WHILE",
-    "WITH", "UNIT", "INTERFACE", "IMPLEMENTATION", "USES"
-]
 
 func renderPascalCharLiteral(_ value: Int) -> String {
     guard value >= 0x20 && value <= 0x7E,
@@ -106,7 +104,10 @@ func isValidPascalIdentifier(_ name: String) -> Bool {
     }
 }
 
-func renderPascalIdentifier(_ name: String) -> String {
+func renderPascalIdentifier(
+    _ name: String,
+    dialect: ApplePascalDialect = .applePascal
+) -> String {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "_" }
 
@@ -124,7 +125,7 @@ func renderPascalIdentifier(_ name: String) -> String {
         rendered = "_" + rendered
     }
 
-    if pascalKeywords.contains(rendered.uppercased()) {
+    if dialect.policy.keywords.contains(rendered.uppercased()) {
         rendered += "_"
     }
 
@@ -266,18 +267,22 @@ indirect enum PascalStmt: Sendable {
     case label(String, PascalStmt?)
     case raw(String)
 
-    func rendered(indentation: Int = 0) -> [String] {
+    func rendered(
+        indentation: Int = 0,
+        dialect: ApplePascalDialect = .applePascal
+    ) -> [String] {
         let indent = String(repeating: " ", count: indentation)
         switch self {
         case .assignment(let target, let source):
             return ["\(indent)\(target.rendered()) := \(source.rendered());"]
         case .call(let name, let arguments):
-            return ["\(indent)\(renderPascalIdentifier(name))(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
+            return ["\(indent)\(renderPascalIdentifier(name, dialect: dialect))(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
         case .block(let statements):
             var lines = ["\(indent)BEGIN"]
             for statement in statements {
                 var statementLines = statement.rendered(
-                    indentation: indentation + 2
+                    indentation: indentation + 2,
+                    dialect: dialect
                 )
                 PascalStmt.terminateCompoundStatement(&statementLines)
                 lines.append(contentsOf: statementLines)
@@ -285,15 +290,15 @@ indirect enum PascalStmt: Sendable {
             lines.append("\(indent)END")
             return lines
         case .ifThen(let condition, let thenBlock):
-            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2)
+            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect)
         case .ifElse(let condition, let thenBlock, let elseBlock):
-            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2) + ["\(indent)ELSE"] + elseBlock.rendered(indentation: indentation + 2)
+            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect) + ["\(indent)ELSE"] + elseBlock.rendered(indentation: indentation + 2, dialect: dialect)
         case .whileDo(let condition, let body):
-            return ["\(indent)WHILE \(condition.rendered()) DO"] + body.rendered(indentation: indentation + 2)
+            return ["\(indent)WHILE \(condition.rendered()) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
         case .repeatUntil(let body, let condition):
-            return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2) } + ["\(indent)UNTIL \(condition.rendered());"]
+            return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2, dialect: dialect) } + ["\(indent)UNTIL \(condition.rendered());"]
         case .forLoop(let variable, let start, let limit, let direction, let body):
-            return ["\(indent)FOR \(renderPascalIdentifier(variable)) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2)
+            return ["\(indent)FOR \(renderPascalIdentifier(variable, dialect: dialect)) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
         case .caseStatement(let statement):
             var lines = [
                 "\(indent)CASE \(statement.expression.rendered()) OF"
@@ -303,30 +308,32 @@ indirect enum PascalStmt: Sendable {
                 lines.append(
                     contentsOf: PascalStmt.renderCaseBody(
                         arm.body,
-                        indentation: indentation + 4
+                        indentation: indentation + 4,
+                        dialect: dialect
                     )
                 )
             }
             if let defaultBody = statement.defaultBody {
                 lines.append(
-                    "\(indent)  \(statement.defaultStyle.keyword)"
+                    "\(indent)  \(statement.defaultStyle.keyword(for: dialect))"
                 )
                 lines.append(
                     contentsOf: PascalStmt.renderCaseBody(
                         defaultBody,
-                        indentation: indentation + 4
+                        indentation: indentation + 4,
+                        dialect: dialect
                     )
                 )
             }
             lines.append("\(indent)END")
             return lines
         case .goto(let label):
-            return ["\(indent)GOTO \(renderPascalIdentifier(label));"]
+            return ["\(indent)GOTO \(renderPascalIdentifier(label, dialect: dialect));"]
         case .label(let label, let statement):
             if let statement {
-                return ["\(indent)\(renderPascalIdentifier(label)):"] + statement.rendered(indentation: indentation + 2)
+                return ["\(indent)\(renderPascalIdentifier(label, dialect: dialect)):"] + statement.rendered(indentation: indentation + 2, dialect: dialect)
             }
-            return ["\(indent)\(renderPascalIdentifier(label)):"]
+            return ["\(indent)\(renderPascalIdentifier(label, dialect: dialect)):"]
         case .raw(let text):
             return ["\(indent)\(PascalStmt.renderRaw(text))"]
         }
@@ -342,14 +349,19 @@ indirect enum PascalStmt: Sendable {
 
     private static func renderCaseBody(
         _ statements: [PascalStmt],
-        indentation: Int
+        indentation: Int,
+        dialect: ApplePascalDialect
     ) -> [String] {
         var lines: [String]
         if statements.count == 1, let statement = statements.first {
-            lines = statement.rendered(indentation: indentation)
+            lines = statement.rendered(
+                indentation: indentation,
+                dialect: dialect
+            )
         } else {
             lines = PascalStmt.block(statements).rendered(
-                indentation: indentation
+                indentation: indentation,
+                dialect: dialect
             )
         }
         terminateStatement(&lines)
@@ -387,9 +399,9 @@ struct PascalCaseArm: Sendable {
 enum PascalCaseDefaultStyle: Sendable {
     case otherwise
 
-    var keyword: String {
+    func keyword(for dialect: ApplePascalDialect) -> String {
         switch self {
-        case .otherwise: return "OTHERWISE"
+        case .otherwise: return dialect.policy.caseDefaultKeyword
         }
     }
 }
@@ -404,8 +416,14 @@ struct PascalCaseStatement: Sendable {
 struct PascalBlock: Sendable {
     var statements: [PascalStmt]
 
-    func rendered(indentation: Int = 0) -> [String] {
-        PascalStmt.block(statements).rendered(indentation: indentation)
+    func rendered(
+        indentation: Int = 0,
+        dialect: ApplePascalDialect = .applePascal
+    ) -> [String] {
+        PascalStmt.block(statements).rendered(
+            indentation: indentation,
+            dialect: dialect
+        )
     }
 }
 

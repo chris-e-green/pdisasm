@@ -6,6 +6,7 @@ struct CodeSegmentDecoder {
     let verbose: Bool
     let diagnostics: DiagnosticCollector?
     let cancellation: CancellationToken?
+    let dialect: ApplePascalDialect
 
     func decode(
         allLocations: inout Set<Location>,
@@ -168,7 +169,8 @@ struct CodeSegmentDecoder {
                         allProcedures: &allProcedures,
                         verbose: verbose,
                         diagnostics: diagnostics,
-                        cancellation: cancellation
+                        cancellation: cancellation,
+                        dialect: dialect
                     )
                 }
 

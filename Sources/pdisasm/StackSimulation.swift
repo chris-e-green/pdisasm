@@ -9,7 +9,8 @@ func simulateStackAndGeneratePseudocode(
     scalarTypes: [String: PascalScalarType] = [:],
     allProcedures: inout [ProcedureIdentifier],
     allLocations: inout Set<Location>,
-    diagnostics: DiagnosticCollector? = nil
+    diagnostics: DiagnosticCollector? = nil,
+    dialect: ApplePascalDialect = .applePascal
 ) -> [TypeConflict] {
     proc.entryPoints.insert(proc.enterIC)
     proc.entryPoints.insert(proc.exitIC)
@@ -20,7 +21,8 @@ func simulateStackAndGeneratePseudocode(
         knownRecords: knownRecords,
         typeAliases: typeAliases,
         scalarTypes: scalarTypes,
-        allLocations: allLocations
+        allLocations: allLocations,
+        dialect: dialect
     )
     var controlFlow = ControlFlowAnalyzer()
 

@@ -35,8 +35,9 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     public var showPseudoCode: Bool
     public var showPascalSource: Bool
     public var showDot: Bool
+    public var dialect: ApplePascalDialect
 
-    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showPascalSource: Bool = false, showDot: Bool = false) {
+    public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showPascalSource: Bool = false, showDot: Bool = false, dialect: ApplePascalDialect = .applePascal) {
         self.verbose = verbose
         self.writeMetadata = writeMetadata
         self.overwriteMetadata = overwriteMetadata
@@ -46,6 +47,7 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
         self.showPseudoCode = showPseudoCode
         self.showPascalSource = showPascalSource
         self.showDot = showDot
+        self.dialect = dialect
     }
 }
 
@@ -1274,7 +1276,8 @@ public struct LegacyPipelineStages: Sendable {
             overwriteMetadata: input.options.overwriteMetadata,
             metadataWorkspace: input.workspace,
             metadataSnapshot: metadata,
-            cancellation: input.cancellation
+            cancellation: input.cancellation,
+            dialect: input.options.dialect
         )
         if input.cancellation?.isCancellationRequested == true { throw DisassemblyCancelledError() }
         let reports = result.runReport.stages.filter { !["codefileLoading", "metadataMerge"].contains($0.name) }
@@ -1282,6 +1285,6 @@ public struct LegacyPipelineStages: Sendable {
     }
 
     public func run(filename: String, options: DisassemblyOptions, workspace: MetadataWorkspace?, metadata: MetadataSnapshot?) throws -> DisassemblyResult {
-        try disassemble(filename: filename, verbose: options.verbose, writeMetadata: options.writeMetadata, overwriteMetadata: options.overwriteMetadata, metadataWorkspace: workspace, metadataSnapshot: metadata)
+        try disassemble(filename: filename, verbose: options.verbose, writeMetadata: options.writeMetadata, overwriteMetadata: options.overwriteMetadata, metadataWorkspace: workspace, metadataSnapshot: metadata, dialect: options.dialect)
     }
 }

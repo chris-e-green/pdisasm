@@ -141,7 +141,7 @@ public indirect enum PascalType: Hashable, Sendable {
         case .named(let name):
             return renderPascalIdentifier(name)
         case .enumerated(let type):
-            return "(" + type.cases.map(renderPascalIdentifier).joined(separator: ", ") + ")"
+            return "(" + type.cases.map { renderPascalIdentifier($0) }.joined(separator: ", ") + ")"
         case .subrange(let type):
             return "\(type.lowerBound)..\(type.upperBound)"
         case .pointer(let type):
@@ -199,7 +199,7 @@ public indirect enum PascalType: Hashable, Sendable {
             return "\(prefix) END"
         }
         let fields = type.fields.map { field in
-            "\(field.names.map(renderPascalIdentifier).joined(separator: ", ")): \(field.type.renderedType)"
+            "\(field.names.map { renderPascalIdentifier($0) }.joined(separator: ", ")): \(field.type.renderedType)"
         }.joined(separator: "; ")
         return "\(prefix) \(fields); END"
     }
@@ -207,7 +207,7 @@ public indirect enum PascalType: Hashable, Sendable {
     private func renderVariantRecordType(_ type: PascalVariantRecordType) -> String {
         let prefix = type.isPacked ? "PACKED RECORD" : "RECORD"
         let fixedFields = type.fixedFields.map { field in
-            "\(field.names.map(renderPascalIdentifier).joined(separator: ", ")): \(field.type.renderedType)"
+            "\(field.names.map { renderPascalIdentifier($0) }.joined(separator: ", ")): \(field.type.renderedType)"
         }.joined(separator: "; ")
         let separator = fixedFields.isEmpty ? "" : "; "
         return "\(prefix) \(fixedFields)\(separator)\(type.variantBody) END"

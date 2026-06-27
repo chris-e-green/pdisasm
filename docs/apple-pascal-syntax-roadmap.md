@@ -471,14 +471,18 @@ explicit.
 
 Tasks:
 
-- [ ] Add an `ApplePascalDialect` or `PSystemDialect` enum.
-- [ ] Add dialect selection to configuration.
-- [ ] Add CLI option for dialect selection.
-- [ ] Default to current behavior when no dialect is selected.
-- [ ] Add dialect-specific keyword lists.
-- [ ] Add dialect-specific standard procedure tables.
-- [ ] Add dialect-specific file/unit conventions.
-- [ ] Add tests proving dialect selection changes only intended output.
+- [x] Add an `ApplePascalDialect` or `PSystemDialect` enum.
+- [x] Add dialect selection to configuration.
+- [x] Add CLI option for dialect selection.
+- [x] Default to current behavior when no dialect is selected.
+- [x] Add dialect-specific keyword lists.
+- [x] Add dialect-specific standard procedure tables.
+- [x] Add dialect-specific file/unit conventions.
+- [x] Add tests proving dialect selection changes only intended output.
+
+The initial profiles are `apple-pascal` and `ucsd-p-system`. Apple Pascal remains
+the compatibility default. Differences without verified version-specific
+documentation deliberately retain the current behavior rather than guessing.
 
 ### 6.2 Expand standard procedure and library modeling
 

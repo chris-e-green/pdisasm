@@ -136,3 +136,15 @@ docs/                     Architecture notes and ADRs
 
 See `ARCHITECTURE.md` and `docs/adr/` for more detail about current design
 boundaries and decisions.
+### Pascal dialect
+
+Source reconstruction defaults to the existing Apple Pascal behavior. Select an
+explicit profile with:
+
+```sh
+pdisasm-cli INPUT --show-source --dialect apple-pascal
+pdisasm-cli INPUT --show-source --dialect ucsd-p-system
+```
+
+Unverified version-specific differences retain compatibility behavior until a
+documented policy is available.
