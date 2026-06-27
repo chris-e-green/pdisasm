@@ -80,6 +80,68 @@ public struct GotoFallback: Hashable, Sendable {
     }
 }
 
+public enum StructuredForDirection: Hashable, Sendable {
+    case to
+    case downto
+}
+
+public struct StructuredForVariable: Hashable, Sendable {
+    public let segment: Int
+    public let procedure: Int?
+    public let lexicalLevel: Int?
+    public let address: Int?
+    public let name: String
+
+    public init(
+        segment: Int,
+        procedure: Int?,
+        lexicalLevel: Int?,
+        address: Int?,
+        name: String
+    ) {
+        self.segment = segment
+        self.procedure = procedure
+        self.lexicalLevel = lexicalLevel
+        self.address = address
+        self.name = name
+    }
+
+    init(_ location: Location) {
+        self.init(
+            segment: location.segment,
+            procedure: location.procedure,
+            lexicalLevel: location.lexLevel,
+            address: location.addr,
+            name: location.displayName
+        )
+    }
+}
+
+public struct StructuredForRegion: Hashable, Sendable {
+    public let direction: StructuredForDirection
+    public let variable: StructuredForVariable
+    public let loop: StructuredLoopRegion
+    public let initializationStoreAddress: Int
+    public let comparisonAddress: Int
+    public let updateStoreAddress: Int
+
+    public init(
+        direction: StructuredForDirection,
+        variable: StructuredForVariable,
+        loop: StructuredLoopRegion,
+        initializationStoreAddress: Int,
+        comparisonAddress: Int,
+        updateStoreAddress: Int
+    ) {
+        self.direction = direction
+        self.variable = variable
+        self.loop = loop
+        self.initializationStoreAddress = initializationStoreAddress
+        self.comparisonAddress = comparisonAddress
+        self.updateStoreAddress = updateStoreAddress
+    }
+}
+
 public struct StructuredCaseArm: Hashable, Sendable {
     public let values: Set<Int>
     public let entryBlock: Int
@@ -116,13 +178,16 @@ public struct StructuredCaseRegion: Hashable, Sendable {
 
 public struct StructuredControlFlowAnalyzer {
     public let graph: ControlFlowGraph
+    private let instructions: [Int: Instruction]
 
     public init(graph: ControlFlowGraph) {
         self.graph = graph
+        self.instructions = [:]
     }
 
     public init(procedure: Procedure) {
-        self.init(graph: ControlFlowGraph(procedure: procedure))
+        self.graph = ControlFlowGraph(procedure: procedure)
+        self.instructions = procedure.instructions
     }
 
     public func conditionalRegions() -> [StructuredControlFlowRegion] {
@@ -209,6 +274,10 @@ public struct StructuredControlFlowAnalyzer {
                 }
                 return $0.conditionBlock < $1.conditionBlock
             }
+    }
+
+    public func forRegions() -> [StructuredForRegion] {
+        loopRegions().compactMap(forRegion)
     }
 
     public func caseRegions() -> [StructuredCaseRegion] {
@@ -358,6 +427,94 @@ public struct StructuredControlFlowAnalyzer {
             return ($0.edge.destination ?? Int.max)
                 < ($1.edge.destination ?? Int.max)
         }
+    }
+
+    private func forRegion(
+        from loop: StructuredLoopRegion
+    ) -> StructuredForRegion? {
+        guard loop.kind == .whileLoop,
+            let header = graph.blocks[loop.conditionBlock],
+            header.instructionAddresses.count >= 2,
+            let comparison = forComparison(
+                at: header.instructionAddresses[
+                    header.instructionAddresses.count - 2
+                ]
+            ),
+            let updateBlock = graph.blocks[loop.structuralBackEdge.source],
+            let update = forUpdate(
+                in: updateBlock,
+                direction: comparison.1
+            ),
+            header.instructionAddresses.contains(where: {
+                guard let instruction = instructions[$0] else { return false }
+                return Self.isDirectLoad(instruction.opcode)
+                    && instruction.memLocation == update.variable
+            }),
+            let initializationAddress = instructions.keys
+                .filter({ $0 < loop.headerBlock })
+                .sorted(by: >)
+                .first(where: {
+                    guard let instruction = instructions[$0] else {
+                        return false
+                    }
+                    return Self.isDirectStore(instruction.opcode)
+                        && instruction.memLocation == update.variable
+                })
+        else {
+            return nil
+        }
+
+        return StructuredForRegion(
+            direction: comparison.1,
+            variable: StructuredForVariable(update.variable),
+            loop: loop,
+            initializationStoreAddress: initializationAddress,
+            comparisonAddress: comparison.0,
+            updateStoreAddress: update.storeAddress
+        )
+    }
+
+    private func forComparison(
+        at address: Int
+    ) -> (Int, StructuredForDirection)? {
+        guard let instruction = instructions[address] else { return nil }
+        switch instruction.opcode {
+        case leq, leqi:
+            return (address, .to)
+        case geq, geqi:
+            return (address, .downto)
+        default:
+            return nil
+        }
+    }
+
+    private func forUpdate(
+        in block: BasicBlock,
+        direction: StructuredForDirection
+    ) -> (variable: Location, storeAddress: Int)? {
+        let addresses = block.instructionAddresses
+        guard addresses.count >= 5,
+            let branchAddress = addresses.last,
+            instructions[branchAddress]?.opcode == ujp
+        else {
+            return nil
+        }
+        let updateAddresses = Array(addresses.dropLast().suffix(4))
+        guard updateAddresses.count == 4,
+            let load = instructions[updateAddresses[0]],
+            let constant = instructions[updateAddresses[1]],
+            let arithmetic = instructions[updateAddresses[2]],
+            let store = instructions[updateAddresses[3]],
+            Self.isDirectLoad(load.opcode),
+            Self.isOneConstant(constant),
+            arithmetic.opcode == (direction == .to ? adi : sbi),
+            Self.isDirectStore(store.opcode),
+            let variable = store.memLocation,
+            load.memLocation == variable
+        else {
+            return nil
+        }
+        return (variable, updateAddresses[3])
     }
 
     private func caseArmBlocks(
@@ -536,6 +693,29 @@ public struct StructuredControlFlowAnalyzer {
         case .fallthrough, .call, .return:
             return false
         }
+    }
+
+    private static func isDirectLoad(_ opcode: UInt8) -> Bool {
+        switch opcode {
+        case ldo, lod, lde, ldl, sldl1...sldl16, sldo1...sldo16:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isDirectStore(_ opcode: UInt8) -> Bool {
+        switch opcode {
+        case sro, str, stl, ste:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isOneConstant(_ instruction: Instruction) -> Bool {
+        instruction.opcode == 1
+            || instruction.opcode == ldci && instruction.params.first == 1
     }
 
     private func armBlocks(

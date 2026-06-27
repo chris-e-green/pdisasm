@@ -399,7 +399,7 @@ Tasks:
 - [x] Identify `IF/ELSE` regions.
 - [x] Identify pre-test `WHILE` loops.
 - [x] Identify post-test `REPEAT/UNTIL` loops.
-- [ ] Identify counted `FOR` loops.
+- [x] Identify counted `FOR` loops.
 - [x] Identify `CASE` jump-table regions.
 - [x] Detect loop exits and continue-like jumps.
 - [x] Preserve `GOTO` for irreducible leftovers.

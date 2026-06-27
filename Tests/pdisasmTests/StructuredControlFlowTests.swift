@@ -4,9 +4,17 @@ import XCTest
 final class StructuredControlFlowTests: XCTestCase {
     private func instruction(
         _ opcode: UInt8 = nop,
-        params: [Int] = []
+        params: [Int] = [],
+        location: Location? = nil,
+        pseudoCode: String? = nil
     ) -> Instruction {
-        Instruction(opcode: opcode, mnemonic: "", params: params)
+        Instruction(
+            opcode: opcode,
+            mnemonic: "",
+            params: params,
+            memLocation: location,
+            pseudoCode: pseudoCode
+        )
     }
 
     private func graph(_ instructions: [Int: Instruction]) -> ControlFlowGraph {
@@ -416,5 +424,102 @@ final class StructuredControlFlowTests: XCTestCase {
         let fallbacks = analyzer.gotoFallbacks()
         XCTAssertTrue(fallbacks.contains { $0.reason == .loopExit })
         XCTAssertTrue(fallbacks.contains { $0.reason == .loopContinue })
+    }
+
+    func testIdentifiesForToRegionFromCompleteEvidence() {
+        let variable = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 3,
+            name: "I"
+        )
+        let procedure = Procedure()
+        procedure.instructions = [
+            0: instruction(ldci, params: [1]),
+            2: instruction(stl, location: variable, pseudoCode: "I := 1"),
+            4: instruction(ldl, location: variable),
+            6: instruction(ldci, params: [10]),
+            8: instruction(leqi),
+            9: instruction(fjp, params: [20]),
+            11: instruction(),
+            12: instruction(ldl, location: variable),
+            14: instruction(ldci, params: [1]),
+            16: instruction(adi),
+            17: instruction(stl, location: variable),
+            19: instruction(ujp, params: [4]),
+            20: instruction(rnp),
+        ]
+
+        let regions = StructuredControlFlowAnalyzer(procedure: procedure)
+            .forRegions()
+        XCTAssertEqual(regions.count, 1)
+        XCTAssertEqual(regions[0].direction, .to)
+        XCTAssertEqual(regions[0].variable.name, "I")
+        XCTAssertEqual(regions[0].initializationStoreAddress, 2)
+        XCTAssertEqual(regions[0].comparisonAddress, 8)
+        XCTAssertEqual(regions[0].updateStoreAddress, 17)
+    }
+
+    func testIdentifiesForDowntoRegionFromCompleteEvidence() {
+        let variable = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 3,
+            name: "I"
+        )
+        let procedure = Procedure()
+        procedure.instructions = [
+            0: instruction(ldci, params: [10]),
+            2: instruction(stl, location: variable),
+            4: instruction(ldl, location: variable),
+            6: instruction(ldci, params: [1]),
+            8: instruction(geqi),
+            9: instruction(fjp, params: [20]),
+            11: instruction(),
+            12: instruction(ldl, location: variable),
+            14: instruction(ldci, params: [1]),
+            16: instruction(sbi),
+            17: instruction(stl, location: variable),
+            19: instruction(ujp, params: [4]),
+            20: instruction(rnp),
+        ]
+
+        let regions = StructuredControlFlowAnalyzer(procedure: procedure)
+            .forRegions()
+        XCTAssertEqual(regions.count, 1)
+        XCTAssertEqual(regions[0].direction, .downto)
+        XCTAssertEqual(regions[0].variable.name, "I")
+    }
+
+    func testIncompleteForEvidenceRemainsWhileLoop() {
+        let variable = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 3,
+            name: "I"
+        )
+        let procedure = Procedure()
+        procedure.instructions = [
+            0: instruction(ldci, params: [1]),
+            2: instruction(stl, location: variable),
+            4: instruction(ldl, location: variable),
+            6: instruction(ldci, params: [10]),
+            8: instruction(leqi),
+            9: instruction(fjp, params: [20]),
+            11: instruction(),
+            12: instruction(ldl, location: variable),
+            14: instruction(ldci, params: [2]),
+            16: instruction(adi),
+            17: instruction(stl, location: variable),
+            19: instruction(ujp, params: [4]),
+            20: instruction(rnp),
+        ]
+
+        let analyzer = StructuredControlFlowAnalyzer(procedure: procedure)
+        XCTAssertEqual(analyzer.loopRegions().map(\.kind), [.whileLoop])
+        XCTAssertTrue(analyzer.forRegions().isEmpty)
     }
 }
