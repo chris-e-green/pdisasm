@@ -163,7 +163,8 @@ final class StructuredControlFlowTests: XCTestCase {
         XCTAssertEqual(loop?.bodyBlocks, [2, 4, 6])
         XCTAssertEqual(loop?.continuationBlock, 8)
         XCTAssertEqual(loop?.backEdges.count, 2)
-        XCTAssertEqual(loop?.continueEdges.count, 2)
+        XCTAssertEqual(loop?.structuralBackEdge.source, 6)
+        XCTAssertEqual(loop?.continueEdges.count, 1)
         XCTAssertEqual(loop?.exitEdges.count, 1)
     }
 
@@ -183,6 +184,7 @@ final class StructuredControlFlowTests: XCTestCase {
         XCTAssertEqual(loop?.conditionBlock, 4)
         XCTAssertEqual(loop?.bodyBlocks, [0])
         XCTAssertEqual(loop?.continuationBlock, 6)
+        XCTAssertEqual(loop?.structuralBackEdge.source, 4)
         XCTAssertEqual(loop?.continueEdges.count, 1)
         XCTAssertEqual(loop?.exitEdges.count, 1)
     }
@@ -357,5 +359,62 @@ final class StructuredControlFlowTests: XCTestCase {
         )
 
         XCTAssertEqual(analyzer.caseRegions().map(\.dispatchBlock), [6])
+    }
+
+    func testStructuredConditionalDoesNotRequireGotoFallback() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [4]),
+                2: instruction(),
+                3: instruction(ujp, params: [6]),
+                4: instruction(),
+                6: instruction(rnp),
+            ])
+        )
+
+        XCTAssertTrue(analyzer.gotoFallbacks().isEmpty)
+    }
+
+    func testUnstructuredBranchIsPreservedAsGotoFallback() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(ujp, params: [4]),
+                2: instruction(rnp),
+                4: instruction(rnp),
+            ])
+        )
+
+        XCTAssertEqual(
+            analyzer.gotoFallbacks(),
+            [
+                GotoFallback(
+                    edge: ControlFlowEdge(
+                        source: 0,
+                        destination: 4,
+                        kind: .unconditionalBranch
+                    ),
+                    reason: .irreducible
+                )
+            ]
+        )
+    }
+
+    func testLoopExitAndContinueRemainGotoFallbacks() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [12]),
+                2: instruction(fjp, params: [10]),
+                4: instruction(fjp, params: [8]),
+                6: instruction(ujp, params: [0]),
+                8: instruction(ujp, params: [0]),
+                10: instruction(ujp, params: [14]),
+                12: instruction(ujp, params: [14]),
+                14: instruction(rnp),
+            ])
+        )
+
+        let fallbacks = analyzer.gotoFallbacks()
+        XCTAssertTrue(fallbacks.contains { $0.reason == .loopExit })
+        XCTAssertTrue(fallbacks.contains { $0.reason == .loopContinue })
     }
 }

@@ -402,7 +402,7 @@ Tasks:
 - [ ] Identify counted `FOR` loops.
 - [x] Identify `CASE` jump-table regions.
 - [x] Detect loop exits and continue-like jumps.
-- [ ] Preserve `GOTO` for irreducible leftovers.
+- [x] Preserve `GOTO` for irreducible leftovers.
 - [x] Add nested control-flow tests.
 - [x] Add tests for loops containing conditionals.
 - [x] Add tests for conditionals containing loops.

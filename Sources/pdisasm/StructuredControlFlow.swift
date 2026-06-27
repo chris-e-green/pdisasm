@@ -36,6 +36,7 @@ public struct StructuredLoopRegion: Hashable, Sendable {
     public let conditionBlock: Int
     public let bodyBlocks: Set<Int>
     public let continuationBlock: Int
+    public let structuralBackEdge: ControlFlowEdge
     public let backEdges: Set<ControlFlowEdge>
     public let exitEdges: Set<ControlFlowEdge>
     public let continueEdges: Set<ControlFlowEdge>
@@ -46,6 +47,7 @@ public struct StructuredLoopRegion: Hashable, Sendable {
         conditionBlock: Int,
         bodyBlocks: Set<Int>,
         continuationBlock: Int,
+        structuralBackEdge: ControlFlowEdge,
         backEdges: Set<ControlFlowEdge>,
         exitEdges: Set<ControlFlowEdge>,
         continueEdges: Set<ControlFlowEdge>
@@ -55,9 +57,26 @@ public struct StructuredLoopRegion: Hashable, Sendable {
         self.conditionBlock = conditionBlock
         self.bodyBlocks = bodyBlocks
         self.continuationBlock = continuationBlock
+        self.structuralBackEdge = structuralBackEdge
         self.backEdges = backEdges
         self.exitEdges = exitEdges
         self.continueEdges = continueEdges
+    }
+}
+
+public enum GotoFallbackReason: Hashable, Sendable {
+    case irreducible
+    case loopExit
+    case loopContinue
+}
+
+public struct GotoFallback: Hashable, Sendable {
+    public let edge: ControlFlowEdge
+    public let reason: GotoFallbackReason
+
+    public init(edge: ControlFlowEdge, reason: GotoFallbackReason) {
+        self.edge = edge
+        self.reason = reason
     }
 }
 
@@ -269,6 +288,78 @@ public struct StructuredControlFlowAnalyzer {
         )
     }
 
+    public func gotoFallbacks() -> [GotoFallback] {
+        let conditionals = conditionalRegions()
+        let loops = loopRegions()
+        let cases = caseRegions()
+        var consumedEdges: Set<ControlFlowEdge> = []
+        var reasons: [ControlFlowEdge: GotoFallbackReason] = [:]
+
+        for region in conditionals {
+            consumedEdges.formUnion(
+                graph.edges.filter { $0.source == region.conditionBlock }
+            )
+            let armBlocks = region.thenBlocks.union(region.elseBlocks)
+            consumedEdges.formUnion(
+                graph.edges.filter {
+                    armBlocks.contains($0.source)
+                        && $0.destination == region.continuationBlock
+                }
+            )
+        }
+
+        for region in loops {
+            consumedEdges.formUnion(
+                graph.edges.filter { $0.source == region.conditionBlock }
+            )
+            consumedEdges.insert(region.structuralBackEdge)
+            for edge in region.exitEdges
+            where !(edge.source == region.conditionBlock
+                && edge.destination == region.continuationBlock)
+            {
+                consumedEdges.remove(edge)
+                reasons[edge] = .loopExit
+            }
+            for edge in region.continueEdges {
+                consumedEdges.remove(edge)
+                reasons[edge] = .loopContinue
+            }
+        }
+
+        for region in cases {
+            consumedEdges.formUnion(
+                graph.edges.filter { $0.source == region.dispatchBlock }
+            )
+            let armBlocks = region.arms.reduce(into: region.defaultBlocks) {
+                $0.formUnion($1.blocks)
+            }
+            consumedEdges.formUnion(
+                graph.edges.filter {
+                    armBlocks.contains($0.source)
+                        && $0.destination == region.continuationBlock
+                }
+            )
+        }
+
+        return graph.edges.compactMap { edge in
+            guard Self.requiresExplicitTransfer(edge),
+                !consumedEdges.contains(edge)
+            else {
+                return nil
+            }
+            return GotoFallback(
+                edge: edge,
+                reason: reasons[edge] ?? .irreducible
+            )
+        }.sorted {
+            if $0.edge.source != $1.edge.source {
+                return $0.edge.source < $1.edge.source
+            }
+            return ($0.edge.destination ?? Int.max)
+                < ($1.edge.destination ?? Int.max)
+        }
+    }
+
     private func caseArmBlocks(
         from start: Int,
         dispatchBlock: Int,
@@ -387,7 +478,19 @@ public struct StructuredControlFlowAnalyzer {
         loop: NaturalLoop,
         conditionBlock: Int,
         continuationBlock: Int
-    ) -> StructuredLoopRegion {
+    ) -> StructuredLoopRegion? {
+        let structuralBackEdge: ControlFlowEdge?
+        switch kind {
+        case .whileLoop:
+            structuralBackEdge = loop.backEdges.max {
+                $0.source < $1.source
+            }
+        case .repeatUntilLoop:
+            structuralBackEdge = loop.backEdges.first {
+                $0.source == conditionBlock && $0.destination == loop.header
+            }
+        }
+        guard let structuralBackEdge else { return nil }
         let exitEdges = Set(
             graph.edges.filter { edge in
                 guard loop.blocks.contains(edge.source),
@@ -402,7 +505,8 @@ public struct StructuredControlFlowAnalyzer {
         let continueEdges = Set(
             graph.edges.filter { edge in
                 guard loop.blocks.contains(edge.source),
-                    edge.destination == continueTarget
+                    edge.destination == continueTarget,
+                    edge != structuralBackEdge
                 else {
                     return false
                 }
@@ -415,10 +519,23 @@ public struct StructuredControlFlowAnalyzer {
             conditionBlock: conditionBlock,
             bodyBlocks: loop.blocks.subtracting([conditionBlock]),
             continuationBlock: continuationBlock,
+            structuralBackEdge: structuralBackEdge,
             backEdges: loop.backEdges,
             exitEdges: exitEdges,
             continueEdges: continueEdges
         )
+    }
+
+    private static func requiresExplicitTransfer(
+        _ edge: ControlFlowEdge
+    ) -> Bool {
+        switch edge.kind {
+        case .conditionalBranch, .unconditionalBranch, .caseBranch,
+            .caseDefault:
+            return true
+        case .fallthrough, .call, .return:
+            return false
+        }
     }
 
     private func armBlocks(
