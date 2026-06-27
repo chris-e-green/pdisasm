@@ -318,15 +318,15 @@ confidence-scored.
 
 Tasks:
 
-- [ ] Add parameter mode to the procedure signature model.
-- [ ] Support explicit metadata for `VAR` parameters.
-- [ ] Infer likely `VAR` parameters from address-passing patterns.
-- [ ] Infer value parameters from scalar value-passing patterns.
-- [ ] Mark uncertain parameter modes.
-- [ ] Render uncertain modes conservatively or with comments.
-- [ ] Add tests for known value parameters.
-- [ ] Add tests for known `VAR` parameters.
-- [ ] Add tests for ambiguous pointer/address parameters.
+- [x] Add parameter mode to the procedure signature model.
+- [x] Support explicit metadata for `VAR` parameters.
+- [x] Infer likely `VAR` parameters from address-passing patterns.
+- [x] Infer value parameters from scalar value-passing patterns.
+- [x] Mark uncertain parameter modes.
+- [x] Render uncertain modes conservatively or with comments.
+- [x] Add tests for known value parameters.
+- [x] Add tests for known `VAR` parameters.
+- [x] Add tests for ambiguous pointer/address parameters.
 
 ### 4.3 Model function result storage
 

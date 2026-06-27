@@ -400,6 +400,8 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         var gen = makeGenerator(procs: [calledProc])
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
         XCTAssertEqual(result, "MYSEG.DOWORK(42)")
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .value)
+        XCTAssertEqual(calledProc.parameters[0].parameterModeSource, .inferred)
     }
 
     func testCallProcedureInfersArgumentTypeFromKnownParameterType() {
@@ -459,7 +461,94 @@ final class PseudoCodeGeneratorTests: XCTestCase {
 
         XCTAssertEqual(result, "MYSEG.DOWORK(ARG)")
         XCTAssertEqual(calledProc.parameters[0].type, "UNKNOWN")
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .unknown)
+        XCTAssertEqual(calledProc.parameters[0].parameterModeSource, .unknown)
         XCTAssertEqual(gen.allLocations.first(where: { $0 == arg })?.type, "UNKNOWN")
+    }
+
+    func testCallProcedureInfersVariableParameterFromAddressArgument() {
+        let arg = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 5,
+            name: "ARG",
+            type: "INTEGER"
+        )
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "ARG", type: "INTEGER", kind: .address, location: arg))
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 5,
+            parameters: [Identifier(name: "X", type: "INTEGER")]
+        )
+        let inst = Instruction(
+            opcode: cip,
+            mnemonic: "CIP",
+            destination: Location(segment: 1, procedure: 5)
+        )
+        var gen = makeGenerator(procs: [calledProc], labels: [arg])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .variable)
+        XCTAssertEqual(calledProc.parameters[0].parameterModeSource, .inferred)
+    }
+
+    func testExplicitVariableParameterModeOverridesValueEvidence() {
+        var stack = StackSimulator()
+        stack.push(StackValue(text: "42", type: "INTEGER", kind: .constant))
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 5,
+            parameters: [
+                Identifier(name: "X", type: "INTEGER", parameterMode: .variable)
+            ]
+        )
+        let inst = Instruction(
+            opcode: cip,
+            mnemonic: "CIP",
+            destination: Location(segment: 1, procedure: 5)
+        )
+        var gen = makeGenerator(procs: [calledProc])
+
+        _ = gen.generateForInstruction(inst, stack: &stack, loc: nil)
+
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .variable)
+        XCTAssertEqual(calledProc.parameters[0].parameterModeSource, .metadata)
+    }
+
+    func testConflictingParameterModeEvidenceRemainsAmbiguous() {
+        let calledProc = ProcedureIdentifier(
+            isFunction: false,
+            segment: 1,
+            procedure: 5,
+            parameters: [Identifier(name: "X", type: "INTEGER")]
+        )
+        let inst = Instruction(
+            opcode: cip,
+            mnemonic: "CIP",
+            destination: Location(segment: 1, procedure: 5)
+        )
+        var gen = makeGenerator(procs: [calledProc])
+        var addressStack = StackSimulator()
+        addressStack.push(StackValue(text: "ARG", type: "INTEGER", kind: .address))
+        _ = gen.generateForInstruction(inst, stack: &addressStack, loc: nil)
+
+        var valueStack = StackSimulator()
+        valueStack.push(StackValue(text: "42", type: "INTEGER", kind: .constant))
+        _ = gen.generateForInstruction(inst, stack: &valueStack, loc: nil)
+
+        var repeatedAddressStack = StackSimulator()
+        repeatedAddressStack.push(
+            StackValue(text: "ARG", type: "INTEGER", kind: .address)
+        )
+        _ = gen.generateForInstruction(inst, stack: &repeatedAddressStack, loc: nil)
+
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .unknown)
+        XCTAssertEqual(calledProc.parameters[0].parameterModeSource, .inferred)
     }
 
     func testCallProcedureConsumesTwoWordRealArgument() {
@@ -513,6 +602,8 @@ final class PseudoCodeGeneratorTests: XCTestCase {
 
         XCTAssertEqual(result, "MYSEG.DOWORK(COUNT, VALUE)")
         XCTAssertTrue(stack.values.isEmpty)
+        XCTAssertEqual(calledProc.parameters[0].parameterMode, .value)
+        XCTAssertEqual(calledProc.parameters[1].parameterMode, .value)
     }
 
     func testUnknownFunctionCallInfersRealArgumentAndRealReturnStore() {

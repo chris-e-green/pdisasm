@@ -186,9 +186,21 @@ struct MetadataStore {
     ) throws {
         let url = fileURL(file, extension: "csv")
         guard try prepareWrite(to: url, overwrite: overwrite) else { return }
-        let headers = ["segmentNumber", "segmentName", "procNumber", "procName", "isFunction", "isAssembly", "parameters", "returnType", "returnTypeSource"]
+        let headers = ["segmentNumber", "segmentName", "procNumber", "procName", "isFunction", "isAssembly", "parameters", "parameterModes", "parameterModeSources", "returnType", "returnTypeSource"]
         let rows = procedures.map { proc in
-            [String(proc.segment), proc.segmentName ?? "", String(proc.procedure), proc.procName ?? "", String(proc.isFunction), String(proc.isAssembly), proc.parameters.map(\.description).joined(separator: ";"), proc.returnType ?? "", proc.returnTypeSource.rawValue]
+            [
+                String(proc.segment),
+                proc.segmentName ?? "",
+                String(proc.procedure),
+                proc.procName ?? "",
+                String(proc.isFunction),
+                String(proc.isAssembly),
+                proc.parameters.map(\.description).joined(separator: ";"),
+                proc.parameters.map(\.parameterMode.rawValue).joined(separator: ";"),
+                proc.parameters.map(\.parameterModeSource.rawValue).joined(separator: ";"),
+                proc.returnType ?? "",
+                proc.returnTypeSource.rawValue
+            ]
         }
         try CSVTable.write(headers: headers, rows: rows, to: url)
     }
@@ -318,9 +330,27 @@ extension Location {
 
 extension ProcedureIdentifier {
     convenience init(csv record: [String: String]) {
-        let parameters = (record["parameters"] ?? "").split(separator: ";").map { raw in
+        var parameters = (record["parameters"] ?? "").split(separator: ";").map { raw in
             let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
             return Identifier(name: parts.first ?? "", type: parts.count > 1 ? parts[1] : "")
+        }
+        let modes = (record["parameterModes"] ?? "").split(
+            separator: ";",
+            omittingEmptySubsequences: false
+        )
+        let modeSources = (record["parameterModeSources"] ?? "").split(
+            separator: ";",
+            omittingEmptySubsequences: false
+        )
+        for index in parameters.indices {
+            guard modes.indices.contains(index),
+                  let mode = ParameterMode(rawValue: String(modes[index]))
+            else { continue }
+            parameters[index].parameterMode = mode
+            parameters[index].parameterModeSource = modeSources.indices.contains(index)
+                ? ParameterModeSource(rawValue: String(modeSources[index]))
+                    ?? (mode == .unknown ? .unknown : .metadata)
+                : (mode == .unknown ? .unknown : .metadata)
         }
         self.init(
             isFunction: Bool(record["isFunction"] ?? "false") ?? false,

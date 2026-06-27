@@ -2,7 +2,13 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
     private static func normalizedParameter(_ parameter: Identifier) -> Identifier {
         let type = parameter.type.trimmingCharacters(in: .whitespacesAndNewlines)
         guard type == "POINTER" else { return parameter }
-        return Identifier(name: parameter.name, type: "UNKNOWN", typeSource: .unknown)
+        return Identifier(
+            name: parameter.name,
+            type: "UNKNOWN",
+            typeSource: .unknown,
+            parameterMode: parameter.parameterMode,
+            parameterModeSource: parameter.parameterModeSource
+        )
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -117,6 +123,21 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
                 return Identifier(name: parts[0], type: "")
             }
         }.map(Self.normalizedParameter)
+        let modes = try container.decodeIfPresent(
+            [ParameterMode].self,
+            forKey: .parameterModes
+        ) ?? []
+        let modeSources = try container.decodeIfPresent(
+            [ParameterModeSource].self,
+            forKey: .parameterModeSources
+        ) ?? []
+        for index in self.parameters.indices {
+            guard modes.indices.contains(index) else { continue }
+            self.parameters[index].parameterMode = modes[index]
+            self.parameters[index].parameterModeSource = modeSources.indices.contains(index)
+                ? modeSources[index]
+                : (modes[index] == .unknown ? .unknown : .metadata)
+        }
         self.returnType = try container.decodeIfPresent(
             String.self,
             forKey: CodingKeys.returnType
@@ -153,6 +174,8 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
             self.signatureParameterDescriptions.joined(separator: ";"),
             forKey: CodingKeys.parameters
         )
+        try container.encode(parameters.map(\.parameterMode), forKey: .parameterModes)
+        try container.encode(parameters.map(\.parameterModeSource), forKey: .parameterModeSources)
         try container.encode(self.returnType, forKey: CodingKeys.returnType)
         try container.encode(self.returnTypeSource.rawValue, forKey: CodingKeys.returnTypeSource)
         try container.encode(self.isAssembly, forKey: CodingKeys.isAssembly)
@@ -164,6 +187,8 @@ public class ProcedureIdentifier: CustomStringConvertible, Hashable, Codable {
         case segmentName = "segmentName"
         case procName = "procName"
         case parameters = "parameters"
+        case parameterModes
+        case parameterModeSources
         case returnType = "returnType"
         case returnTypeSource = "returnTypeSource"
         case isAssembly = "isAssembly"

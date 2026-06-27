@@ -528,7 +528,7 @@ extension DisassemblyServiceTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try "segment,procedure,lexLevel,addr,name,type,typeSource\n1,1,0,4,FILE_LABEL,INTEGER,user\n"
             .write(to: directory.appendingPathComponent("labels_SAMPLE.csv"), atomically: true, encoding: .utf8)
-        try "segmentNumber,segmentName,procNumber,procName,isFunction,isAssembly,parameters,returnType,returnTypeSource\n1,,1,FILE_PROC,false,false,,,unknown\n"
+        try "segmentNumber,segmentName,procNumber,procName,isFunction,isAssembly,parameters,parameterModes,parameterModeSources,returnType,returnTypeSource\n1,,1,FILE_PROC,false,false,ARG:INTEGER,variable,metadata,,unknown\n"
             .write(to: directory.appendingPathComponent("procedures_SAMPLE.csv"), atomically: true, encoding: .utf8)
         try JSONEncoder().encode([DisassemblyComment(reference: InstructionReference(segment: 1, procedure: 1, addr: 4), comment: "hello")])
             .write(to: directory.appendingPathComponent("comments_SAMPLE.json"))
@@ -543,6 +543,11 @@ extension DisassemblyServiceTests {
 
         XCTAssertEqual(snapshot.labels.first?.value.name, "FILE_LABEL")
         XCTAssertEqual(snapshot.procedures.first?.value.procName, "FILE_PROC")
+        XCTAssertEqual(snapshot.procedures.first?.value.parameters[0].parameterMode, .variable)
+        XCTAssertEqual(
+            snapshot.procedures.first?.value.parameters[0].parameterModeSource,
+            .metadata
+        )
         XCTAssertEqual(snapshot.comments.first?.value.comment, "hello")
         XCTAssertEqual(snapshot.records.first?.value.name, "REC")
         XCTAssertEqual(snapshot.constants.first?.value.value, 3)

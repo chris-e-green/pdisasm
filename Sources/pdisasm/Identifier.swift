@@ -1,6 +1,28 @@
+public enum ParameterMode: String, Codable, Sendable {
+    case unknown
+    case value
+    case variable
+}
+
+public enum ParameterModeSource: String, Codable, Sendable {
+    case unknown
+    case inferred
+    case metadata
+    case user
+
+    var precedence: Int {
+        switch self {
+        case .unknown: return 0
+        case .inferred: return 1
+        case .metadata: return 2
+        case .user: return 3
+        }
+    }
+}
+
 public struct Identifier: CustomStringConvertible, Hashable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
-        case name, type, typeSource
+        case name, type, typeSource, parameterMode, parameterModeSource
     }
 
     public static func == (lhs: Identifier, rhs: Identifier) -> Bool {
@@ -15,6 +37,8 @@ public struct Identifier: CustomStringConvertible, Hashable, Codable, Sendable {
     public var name: String
     public var type: String
     public var typeSource: TypeSource
+    public var parameterMode: ParameterMode
+    public var parameterModeSource: ParameterModeSource
     public var description: String {
         if type.isEmpty {
             return name
@@ -23,10 +47,19 @@ public struct Identifier: CustomStringConvertible, Hashable, Codable, Sendable {
         }
     }
 
-    public init(name: String, type: String, typeSource: TypeSource? = nil) {
+    public init(
+        name: String,
+        type: String,
+        typeSource: TypeSource? = nil,
+        parameterMode: ParameterMode = .unknown,
+        parameterModeSource: ParameterModeSource? = nil
+    ) {
         self.name = name
         self.type = type
         self.typeSource = typeSource ?? (type.isEmpty || type == "UNKNOWN" ? .unknown : .metadata)
+        self.parameterMode = parameterMode
+        self.parameterModeSource = parameterModeSource
+            ?? (parameterMode == .unknown ? .unknown : .metadata)
     }
 
     public init(from decoder: Decoder) throws {
@@ -39,6 +72,14 @@ public struct Identifier: CustomStringConvertible, Hashable, Codable, Sendable {
         } else {
             self.typeSource = self.type.isEmpty || self.type == "UNKNOWN" ? .unknown : .metadata
         }
+        self.parameterMode = try container.decodeIfPresent(
+            ParameterMode.self,
+            forKey: .parameterMode
+        ) ?? .unknown
+        self.parameterModeSource = try container.decodeIfPresent(
+            ParameterModeSource.self,
+            forKey: .parameterModeSource
+        ) ?? (self.parameterMode == .unknown ? .unknown : .metadata)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -46,6 +87,8 @@ public struct Identifier: CustomStringConvertible, Hashable, Codable, Sendable {
         try container.encode(name, forKey: .name)
         try container.encode(type, forKey: .type)
         try container.encode(typeSource.rawValue, forKey: .typeSource)
+        try container.encode(parameterMode, forKey: .parameterMode)
+        try container.encode(parameterModeSource, forKey: .parameterModeSource)
     }
 
     @discardableResult
