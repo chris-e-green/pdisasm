@@ -107,6 +107,36 @@ private func accessedSystemGlobalAddresses(in codeSegments: [Int: CodeSegment]) 
     return addresses
 }
 
+private func accessedSystemGlobalLocations(in result: DisassemblyResult) -> [Location] {
+    let accessedGlobalAddresses = accessedSystemGlobalAddresses(in: result.codeSegments)
+    return result.allLocations.filter {
+        $0.lexLevel == -1
+            && $0.segment == 0
+            && $0.addr.map(accessedGlobalAddresses.contains) == true
+    }.sorted()
+}
+
+private func dataSegmentGlobalLocations(in result: DisassemblyResult) -> [Location] {
+    let dataSegments = Set(result.dataSegments)
+    return result.allLocations.filter {
+        dataSegments.contains($0.segment)
+            && $0.procedure == nil
+            && !$0.isParam
+    }.sorted()
+}
+
+private func runLevelDeclarationLines(from result: DisassemblyResult) -> [String] {
+    renderPascalDeclarationSectionLines(
+        records: result.knownRecords,
+        aliases: result.typeAliases,
+        scalarTypes: result.scalarTypes,
+        constants: result.constants,
+        subrangeTypes: result.subrangeTypes,
+        variables: accessedSystemGlobalLocations(in: result)
+            + dataSegmentGlobalLocations(in: result)
+    )
+}
+
 // MARK: - Structured Output Model
 
 /// Classifies the kind of each output line so the GUI can filter and colour them.
@@ -352,6 +382,140 @@ private func renderKnownTypeDefinitionLines(
     return lines
 }
 
+func renderPascalDeclarationSectionLines(
+    labels: [String] = [],
+    records: Set<PascalRecord> = [],
+    aliases: [String: String] = [:],
+    scalarTypes: [String: PascalScalarType] = [:],
+    constants: [String: Int] = [:],
+    subrangeTypes: [String: PascalSubrangeType] = [:],
+    variables: [Location] = []
+) -> [String] {
+    var lines: [String] = []
+
+    let renderedLabels = Array(Set(labels.map {
+        renderPascalIdentifier($0.trimmingCharacters(in: .whitespacesAndNewlines))
+    }.filter { !$0.isEmpty })).sorted()
+    if !renderedLabels.isEmpty {
+        lines.append("LABEL")
+        lines.append("  \(renderedLabels.joined(separator: ", "));")
+        lines.append("")
+    }
+
+    if !constants.isEmpty {
+        lines.append("CONST")
+        for constant in constants.keys.sorted() {
+            if let value = constants[constant] {
+                lines.append("  \(renderPascalIdentifier(constant)) = \(value);")
+            }
+        }
+        lines.append("")
+    }
+
+    let typeLines = renderPascalTypeDeclarationLines(
+        records: records,
+        aliases: aliases,
+        scalarTypes: scalarTypes,
+        subrangeTypes: subrangeTypes
+    )
+    if !typeLines.isEmpty {
+        lines.append("TYPE")
+        lines.append(contentsOf: typeLines)
+        lines.append("")
+    }
+
+    let variableLines = renderPascalVariableDeclarationLines(variables)
+    if !variableLines.isEmpty {
+        lines.append("VAR")
+        lines.append(contentsOf: variableLines)
+        lines.append("")
+    }
+
+    if lines.last == "" {
+        lines.removeLast()
+    }
+    return lines
+}
+
+private func renderPascalTypeDeclarationLines(
+    records: Set<PascalRecord>,
+    aliases: [String: String],
+    scalarTypes: [String: PascalScalarType],
+    subrangeTypes: [String: PascalSubrangeType]
+) -> [String] {
+    guard !records.isEmpty || !aliases.isEmpty || !scalarTypes.isEmpty || !subrangeTypes.isEmpty else {
+        return []
+    }
+
+    var lines: [String] = []
+    let recordNames = Set(records.map(\.name))
+    let scalarNames = Set(scalarTypes.keys)
+    let subrangeNames = Set(subrangeTypes.keys)
+
+    for scalarName in scalarTypes.keys.sorted() {
+        if let scalarType = scalarTypes[scalarName] {
+            lines.append("  \(renderPascalIdentifier(scalarName)) = (\(scalarType.cases.map(renderPascalIdentifier).joined(separator: ", ")));")
+        }
+    }
+
+    for subrangeName in subrangeTypes.keys.sorted() {
+        if let subrangeType = subrangeTypes[subrangeName] {
+            lines.append("  \(renderPascalIdentifier(subrangeName)) = \(subrangeType.renderedType);")
+        }
+    }
+
+    for alias in aliases.keys.sorted() {
+        guard subrangeNames.contains(alias) == false,
+              scalarNames.contains(alias) == false,
+              recordNames.contains(alias) == false,
+              let type = aliases[alias]
+        else {
+            continue
+        }
+        lines.append("  \(renderPascalIdentifier(alias)) = \(type);")
+    }
+
+    for record in records.sorted(by: { $0.name < $1.name }) {
+        lines.append("  \(renderPascalIdentifier(record.name)) = RECORD")
+        let renderedMembers = record.allMembers.isEmpty
+            ? record.members.keys.sorted().compactMap { offset in
+                record.members[offset].map {
+                    PascalRecordMember(offset: offset, identifier: $0)
+                }
+            }
+            : record.allMembers.sorted {
+                if $0.offset != $1.offset {
+                    return $0.offset < $1.offset
+                }
+                return $0.identifier.name < $1.identifier.name
+            }
+        for member in renderedMembers {
+            let identifier = member.identifier
+            let type = identifier.type.isEmpty ? "UNKNOWN" : identifier.type
+            let variant = member.variantLabel.map { " variant \($0)," } ?? ""
+            lines.append("    \(renderPascalIdentifier(identifier.name)): \(type); (*\(variant) offset \(member.offset) *)")
+        }
+        lines.append("  END;")
+    }
+
+    return lines
+}
+
+private func renderPascalVariableDeclarationLines(_ variables: [Location]) -> [String] {
+    var declarationsByName: [String: String] = [:]
+    for variable in variables where !variable.isParam {
+        let name = renderPascalIdentifier(variable.displayName)
+        guard !name.isEmpty else {
+            continue
+        }
+        declarationsByName[name] = variable.displayType
+    }
+
+    return declarationsByName.keys.sorted().map { name in
+        "  \(name): \(declarationsByName[name] ?? "UNKNOWN");"
+    }
+}
+
 private func unknownKnownTypeDiagnostics(
     records: Set<PascalRecord>,
     aliases: [String: String],
@@ -548,6 +712,17 @@ public func renderStructuredLines(
         addLine(.diagnostic, "")
     }
 
+    let accessedGlobals = accessedSystemGlobalLocations(in: result)
+    let declarationLines = runLevelDeclarationLines(from: result)
+    if !declarationLines.isEmpty {
+        addLine(.markup, "## Declarations")
+        addLine(.markup, "")
+        for line in declarationLines {
+            addLine(.variable, line)
+        }
+        addLine(.variable, "")
+    }
+
     for line in renderKnownTypeDefinitionLines(
         records: result.knownRecords,
         aliases: result.typeAliases,
@@ -562,15 +737,10 @@ public func renderStructuredLines(
     addLine(.markup, "")
 
     // Global variables
-    let accessedGlobalAddresses = accessedSystemGlobalAddresses(in: result.codeSegments)
-    result.allLocations.filter({
-        $0.lexLevel == -1
-            && $0.segment == 0
-            && $0.addr.map(accessedGlobalAddresses.contains) == true
-    }).sorted()
-        .forEach({ loc in
+    accessedGlobals
+        .forEach { loc in
             addLine(.global, "G\(loc.addr ?? -1)=\(loc.description)", location: loc)
-        })
+        }
     addLine(.global, "")
     
     for ds in result.dataSegments.sorted(by: { $0 < $1 }) {
@@ -1019,10 +1189,113 @@ func outputResults<Target: TextOutputStream>(
     writeLines(outputLines, to: &stream)
 }
 
+private func procedureDeclarationLines(
+    for procedure: Procedure,
+    segmentNumber: Int,
+    statements: [PascalStmt],
+    result: DisassemblyResult
+) -> [String] {
+    let procedureNumber = procedure.identifier?.procedure
+    let variables: [Location]
+    if let procedureNumber {
+        variables = result.allLocations.filter {
+            $0.segment == segmentNumber
+                && $0.procedure == procedureNumber
+                && !$0.isParam
+        }.sorted()
+    } else {
+        variables = []
+    }
+
+    return renderPascalDeclarationSectionLines(
+        labels: referencedGotoLabels(in: statements),
+        variables: variables
+    )
+}
+
+private func referencedGotoLabels(in statements: [PascalStmt]) -> [String] {
+    var labels: Set<String> = []
+    for statement in statements {
+        collectGotoLabels(from: statement, into: &labels)
+    }
+    return labels.sorted()
+}
+
+private func collectGotoLabels(from statement: PascalStmt, into labels: inout Set<String>) {
+    switch statement {
+    case .goto(let label):
+        labels.insert(label)
+    case .block(let statements):
+        for statement in statements {
+            collectGotoLabels(from: statement, into: &labels)
+        }
+    case .ifThen(_, let thenBlock):
+        collectGotoLabels(from: thenBlock, into: &labels)
+    case .ifElse(_, let thenBlock, let elseBlock):
+        collectGotoLabels(from: thenBlock, into: &labels)
+        collectGotoLabels(from: elseBlock, into: &labels)
+    case .whileDo(_, let body):
+        collectGotoLabels(from: body, into: &labels)
+    case .repeatUntil(let body, _):
+        for statement in body {
+            collectGotoLabels(from: statement, into: &labels)
+        }
+    case .forLoop(_, _, _, _, let body):
+        collectGotoLabels(from: body, into: &labels)
+    case .caseStatement(_, let arms, let defaultBody):
+        for arm in arms {
+            for statement in arm.body {
+                collectGotoLabels(from: statement, into: &labels)
+            }
+        }
+        for statement in defaultBody ?? [] {
+            collectGotoLabels(from: statement, into: &labels)
+        }
+    case .label(_, let statement):
+        if let statement {
+            collectGotoLabels(from: statement, into: &labels)
+        }
+    case .raw(let text):
+        labels.formUnion(gotoLabels(inRawText: text))
+    case .assignment, .call:
+        break
+    }
+}
+
+private func gotoLabels(inRawText text: String) -> [String] {
+    let pattern = #"\bGOTO\s+([A-Za-z_][A-Za-z0-9_]*)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+        return []
+    }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    return regex.matches(in: text, range: range).compactMap { match in
+        guard match.numberOfRanges > 1,
+              let labelRange = Range(match.range(at: 1), in: text)
+        else {
+            return nil
+        }
+        return String(text[labelRange])
+    }
+}
+
 public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: Bool = true) -> [String] {
     var lines: [String] = []
     if showMarkup {
         lines.append("#  Pascal source reconstruction for \(result.sourceFilename)")
+        lines.append("")
+    }
+
+    let runLevelDeclarations = runLevelDeclarationLines(from: result)
+    if !runLevelDeclarations.isEmpty {
+        if showMarkup {
+            lines.append("## Declarations")
+            lines.append("")
+            lines.append("```pascal")
+        }
+        lines.append(contentsOf: runLevelDeclarations)
+        if showMarkup {
+            lines.append("```")
+        }
         lines.append("")
     }
 
@@ -1051,6 +1324,16 @@ public func renderPascalSourceLines(from result: DisassemblyResult, showMarkup: 
                 } else if let pseudo = instruction.pseudoCode {
                     statements.append(PseudoCodeStatement(renderedText: pseudo, locations: result.allLocations).pascalSourceStatement)
                 }
+            }
+            let declarationLines = procedureDeclarationLines(
+                for: procedure,
+                segmentNumber: segmentNumber,
+                statements: statements,
+                result: result
+            )
+            if !declarationLines.isEmpty {
+                lines.append(contentsOf: declarationLines)
+                lines.append("")
             }
             lines.append(contentsOf: PascalBlock(statements: statements).rendered())
             lines.append(";")
