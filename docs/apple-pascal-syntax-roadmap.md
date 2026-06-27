@@ -260,17 +260,17 @@ available.
 
 Tasks:
 
-- [ ] Generate `LABEL` declarations for remaining `GOTO` labels.
-- [ ] Generate `CONST` declarations from parsed/inferred constants.
-- [ ] Generate `TYPE` declarations from metadata and inferred types.
-- [ ] Generate `VAR` declarations for globals, locals, parameters, and temporaries
+- [x] Generate `LABEL` declarations for remaining `GOTO` labels.
+- [x] Generate `CONST` declarations from parsed/inferred constants.
+- [x] Generate `TYPE` declarations from metadata and inferred types.
+- [x] Generate `VAR` declarations for globals, locals, parameters, and temporaries
       as appropriate.
-- [ ] Avoid duplicate declarations for type aliases and named records.
-- [ ] Preserve deterministic declaration ordering.
-- [ ] Add tests for procedures with local variables.
-- [ ] Add tests for data-segment globals.
-- [ ] Add tests for labels produced by irreducible control flow.
-- [ ] Add tests for enum and subrange declarations.
+- [x] Avoid duplicate declarations for type aliases and named records.
+- [x] Preserve deterministic declaration ordering.
+- [x] Add tests for procedures with local variables.
+- [x] Add tests for data-segment globals.
+- [x] Add tests for labels produced by irreducible control flow.
+- [x] Add tests for enum and subrange declarations.
 
 ### 3.5 Extend metadata parsing for Apple Pascal declarations
 

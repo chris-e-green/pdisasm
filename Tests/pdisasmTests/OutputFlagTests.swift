@@ -48,6 +48,258 @@ final class OutputFlagTests: XCTestCase {
         return (dict, codeSegs, [], allProcedures, [])
     }
 
+    // MARK: - Pascal declaration sections
+
+    func testPascalDeclarationSectionsRenderLabelsConstantsTypesAndVariables() {
+        let record = PascalRecord(
+            name: "NODE",
+            members: [
+                0: Identifier(name: "KIND", type: "SEGKINDS"),
+                1: Identifier(name: "COUNT", type: "SEGNO")
+            ]
+        )
+        let lines = renderPascalDeclarationSectionLines(
+            labels: ["LAB20", "LAB10", "LAB20"],
+            records: [record],
+            aliases: [
+                "ALPHA": "PACKED ARRAY[1..8] OF CHAR",
+                "NODE": "INTEGER",
+                "SEGNO": "INTEGER"
+            ],
+            scalarTypes: [
+                "SEGKINDS": PascalScalarType(
+                    name: "SEGKINDS",
+                    cases: ["LINKED", "HOSTSEG", "SEGPROC"]
+                )
+            ],
+            constants: ["MAXSEGS": 15],
+            subrangeTypes: [
+                "SEGNO": PascalSubrangeType(name: "SEGNO", lowerBound: 1, upperBound: 15)
+            ],
+            variables: [
+                Location(segment: 1, procedure: 2, lexLevel: 0, addr: 4, name: "LOCAL_B", type: "CHAR"),
+                Location(segment: 0, procedure: nil, lexLevel: -1, addr: 1, name: "GLOBAL_A", type: "INTEGER")
+            ]
+        )
+
+        XCTAssertEqual(lines, [
+            "LABEL",
+            "  LAB10, LAB20;",
+            "",
+            "CONST",
+            "  MAXSEGS = 15;",
+            "",
+            "TYPE",
+            "  SEGKINDS = (LINKED, HOSTSEG, SEGPROC);",
+            "  SEGNO = 1..15;",
+            "  ALPHA = PACKED ARRAY[1..8] OF CHAR;",
+            "  NODE = RECORD",
+            "    KIND: SEGKINDS; (* offset 0 *)",
+            "    COUNT: SEGNO; (* offset 1 *)",
+            "  END;",
+            "",
+            "VAR",
+            "  GLOBAL_A: INTEGER;",
+            "  LOCAL_B: CHAR;"
+        ])
+    }
+
+    func testPascalDeclarationSectionsSkipParameterLocationsAndDeduplicateVariables() {
+        let param = Location(
+            segment: 1,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 1,
+            isParam: true,
+            name: "ARG",
+            type: "INTEGER"
+        )
+        let first = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 2, name: "TEMP", type: "INTEGER")
+        let duplicate = Location(segment: 1, procedure: 2, lexLevel: 0, addr: 3, name: "TEMP", type: "INTEGER")
+
+        let lines = renderPascalDeclarationSectionLines(variables: [param, duplicate, first])
+
+        XCTAssertEqual(lines, [
+            "VAR",
+            "  TEMP: INTEGER;"
+        ])
+    }
+
+    func testPascalDeclarationSectionsReturnEmptyWhenNothingIsKnown() {
+        XCTAssertTrue(renderPascalDeclarationSectionLines().isEmpty)
+    }
+
+    func testOutputResultsEmitsRunLevelPascalDeclarations() {
+        let (dict, codeSegs, _, procs, callers) = makeMinimalInputs()
+        let accessedGlobal = Location(
+            segment: 0,
+            procedure: nil,
+            lexLevel: -1,
+            addr: 7,
+            name: "GLOBAL_VALUE",
+            type: "SEGNO"
+        )
+        let unaccessedGlobal = Location(
+            segment: 0,
+            procedure: nil,
+            lexLevel: -1,
+            addr: 8,
+            name: "UNUSED_GLOBAL",
+            type: "INTEGER"
+        )
+        let dataSegmentGlobal = Location(
+            segment: 3,
+            procedure: nil,
+            lexLevel: nil,
+            addr: 2,
+            name: "DATA_VALUE",
+            type: "CHAR"
+        )
+        codeSegs[0]?.procedures.first?.instructions[1] = Instruction(
+            opcode: lao,
+            mnemonic: "LAO",
+            memLocation: accessedGlobal
+        )
+
+        let out = captureOutput {
+            outputResults(
+                sourceFilename: "test",
+                segDictionary: dict,
+                codeSegs: codeSegs,
+                dataSegs: [3],
+                allLocations: [accessedGlobal, unaccessedGlobal, dataSegmentGlobal],
+                allProcedures: procs,
+                allCallers: callers,
+                typeAliases: ["SEGNO": "INTEGER"],
+                constants: ["MAXSEGS": 15],
+                subrangeTypes: [
+                    "SEGNO": PascalSubrangeType(name: "SEGNO", lowerBound: 1, upperBound: 15)
+                ],
+                showMarkup: true
+            )
+        }
+
+        XCTAssertTrue(out.contains("## Declarations"))
+        XCTAssertTrue(out.contains("CONST\n  MAXSEGS = 15;"))
+        XCTAssertTrue(out.contains("TYPE\n  SEGNO = 1..15;"))
+        XCTAssertTrue(out.contains("VAR\n  DATA_VALUE: CHAR;"))
+        XCTAssertTrue(out.contains("  GLOBAL_VALUE: SEGNO;"))
+        XCTAssertFalse(out.contains("UNUSED_GLOBAL: INTEGER;"))
+    }
+
+    func testPascalSourceEmitsRunLevelDeclarationsAndDataSegmentGlobals() {
+        let (dict, codeSegs, _, procs, callers) = makeMinimalInputs()
+        let dataSegmentGlobal = Location(
+            segment: 3,
+            procedure: nil,
+            addr: 2,
+            name: "DATA_VALUE",
+            type: "SEGNO"
+        )
+        let result = DisassemblyResult(
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegments: codeSegs,
+            dataSegments: [3],
+            allLocations: [dataSegmentGlobal],
+            allProcedures: procs,
+            allCallers: callers,
+            knownRecords: [],
+            typeAliases: ["SEGNO": "INTEGER"],
+            scalarTypes: [:],
+            constants: ["MAXSEGS": 15],
+            subrangeTypes: [
+                "SEGNO": PascalSubrangeType(name: "SEGNO", lowerBound: 1, upperBound: 15)
+            ],
+            typeConflicts: [],
+            diagnostics: []
+        )
+
+        let lines = renderPascalSourceLines(from: result, showMarkup: false)
+
+        XCTAssertTrue(lines.contains("CONST"))
+        XCTAssertTrue(lines.contains("  MAXSEGS = 15;"))
+        XCTAssertTrue(lines.contains("TYPE"))
+        XCTAssertTrue(lines.contains("  SEGNO = 1..15;"))
+        XCTAssertTrue(lines.contains("VAR"))
+        XCTAssertTrue(lines.contains("  DATA_VALUE: SEGNO;"))
+        XCTAssertLessThan(lines.firstIndex(of: "VAR")!, lines.firstIndex(of: "PROCEDURE MYPROC;")!)
+    }
+
+    func testPascalSourceEmitsProcedureLabelsAndLocalVariables() {
+        let (dict, codeSegs, _, procs, callers) = makeMinimalInputs()
+        let procedure = codeSegs[0]!.procedures[0]
+        procedure.instructions[1] = Instruction(opcode: ujp, mnemonic: "UJP")
+        procedure.instructions[1]?.pseudoCode = "GOTO LAB20"
+        procedure.instructions[2] = Instruction(opcode: ujp, mnemonic: "UJP")
+        procedure.instructions[2]?.pseudoCode = "GOTO LAB20"
+        procedure.instructions[20] = Instruction(opcode: rnp, mnemonic: "RNP")
+        procedure.instructions[20]?.prePseudoCode = ["LAB20:"]
+
+        let local = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: 0,
+            addr: 2,
+            name: "LOCAL_VALUE",
+            type: "INTEGER"
+        )
+        let temporary = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: 0,
+            addr: 3,
+            name: "TEMP1",
+            type: "BOOLEAN",
+            typeSource: .inferred
+        )
+        let parameter = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: 0,
+            addr: 1,
+            isParam: true,
+            name: "ARG",
+            type: "INTEGER"
+        )
+        let otherProcedureLocal = Location(
+            segment: 0,
+            procedure: 2,
+            lexLevel: 0,
+            addr: 1,
+            name: "OTHER_LOCAL",
+            type: "CHAR"
+        )
+        let result = DisassemblyResult(
+            sourceFilename: "test",
+            segDictionary: dict,
+            codeSegments: codeSegs,
+            dataSegments: [],
+            allLocations: [local, temporary, parameter, otherProcedureLocal],
+            allProcedures: procs,
+            allCallers: callers,
+            knownRecords: [],
+            typeAliases: [:],
+            scalarTypes: [:],
+            constants: [:],
+            subrangeTypes: [:],
+            typeConflicts: [],
+            diagnostics: []
+        )
+
+        let lines = renderPascalSourceLines(from: result, showMarkup: false)
+
+        XCTAssertEqual(lines.filter { $0 == "  LAB20;" }.count, 1)
+        XCTAssertTrue(lines.contains("LABEL"))
+        XCTAssertTrue(lines.contains("VAR"))
+        XCTAssertTrue(lines.contains("  LOCAL_VALUE: INTEGER;"))
+        XCTAssertTrue(lines.contains("  TEMP1: BOOLEAN;"))
+        XCTAssertFalse(lines.contains("  ARG: INTEGER;"))
+        XCTAssertFalse(lines.contains("  OTHER_LOCAL: CHAR;"))
+        XCTAssertLessThan(lines.firstIndex(of: "LABEL")!, lines.firstIndex(of: "BEGIN")!)
+        XCTAssertLessThan(lines.firstIndex(of: "VAR")!, lines.firstIndex(of: "BEGIN")!)
+    }
+
     // MARK: - showDot
 
     func testShowDotProducesDigraph() {
