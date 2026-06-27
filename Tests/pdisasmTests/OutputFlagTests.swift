@@ -50,6 +50,7 @@ final class OutputFlagTests: XCTestCase {
 
     private func pascalSourceLines(
         for identifier: ProcedureIdentifier,
+        sourceMetadata: PascalSourceMetadata? = nil,
         configureProcedure: ((Procedure) -> Void)? = nil
     ) -> [String] {
         let (dict, codeSegments, locations, _, callers) = makeMinimalInputs()
@@ -71,7 +72,8 @@ final class OutputFlagTests: XCTestCase {
             constants: [:],
             subrangeTypes: [:],
             typeConflicts: [],
-            diagnostics: []
+            diagnostics: [],
+            sourceMetadata: sourceMetadata
         )
         return renderPascalSourceLines(from: result, showMarkup: false)
     }
@@ -485,6 +487,135 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertTrue(lines.contains("FUNCTION CALCULATE: INTEGER;"))
         XCTAssertTrue(lines.contains("  CALCULATE := 42;"))
         XCTAssertFalse(lines.contains("  TEST.CALCULATE := 42;"))
+    }
+
+    func testPascalSourceWrapsStandaloneBinaryInProgram() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 1,
+            procName: "MAIN"
+        )
+
+        let lines = pascalSourceLines(for: identifier)
+
+        XCTAssertEqual(lines.first, "PROGRAM test;")
+        XCTAssertEqual(Array(lines.suffix(2)), ["BEGIN", "END."])
+        XCTAssertTrue(lines.contains("(* Segment TEST [0] *)"))
+    }
+
+    func testPascalSourceRendersMetadataDrivenUnitAndUses() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 1,
+            procName: "INITIALIZE"
+        )
+        let metadata = PascalSourceMetadata(
+            kind: .unit,
+            name: "TOOLS",
+            uses: ["SYSTEM", "IO"],
+            interfaceSegments: [0],
+            implementationSegments: [0]
+        )
+
+        let lines = pascalSourceLines(
+            for: identifier,
+            sourceMetadata: metadata
+        )
+
+        XCTAssertEqual(lines.first, "UNIT TOOLS;")
+        XCTAssertTrue(lines.contains("INTERFACE"))
+        XCTAssertTrue(lines.contains("  IO, SYSTEM;"))
+        XCTAssertTrue(lines.contains("IMPLEMENTATION"))
+        XCTAssertEqual(lines.last, "END.")
+        XCTAssertEqual(
+            lines.filter { $0 == "PROCEDURE INITIALIZE;" }.count,
+            2
+        )
+    }
+
+    func testPascalSourceUnitWithoutBoundariesDocumentsLimitation() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            procedure: 1,
+            procName: "INITIALIZE"
+        )
+
+        let lines = pascalSourceLines(
+            for: identifier,
+            sourceMetadata: PascalSourceMetadata(kind: .unit, name: "TOOLS")
+        )
+
+        XCTAssertTrue(lines.contains {
+            $0.contains("INTERFACE declarations are not recoverable")
+        })
+    }
+
+    func testPascalSourceGroupsAndAnnotatesSegmentsDeterministically() {
+        let first = Segment(
+            codeAddress: 0,
+            codeLength: 0,
+            name: "FIRST",
+            segmentKind: .linked,
+            textAddress: 0,
+            segNum: 1,
+            machineType: 0,
+            version: 0
+        )
+        let second = Segment(
+            codeAddress: 0,
+            codeLength: 0,
+            name: "HELPER",
+            segmentKind: .segproc,
+            textAddress: 0,
+            segNum: 2,
+            machineType: 0,
+            version: 0
+        )
+        let result = DisassemblyResult(
+            sourceFilename: "GROUPED",
+            segDictionary: SegDictionary(
+                segTable: [2: second, 1: first],
+                intrinsics: [],
+                comment: ""
+            ),
+            codeSegments: [
+                2: CodeSegment(
+                    procedureDictionary: ProcedureDictionary(
+                        procedureCount: 0,
+                        procedurePointers: []
+                    ),
+                    procedures: []
+                ),
+                1: CodeSegment(
+                    procedureDictionary: ProcedureDictionary(
+                        procedureCount: 0,
+                        procedurePointers: []
+                    ),
+                    procedures: []
+                )
+            ],
+            dataSegments: [],
+            allLocations: [],
+            allProcedures: [],
+            allCallers: [],
+            knownRecords: [],
+            typeAliases: [:],
+            scalarTypes: [:],
+            constants: [:],
+            subrangeTypes: [:],
+            typeConflicts: [],
+            diagnostics: []
+        )
+
+        let lines = renderPascalSourceLines(from: result, showMarkup: false)
+
+        XCTAssertLessThan(
+            lines.firstIndex(of: "(* Segment FIRST [1] *)")!,
+            lines.firstIndex(of: "(* SEGMENT PROCEDURE HELPER [2] *)")!
+        )
     }
 
     // MARK: - showDot

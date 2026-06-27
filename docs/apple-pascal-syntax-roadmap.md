@@ -352,16 +352,22 @@ container rather than only procedure bodies.
 
 Tasks:
 
-- [ ] Add a `PascalSourceUnit` model.
-- [ ] Render a fallback `PROGRAM` wrapper for standalone binaries.
-- [ ] Render `UNIT` wrappers when metadata identifies a unit.
-- [ ] Render `INTERFACE` and `IMPLEMENTATION` sections when known.
-- [ ] Render `USES` clauses from metadata.
-- [ ] Render segment procedure/function annotations when supported.
-- [ ] Add tests for minimal program output.
-- [ ] Add tests for minimal unit output.
-- [ ] Add tests for procedures grouped by segment.
-- [ ] Document limitations when original unit boundaries are unrecoverable.
+- [x] Add a `PascalSourceUnit` model.
+- [x] Render a fallback `PROGRAM` wrapper for standalone binaries.
+- [x] Render `UNIT` wrappers when metadata identifies a unit.
+- [x] Render `INTERFACE` and `IMPLEMENTATION` sections when known.
+- [x] Render `USES` clauses from metadata.
+- [x] Render segment procedure/function annotations when supported.
+- [x] Add tests for minimal program output.
+- [x] Add tests for minimal unit output.
+- [x] Add tests for procedures grouped by segment.
+- [x] Document limitations when original unit boundaries are unrecoverable.
+
+Source container metadata can restore known unit names, dependencies, and section
+segment lists. When it is absent, segment kinds can identify likely units but
+cannot recover the original interface declarations or exact implementation
+boundaries; reconstructed source emits an explicit limitation comment and places
+available procedure bodies in `IMPLEMENTATION`.
 
 ## Phase 5: Control-Flow Reconstruction
 

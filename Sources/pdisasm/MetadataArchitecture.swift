@@ -54,6 +54,56 @@ public struct MetadataTypeAlias: Hashable, Codable, Sendable {
     }
 }
 
+public enum PascalSourceContainerKind: String, Codable, Sendable {
+    case program
+    case unit
+}
+
+public struct PascalSourceMetadata: Hashable, Codable, Sendable {
+    public let kind: PascalSourceContainerKind
+    public let name: String?
+    public let uses: [String]
+    public let interfaceSegments: [Int]
+    public let implementationSegments: [Int]
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case name
+        case uses
+        case interfaceSegments
+        case implementationSegments
+    }
+
+    public init(
+        kind: PascalSourceContainerKind,
+        name: String? = nil,
+        uses: [String] = [],
+        interfaceSegments: [Int] = [],
+        implementationSegments: [Int] = []
+    ) {
+        self.kind = kind
+        self.name = name
+        self.uses = uses
+        self.interfaceSegments = interfaceSegments
+        self.implementationSegments = implementationSegments
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(PascalSourceContainerKind.self, forKey: .kind)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        uses = try container.decodeIfPresent([String].self, forKey: .uses) ?? []
+        interfaceSegments = try container.decodeIfPresent(
+            [Int].self,
+            forKey: .interfaceSegments
+        ) ?? []
+        implementationSegments = try container.decodeIfPresent(
+            [Int].self,
+            forKey: .implementationSegments
+        ) ?? []
+    }
+}
+
 public struct MetadataConstant: Hashable, Codable, Sendable {
     public let name: String
     public let constantValue: PascalConstantValue
@@ -111,6 +161,7 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
     public var constants: [ProvenancedMetadataFact<MetadataConstant>]
     public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
     public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
+    public var sourceUnits: [ProvenancedMetadataFact<PascalSourceMetadata>]
     public var diagnostics: [Diagnostic]
 
     private enum CodingKeys: String, CodingKey {
@@ -123,6 +174,7 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         case constants
         case subrangeTypes
         case globals
+        case sourceUnits
         case diagnostics
     }
 
@@ -136,6 +188,7 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
         subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
         globals: [ProvenancedMetadataFact<MetadataGlobal>] = [],
+        sourceUnits: [ProvenancedMetadataFact<PascalSourceMetadata>] = [],
         diagnostics: [Diagnostic] = []
     ) {
         self.labels = labels
@@ -147,6 +200,7 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         self.constants = constants
         self.subrangeTypes = subrangeTypes
         self.globals = globals
+        self.sourceUnits = sourceUnits
         self.diagnostics = diagnostics
     }
 
@@ -161,6 +215,10 @@ public struct MetadataBundle: Hashable, Codable, @unchecked Sendable {
         constants = try container.decode([ProvenancedMetadataFact<MetadataConstant>].self, forKey: .constants)
         subrangeTypes = try container.decode([ProvenancedMetadataFact<PascalSubrangeType>].self, forKey: .subrangeTypes)
         globals = try container.decode([ProvenancedMetadataFact<MetadataGlobal>].self, forKey: .globals)
+        sourceUnits = try container.decodeIfPresent(
+            [ProvenancedMetadataFact<PascalSourceMetadata>].self,
+            forKey: .sourceUnits
+        ) ?? []
         diagnostics = try container.decodeIfPresent([Diagnostic].self, forKey: .diagnostics) ?? []
     }
 }
@@ -175,6 +233,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
     public var constants: [ProvenancedMetadataFact<MetadataConstant>]
     public var subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>]
     public var globals: [ProvenancedMetadataFact<MetadataGlobal>]
+    public var sourceUnits: [ProvenancedMetadataFact<PascalSourceMetadata>]
     public var diagnostics: [Diagnostic]
 
     private enum CodingKeys: String, CodingKey {
@@ -187,6 +246,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         case constants
         case subrangeTypes
         case globals
+        case sourceUnits
         case diagnostics
     }
 
@@ -200,6 +260,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         constants: [ProvenancedMetadataFact<MetadataConstant>] = [],
         subrangeTypes: [ProvenancedMetadataFact<PascalSubrangeType>] = [],
         globals: [ProvenancedMetadataFact<MetadataGlobal>] = [],
+        sourceUnits: [ProvenancedMetadataFact<PascalSourceMetadata>] = [],
         diagnostics: [Diagnostic] = []
     ) {
         self.labels = labels
@@ -211,6 +272,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         self.constants = constants
         self.subrangeTypes = subrangeTypes
         self.globals = globals
+        self.sourceUnits = sourceUnits
         self.diagnostics = diagnostics
     }
 
@@ -225,6 +287,10 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         constants = try container.decode([ProvenancedMetadataFact<MetadataConstant>].self, forKey: .constants)
         subrangeTypes = try container.decode([ProvenancedMetadataFact<PascalSubrangeType>].self, forKey: .subrangeTypes)
         globals = try container.decode([ProvenancedMetadataFact<MetadataGlobal>].self, forKey: .globals)
+        sourceUnits = try container.decodeIfPresent(
+            [ProvenancedMetadataFact<PascalSourceMetadata>].self,
+            forKey: .sourceUnits
+        ) ?? []
         diagnostics = try container.decodeIfPresent([Diagnostic].self, forKey: .diagnostics) ?? []
     }
 
@@ -238,6 +304,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         var constants: [String: ProvenancedMetadataFact<MetadataConstant>] = [:]
         var subranges: [String: ProvenancedMetadataFact<PascalSubrangeType>] = [:]
         var globals: [Int: ProvenancedMetadataFact<MetadataGlobal>] = [:]
+        var sourceUnit: ProvenancedMetadataFact<PascalSourceMetadata>?
         var diagnostics: [Diagnostic] = []
         for bundle in bundles {
             for fact in bundle.labels { labels.mergeKeepingHighestPrecedence(fact, key: LocationReference(fact.value)) }
@@ -249,6 +316,11 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
             for fact in bundle.constants { constants.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
             for fact in bundle.subrangeTypes { subranges.mergeKeepingHighestPrecedence(fact, key: fact.value.name) }
             for fact in bundle.globals { globals.mergeKeepingHighestPrecedence(fact, key: fact.value.address) }
+            for fact in bundle.sourceUnits where
+                sourceUnit?.provenance.precedence ?? Int.min <= fact.provenance.precedence
+            {
+                sourceUnit = fact
+            }
             diagnostics.append(contentsOf: bundle.diagnostics)
         }
         self.labels = labels.values.sorted { $0.value < $1.value }
@@ -267,6 +339,7 @@ public struct MetadataSnapshot: Hashable, Codable, @unchecked Sendable {
         self.constants = constants.values.sorted { $0.value.name < $1.value.name }
         self.subrangeTypes = subranges.values.sorted { $0.value.name < $1.value.name }
         self.globals = globals.values.sorted { $0.value.address < $1.value.address }
+        self.sourceUnits = sourceUnit.map { [$0] } ?? []
         self.diagnostics = Array(Set(diagnostics)).sorted {
             if $0.severity != $1.severity {
                 return $0.severity.rawValue < $1.severity.rawValue
@@ -328,7 +401,10 @@ private struct RawMetadataScope {
     }
 }
 
-public enum MetadataFileKind: Hashable, Sendable { case labelsCSV, proceduresCSV, commentsJSON, recordsJSON, globalsJSON, typesPascal }
+public enum MetadataFileKind: Hashable, Sendable {
+    case labelsCSV, proceduresCSV, commentsJSON, recordsJSON, globalsJSON
+    case sourceJSON, typesPascal
+}
 
 public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
     case systemLabels(version: Int)
@@ -340,6 +416,7 @@ public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
     case fileRecords(fileIdentifier: String)
     case systemTypes(version: Int)
     case fileTypes(fileIdentifier: String)
+    case fileSource(fileIdentifier: String)
     case systemGlobals(version: Int)
     case raw(name: String, kind: MetadataFileKind)
 
@@ -354,6 +431,7 @@ public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
         case let .fileRecords(fileIdentifier): return "records_\(fileIdentifier)"
         case let .systemTypes(version): return "types_ver_\(version)"
         case let .fileTypes(fileIdentifier): return "types_\(fileIdentifier)"
+        case let .fileSource(fileIdentifier): return "source_\(fileIdentifier)"
         case let .systemGlobals(version): return "globals_ver_\(version)"
         case let .raw(name, _): return name
         }
@@ -366,6 +444,7 @@ public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
         case .fileComments: return .commentsJSON
         case .systemRecords, .fileRecords: return .recordsJSON
         case .systemTypes, .fileTypes: return .typesPascal
+        case .fileSource: return .sourceJSON
         case .systemGlobals: return .globalsJSON
         case let .raw(_, kind): return kind
         }
@@ -374,7 +453,7 @@ public enum MetadataScope: Hashable, Sendable, CustomStringConvertible {
     public var defaultPrecedence: Int {
         switch self {
         case .systemLabels, .systemProcedures, .systemRecords, .systemTypes, .systemGlobals: return 0
-        case .fileLabels, .fileProcedures, .fileComments, .fileRecords, .fileTypes: return 10
+        case .fileLabels, .fileProcedures, .fileComments, .fileRecords, .fileTypes, .fileSource: return 10
         case .raw: return 0
         }
     }
@@ -627,6 +706,14 @@ public struct FileBackedMetadataRepository: MetadataRepository {
         case .globalsJSON:
             let rows = try JSONDecoder().decode([Int: Identifier].self, from: Data(contentsOf: url))
             return MetadataBundle(globals: rows.map { ProvenancedMetadataFact(value: MetadataGlobal(address: $0.key, identifier: $0.value), provenance: source) })
+        case .sourceJSON:
+            let metadata = try JSONDecoder().decode(
+                PascalSourceMetadata.self,
+                from: Data(contentsOf: url)
+            )
+            return MetadataBundle(sourceUnits: [
+                ProvenancedMetadataFact(value: metadata, provenance: source)
+            ])
         case .typesPascal:
             let definitions = PascalTypeDefinitionParser.parse(
                 try String(contentsOf: url, encoding: .utf8),
@@ -655,7 +742,7 @@ public struct FileBackedMetadataRepository: MetadataRepository {
     private func readURL(in scope: MetadataScope) -> URL? {
         let ext: String
         switch scope.kind {
-        case .commentsJSON, .recordsJSON, .globalsJSON: ext = "json"
+        case .commentsJSON, .recordsJSON, .globalsJSON, .sourceJSON: ext = "json"
         case .typesPascal: ext = "pas"
         case .labelsCSV, .proceduresCSV: ext = "csv"
         }
@@ -711,6 +798,7 @@ public struct MetadataScopeResolver: Sendable {
             .fileComments(fileIdentifier: fileIdentifier),
             .fileRecords(fileIdentifier: fileIdentifier),
             .fileTypes(fileIdentifier: fileIdentifier),
+            .fileSource(fileIdentifier: fileIdentifier),
         ])
     }
 

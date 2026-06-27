@@ -1,5 +1,45 @@
 import Foundation
 
+public struct PascalSourceUnit: Sendable {
+    public let kind: PascalSourceContainerKind
+    public let name: String
+    public let uses: [String]
+    public let segmentNumbers: [Int]
+    public let interfaceSegments: [Int]
+    public let implementationSegments: [Int]
+    public let hasExplicitSectionBoundaries: Bool
+
+    public init(result: DisassemblyResult) {
+        let metadata = result.sourceMetadata
+        let sortedSegments = result.codeSegments.keys.sorted()
+        let inferredUnitSegment = sortedSegments.first {
+            result.segDictionary.segTable[$0]?.segmentKind == .unitseg
+        }
+        kind = metadata?.kind ?? (inferredUnitSegment == nil ? .program : .unit)
+
+        let fallbackName: String
+        if let inferredUnitSegment {
+            fallbackName = result.segDictionary.segTable[inferredUnitSegment]?.name
+                ?? result.sourceFilename
+        } else {
+            fallbackName = result.sourceFilename
+        }
+        let metadataName = metadata?.name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        name = metadataName?.isEmpty == false ? metadataName! : fallbackName
+        uses = Array(Set(metadata?.uses ?? [])).sorted()
+        segmentNumbers = sortedSegments
+        interfaceSegments = metadata?.interfaceSegments.filter(
+            result.codeSegments.keys.contains
+        ).sorted() ?? []
+        implementationSegments = metadata?.implementationSegments.filter(
+            result.codeSegments.keys.contains
+        ).sorted() ?? []
+        hasExplicitSectionBoundaries = metadata != nil
+            && (!interfaceSegments.isEmpty || !implementationSegments.isEmpty)
+    }
+}
+
 private let pascalKeywords: Set<String> = [
     "AND", "ARRAY", "BEGIN", "CASE", "CONST", "DIV", "DO", "DOWNTO", "ELSE",
     "END", "FILE", "FOR", "FUNCTION", "GOTO", "IF", "IN", "LABEL", "MOD",

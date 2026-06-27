@@ -2,6 +2,19 @@ import XCTest
 @testable import pdisasm
 
 final class DisassemblyServiceTests: XCTestCase {
+    func testMinimalPascalSourceMetadataDefaultsOptionalFields() throws {
+        let metadata = try JSONDecoder().decode(
+            PascalSourceMetadata.self,
+            from: Data(#"{"kind":"unit"}"#.utf8)
+        )
+
+        XCTAssertEqual(metadata.kind, .unit)
+        XCTAssertNil(metadata.name)
+        XCTAssertEqual(metadata.uses, [])
+        XCTAssertEqual(metadata.interfaceSegments, [])
+        XCTAssertEqual(metadata.implementationSegments, [])
+    }
+
 
     func testRunReportStatusSemanticsAndExitCodes() {
         let success = RunReport(stages: [StageReport(name: "analysis")])
@@ -538,6 +551,13 @@ extension DisassemblyServiceTests {
             .write(to: directory.appendingPathComponent("types_SAMPLE.pas"), atomically: true, encoding: .utf8)
         try JSONEncoder().encode([9: Identifier(name: "GLOBAL", type: "INTEGER")])
             .write(to: directory.appendingPathComponent("globals_ver_1.json"))
+        try JSONEncoder().encode(PascalSourceMetadata(
+            kind: .unit,
+            name: "SAMPLEUNIT",
+            uses: ["SYSTEM"],
+            interfaceSegments: [1],
+            implementationSegments: [1]
+        )).write(to: directory.appendingPathComponent("source_SAMPLE.json"))
 
         let snapshot = try MetadataScopeResolver(repository: FileBackedMetadataRepository(workspace: MetadataWorkspace(writableDirectory: directory))).resolve(fileIdentifier: "SAMPLE", version: 1)
 
@@ -555,6 +575,9 @@ extension DisassemblyServiceTests {
         XCTAssertEqual(snapshot.subrangeTypes.first?.value.upperBound, 3)
         XCTAssertEqual(snapshot.typeAliases.first?.value.type, "INTEGER")
         XCTAssertEqual(snapshot.globals.first?.value.identifier.name, "GLOBAL")
+        XCTAssertEqual(snapshot.sourceUnits.first?.value.kind, .unit)
+        XCTAssertEqual(snapshot.sourceUnits.first?.value.name, "SAMPLEUNIT")
+        XCTAssertEqual(snapshot.sourceUnits.first?.value.uses, ["SYSTEM"])
     }
 
     func testStageFacadesAcceptInMemoryInputs() throws {

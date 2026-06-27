@@ -93,6 +93,7 @@ public struct DisassemblyResult: @unchecked Sendable {
     public let subrangeTypes: [String: PascalSubrangeType]
     public let typeConflicts: [TypeConflict]
     public let diagnostics: [Diagnostic]
+    public let sourceMetadata: PascalSourceMetadata?
     public let runReport: RunReport
 
     public init(
@@ -111,6 +112,7 @@ public struct DisassemblyResult: @unchecked Sendable {
         subrangeTypes: [String: PascalSubrangeType],
         typeConflicts: [TypeConflict],
         diagnostics: [Diagnostic],
+        sourceMetadata: PascalSourceMetadata? = nil,
         runReport: RunReport = RunReport()
     ) {
         self.sourceFilename = sourceFilename
@@ -130,6 +132,7 @@ public struct DisassemblyResult: @unchecked Sendable {
         self.subrangeTypes = subrangeTypes
         self.typeConflicts = typeConflicts
         self.diagnostics = diagnostics
+        self.sourceMetadata = sourceMetadata
         self.runReport = runReport
     }
 }
@@ -241,6 +244,7 @@ private struct MetadataContext {
     let allTypesFile: String
     let commentsFile: String
     let globalsFile: String
+    let sourceFile: String
     let appSupportDirectory: URL
     let workspace: MetadataWorkspace?
     let store: MetadataStore
@@ -259,6 +263,7 @@ private struct MetadataContext {
         allTypesFile = "types_\(fileIdentifier)"
         commentsFile = "comments_\(fileIdentifier)"
         globalsFile = "globals_ver_\(version)"
+        sourceFile = "source_\(fileIdentifier)"
         self.workspace = workspace
         appSupportDirectory = workspace?.writableDirectory ?? URL.pdisasmApplicationSupportDirectory
             .appendingPathComponent("pdisasm")
@@ -279,7 +284,8 @@ private struct MetadataContext {
         allLocations: inout Set<Location>,
         allProcedures: inout [ProcedureIdentifier],
         lineComments: inout [InstructionReference: String],
-        globalNames: inout [Int: Identifier]
+        globalNames: inout [Int: Identifier],
+        sourceMetadata: inout PascalSourceMetadata?
     ) {
         var sysLocations: Set<Location> = []
         var sysProcedures: [ProcedureIdentifier] = []
@@ -311,6 +317,7 @@ private struct MetadataContext {
 
         store.importGlobalLabels(fromJson: globalsFile, to: &globalNames)
         store.importDisassemblyComments(fromJson: commentsFile, to: &lineComments)
+        store.importSourceMetadata(fromJson: sourceFile, to: &sourceMetadata)
 
         store.importProcedures(fromCSV: allProceduresCSVFile, to: &allProcedures)
         store.importProcedures(fromCSV: sysProceduresCSVFile, to: &sysProcedures)
@@ -749,6 +756,7 @@ public func disassemble(
     var constantValues: [String: PascalConstantValue] = [:]
     var subrangeTypes: [String: PascalSubrangeType] = [:]
     var lineComments: [InstructionReference: String] = [:]
+    var sourceMetadata: PascalSourceMetadata?
 
     // Try loading name maps from the resolved metadata snapshot or workspace.
     // Missing metadata is fine; writeback is controlled separately by the caller.
@@ -781,6 +789,7 @@ public func disassemble(
         }
         subrangeTypes.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.subrangeTypes.map { ($0.value.name, $0.value) })) { _, new in new }
         globalNames.merge(Dictionary(uniqueKeysWithValues: metadataSnapshot.globals.map { ($0.value.address, $0.value.identifier) })) { _, new in new }
+        sourceMetadata = metadataSnapshot.sourceUnits.last?.value
     } else {
         metadata.load(
             knownRecords: &knownRecords,
@@ -792,7 +801,8 @@ public func disassemble(
             allLocations: &allLocations,
             allProcedures: &allProcedures,
             lineComments: &lineComments,
-            globalNames: &globalNames
+            globalNames: &globalNames,
+            sourceMetadata: &sourceMetadata
         )
     }
 
@@ -861,6 +871,7 @@ public func disassemble(
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics.diagnostics,
+        sourceMetadata: sourceMetadata,
         runReport: RunReport(stages: baseStages, isComplete: analysisConverged)
     )
 
