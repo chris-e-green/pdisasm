@@ -165,6 +165,8 @@ public struct StructuredCaseArm: Hashable, Sendable {
 
 public struct StructuredCaseRegion: Hashable, Sendable {
     public let dispatchBlock: Int
+    public let selectorExpression: String?
+    public let gatewayBlock: Int?
     public let arms: [StructuredCaseArm]
     public let defaultEntryBlock: Int
     public let defaultBlocks: Set<Int>
@@ -172,12 +174,16 @@ public struct StructuredCaseRegion: Hashable, Sendable {
 
     public init(
         dispatchBlock: Int,
+        selectorExpression: String? = nil,
+        gatewayBlock: Int? = nil,
         arms: [StructuredCaseArm],
         defaultEntryBlock: Int,
         defaultBlocks: Set<Int>,
         continuationBlock: Int
     ) {
         self.dispatchBlock = dispatchBlock
+        self.selectorExpression = selectorExpression
+        self.gatewayBlock = gatewayBlock
         self.arms = arms
         self.defaultEntryBlock = defaultEntryBlock
         self.defaultBlocks = defaultBlocks
@@ -295,7 +301,7 @@ public struct StructuredControlFlowAnalyzer {
 
     public func caseRegion(at dispatchBlock: Int) -> StructuredCaseRegion? {
         let outgoing = graph.edges.filter { $0.source == dispatchBlock }
-        let caseEdges = outgoing.compactMap {
+        let decodedCaseEdges = outgoing.compactMap {
             edge -> (destination: Int, values: Set<Int>)? in
             guard case let .caseBranch(values) = edge.kind,
                 let destination = edge.destination
@@ -308,12 +314,20 @@ public struct StructuredControlFlowAnalyzer {
             guard edge.kind == .caseDefault else { return nil }
             return edge.destination
         }
-        guard !caseEdges.isEmpty,
-            defaultTargets.count == 1,
+        let dispatchEvidence = graph.blocks[dispatchBlock]?
+            .instructionAddresses
+            .compactMap { instructions[$0]?.caseDispatchEvidence }
+            .first
+        guard defaultTargets.count == 1,
             let continuation = graph.immediatePostDominator(of: dispatchBlock)
         else {
             return nil
         }
+        let defaultTarget = defaultTargets[0]
+        let caseEdges = decodedCaseEdges.filter {
+            $0.destination != defaultTarget
+        }
+        guard !caseEdges.isEmpty else { return nil }
 
         var arms: [StructuredCaseArm] = []
         var occupiedBlocks: Set<Int> = []
@@ -343,7 +357,6 @@ public struct StructuredControlFlowAnalyzer {
                 : leftValue < rightValue
         }
 
-        let defaultTarget = defaultTargets[0]
         guard let defaultBlocks = caseArmBlocks(
             from: defaultTarget,
             dispatchBlock: dispatchBlock,
@@ -359,6 +372,14 @@ public struct StructuredControlFlowAnalyzer {
 
         return StructuredCaseRegion(
             dispatchBlock: dispatchBlock,
+            selectorExpression: dispatchEvidence?.selectorExpression,
+            gatewayBlock: dispatchEvidence.flatMap { evidence in
+                graph.blocks.keys.first(where: { block in
+                    graph.blocks[block]?.instructionAddresses.contains(
+                        evidence.gatewayAddress
+                    ) == true
+                })
+            },
             arms: arms,
             defaultEntryBlock: defaultTarget,
             defaultBlocks: defaultBlocks,

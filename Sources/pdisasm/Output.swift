@@ -1247,13 +1247,13 @@ private func collectGotoLabels(from statement: PascalStmt, into labels: inout Se
         }
     case .forLoop(_, _, _, _, let body):
         collectGotoLabels(from: body, into: &labels)
-    case .caseStatement(_, let arms, let defaultBody):
-        for arm in arms {
+    case .caseStatement(let caseStatement):
+        for arm in caseStatement.arms {
             for statement in arm.body {
                 collectGotoLabels(from: statement, into: &labels)
             }
         }
-        for statement in defaultBody ?? [] {
+        for statement in caseStatement.defaultBody ?? [] {
             collectGotoLabels(from: statement, into: &labels)
         }
     case .label(_, let statement):

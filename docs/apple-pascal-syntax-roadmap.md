@@ -435,17 +435,17 @@ Current `CASE` rendering is useful but not fully source-like.
 
 Tasks:
 
-- [ ] Add a `PascalCaseStatement` model.
-- [ ] Add `PascalCaseArm` with labels and statement list.
-- [ ] Support singleton labels.
-- [ ] Support range labels using `..`.
-- [ ] Support multiple labels per arm.
-- [ ] Identify default/otherwise targets.
-- [ ] Decide dialect/version spelling for default arms.
-- [ ] Render case-arm semicolons correctly.
-- [ ] Add tests for jump tables with shared destinations.
-- [ ] Add tests for default arms.
-- [ ] Add tests for sparse and dense case tables.
+- [x] Add a `PascalCaseStatement` model.
+- [x] Add `PascalCaseArm` with labels and statement list.
+- [x] Support singleton labels.
+- [x] Support range labels using `..`.
+- [x] Support multiple labels per arm.
+- [x] Identify default/otherwise targets.
+- [x] Decide dialect/version spelling for default arms. _(The current Apple Pascal policy emits `OTHERWISE`; Phase 6.1 can select a different policy without changing the case model.)_
+- [x] Render case-arm semicolons correctly.
+- [x] Add tests for jump tables with shared destinations.
+- [x] Add tests for default arms.
+- [x] Add tests for sparse and dense case tables.
 
 ### 5.5 Generate label declarations for remaining gotos
 
@@ -453,14 +453,14 @@ Fallback `GOTO LAB...` output should be source-valid when source mode is enabled
 
 Tasks:
 
-- [ ] Track all emitted labels per procedure.
-- [ ] Emit a `LABEL` declaration section.
-- [ ] Render labelled statements as `LABnnn:`.
-- [ ] Ensure label names are valid Apple Pascal labels or valid generated
+- [x] Track all emitted labels per procedure.
+- [x] Emit a `LABEL` declaration section.
+- [x] Render labelled statements as `LABnnn:`.
+- [x] Ensure label names are valid Apple Pascal labels or valid generated
       identifiers according to the selected dialect.
-- [ ] Add tests for forward gotos.
-- [ ] Add tests for backward gotos.
-- [ ] Add tests for multiple gotos to one label.
+- [x] Add tests for forward gotos.
+- [x] Add tests for backward gotos.
+- [x] Add tests for multiple gotos to one label.
 
 ## Phase 6: Apple Pascal Dialect and Runtime Knowledge
 

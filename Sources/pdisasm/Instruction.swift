@@ -12,6 +12,7 @@ public class Instruction {
     public var stackState: [String]?
     public var prePseudoCode: [String]  // pseudo-code to print before instruction
     public var forLoopEvidence: ForLoopEvidence?
+    public var caseDispatchEvidence: CaseDispatchEvidence?
     var pseudoCodeStatement: PseudoCodeStatement?
     public var pseudoCode: String?  // pseudo-code to print after instruction
 
@@ -29,7 +30,8 @@ public class Instruction {
         stackState: [String]? = nil,
         pseudoCode: String? = nil,
         prePseudoCode: [String] = [],
-        forLoopEvidence: ForLoopEvidence? = nil
+        forLoopEvidence: ForLoopEvidence? = nil,
+        caseDispatchEvidence: CaseDispatchEvidence? = nil
     ) {
         self.opcode = opcode
         self.mnemonic = mnemonic
@@ -48,6 +50,17 @@ public class Instruction {
         self.pseudoCode = pseudoCode
         self.prePseudoCode = prePseudoCode
         self.forLoopEvidence = forLoopEvidence
+        self.caseDispatchEvidence = caseDispatchEvidence
+    }
+}
+
+public struct CaseDispatchEvidence: Hashable, Sendable {
+    public let selectorExpression: String
+    public let gatewayAddress: Int
+
+    public init(selectorExpression: String, gatewayAddress: Int) {
+        self.selectorExpression = selectorExpression
+        self.gatewayAddress = gatewayAddress
     }
 }
 

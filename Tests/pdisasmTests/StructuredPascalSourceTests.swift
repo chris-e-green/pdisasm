@@ -8,7 +8,8 @@ final class StructuredPascalSourceTests: XCTestCase {
         location: Location? = nil,
         pseudoCode: String? = nil,
         prePseudoCode: [String] = [],
-        forLoopEvidence: ForLoopEvidence? = nil
+        forLoopEvidence: ForLoopEvidence? = nil,
+        caseDispatchEvidence: CaseDispatchEvidence? = nil
     ) -> Instruction {
         Instruction(
             opcode: opcode,
@@ -17,7 +18,8 @@ final class StructuredPascalSourceTests: XCTestCase {
             memLocation: location,
             pseudoCode: pseudoCode,
             prePseudoCode: prePseudoCode,
-            forLoopEvidence: forLoopEvidence
+            forLoopEvidence: forLoopEvidence,
+            caseDispatchEvidence: caseDispatchEvidence
         )
     }
 
@@ -77,7 +79,7 @@ final class StructuredPascalSourceTests: XCTestCase {
             "  ELSE",
             "    BEGIN",
             "      VALUE := 2;",
-            "    END",
+            "    END;",
             "END",
         ])
     }
@@ -114,8 +116,8 @@ final class StructuredPascalSourceTests: XCTestCase {
             "      ELSE",
             "        BEGIN",
             "          WAIT();",
-            "        END",
-            "    END",
+            "        END;",
+            "    END;",
             "END",
         ])
     }
@@ -195,7 +197,7 @@ final class StructuredPascalSourceTests: XCTestCase {
             "  FOR I := 1 TO 10 DO",
             "    BEGIN",
             "      USE(I);",
-            "    END",
+            "    END;",
             "END",
         ])
     }
@@ -206,7 +208,7 @@ final class StructuredPascalSourceTests: XCTestCase {
                 0: instruction(
                     ujp,
                     params: [10],
-                    pseudoCode: "CASE CHOICE OF"
+                    pseudoCode: "CASE LEGACY_SELECTOR OF"
                 ),
                 2: instruction(nop, pseudoCode: "ONE()"),
                 3: instruction(ujp, params: [14]),
@@ -216,7 +218,11 @@ final class StructuredPascalSourceTests: XCTestCase {
                 7: instruction(ujp, params: [14]),
                 10: instruction(
                     xjp,
-                    params: [1, 3, 100, 6, 2, 4, 4]
+                    params: [1, 3, 100, 6, 2, 4, 4],
+                    caseDispatchEvidence: CaseDispatchEvidence(
+                        selectorExpression: "CHOICE",
+                        gatewayAddress: 0
+                    )
                 ),
                 14: instruction(rnp),
             ])
@@ -231,9 +237,42 @@ final class StructuredPascalSourceTests: XCTestCase {
             "      MANY();",
             "    OTHERWISE",
             "      OTHER();",
-            "  END",
+            "  END;",
             "END",
         ])
+    }
+
+    func testBuildsSparseCaseWithoutRenderingDefaultHolesAsLabels() {
+        let lines = renderedStatements(
+            for: procedure([
+                0: instruction(ujp, params: [10]),
+                2: instruction(nop, pseudoCode: "ONE()"),
+                3: instruction(ujp, params: [14]),
+                4: instruction(nop, pseudoCode: "THREE()"),
+                5: instruction(ujp, params: [14]),
+                6: instruction(nop, pseudoCode: "FIVE()"),
+                7: instruction(ujp, params: [14]),
+                8: instruction(nop, pseudoCode: "OTHER()"),
+                9: instruction(ujp, params: [14]),
+                10: instruction(
+                    xjp,
+                    params: [1, 5, 100, 8, 2, 8, 4, 8, 6],
+                    caseDispatchEvidence: CaseDispatchEvidence(
+                        selectorExpression: "CHOICE",
+                        gatewayAddress: 0
+                    )
+                ),
+                14: instruction(rnp),
+            ])
+        )
+
+        XCTAssertTrue(lines.contains("    1:"))
+        XCTAssertTrue(lines.contains("    3:"))
+        XCTAssertTrue(lines.contains("    5:"))
+        XCTAssertFalse(lines.contains("    2:"))
+        XCTAssertFalse(lines.contains("    4:"))
+        XCTAssertTrue(lines.contains("    OTHERWISE"))
+        XCTAssertTrue(lines.contains("      OTHER();"))
     }
 
     func testDoesNotActivateForUnstructuredProcedure() {
@@ -273,6 +312,7 @@ final class StructuredPascalSourceTests: XCTestCase {
 
         XCTAssertTrue(lines.contains("      IF NOT READY THEN"))
         XCTAssertTrue(lines.contains("        GOTO LAB10;"))
+        XCTAssertTrue(lines.contains("  LAB10:"))
         XCTAssertFalse(lines.contains("      GOTO LAB10;"))
     }
 
@@ -378,5 +418,51 @@ final class StructuredPascalSourceTests: XCTestCase {
         XCTAssertTrue(lines.contains("  WHILE I <= 10 DO"))
         XCTAssertTrue(lines.contains("      I := I + 2;"))
         XCTAssertFalse(lines.contains { $0.contains("FOR I") })
+    }
+
+    func testBuildsForwardGotoAndTargetLabelFromCFG() {
+        let lines = renderedStatements(
+            for: procedure([
+                0: instruction(
+                    ujp,
+                    params: [4],
+                    pseudoCode: "GOTO LEGACY"
+                ),
+                2: instruction(rnp),
+                4: instruction(nop, pseudoCode: "TARGET()"),
+                5: instruction(rnp),
+            ])
+        )
+
+        XCTAssertTrue(lines.contains("  GOTO LAB4;"))
+        XCTAssertTrue(lines.contains("  LAB4:"))
+        XCTAssertFalse(lines.contains("  GOTO LEGACY;"))
+    }
+
+    func testBuildsBackwardGotoAndLabelsEntryBlock() {
+        let lines = renderedStatements(
+            for: procedure([
+                0: instruction(nop, pseudoCode: "STEP()"),
+                1: instruction(ujp, params: [0]),
+            ])
+        )
+
+        XCTAssertEqual(lines.filter { $0 == "  LAB0:" }.count, 1)
+        XCTAssertTrue(lines.contains("  GOTO LAB0;"))
+    }
+
+    func testMultipleGotosShareOneGeneratedLabel() {
+        let lines = renderedStatements(
+            for: procedure([
+                0: instruction(ujp, params: [6]),
+                2: instruction(ujp, params: [6]),
+                4: instruction(rnp),
+                6: instruction(nop, pseudoCode: "TARGET()"),
+                7: instruction(rnp),
+            ])
+        )
+
+        XCTAssertEqual(lines.filter { $0 == "  GOTO LAB6;" }.count, 2)
+        XCTAssertEqual(lines.filter { $0 == "  LAB6:" }.count, 1)
     }
 }

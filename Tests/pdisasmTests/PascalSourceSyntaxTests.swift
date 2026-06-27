@@ -124,12 +124,14 @@ final class PascalSourceSyntaxTests: XCTestCase {
 
     func testCaseStatementRendererUsesPascalRangeSyntax() {
         let statement = PascalStmt.caseStatement(
-            expression: .identifier("CHOICE"),
-            arms: [
-                PascalCaseArm(labels: [.integer(1)], body: [.call(name: "ONE", arguments: [])]),
-                PascalCaseArm(labels: [.range(.integer(2), .integer(4)), .integer(7)], body: [.call(name: "MANY", arguments: [])]),
-            ],
-            defaultBody: nil
+            PascalCaseStatement(
+                expression: .identifier("CHOICE"),
+                arms: [
+                    PascalCaseArm(labels: [.integer(1)], body: [.call(name: "ONE", arguments: [])]),
+                    PascalCaseArm(labels: [.range(.integer(2), .integer(4)), .integer(7)], body: [.call(name: "MANY", arguments: [])]),
+                ],
+                defaultBody: nil
+            )
         )
 
         XCTAssertEqual(statement.rendered(), [
@@ -138,6 +140,38 @@ final class PascalSourceSyntaxTests: XCTestCase {
             "    ONE();",
             "  2..4, 7:",
             "    MANY();",
+            "END",
+        ])
+    }
+
+    func testCaseRendererTerminatesArmsAndUsesDefaultPolicy() {
+        let statement = PascalStmt.caseStatement(
+            PascalCaseStatement(
+                expression: .identifier("CHOICE"),
+                arms: [
+                    PascalCaseArm(
+                        labels: [.integer(1)],
+                        body: [
+                            .call(name: "FIRST", arguments: []),
+                            .call(name: "SECOND", arguments: []),
+                        ]
+                    )
+                ],
+                defaultBody: [
+                    .call(name: "OTHER", arguments: [])
+                ]
+            )
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "CASE CHOICE OF",
+            "  1:",
+            "    BEGIN",
+            "      FIRST();",
+            "      SECOND();",
+            "    END;",
+            "  OTHERWISE",
+            "    OTHER();",
             "END",
         ])
     }

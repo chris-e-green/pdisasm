@@ -388,6 +388,10 @@ struct ControlFlowAnalyzer {
             let target = sortedInstructions[targetIdx]
             if target.value.opcode == xjp {
                 let (index, _) = simulator.pop()
+                target.value.caseDispatchEvidence = CaseDispatchEvidence(
+                    selectorExpression: index,
+                    gatewayAddress: address
+                )
                 let low = target.value.params[0]
                 let high = target.value.params[1]
                 let defLoc = target.value.params[2]
