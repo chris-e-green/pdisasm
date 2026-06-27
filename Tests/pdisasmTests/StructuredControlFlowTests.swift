@@ -144,4 +144,127 @@ final class StructuredControlFlowTests: XCTestCase {
 
         XCTAssertTrue(analyzer.conditionalRegions().isEmpty)
     }
+
+    func testIdentifiesWhileLoopAndItsControlTransfers() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [8]),
+                2: instruction(fjp, params: [6]),
+                4: instruction(ujp, params: [0]),
+                6: instruction(ujp, params: [0]),
+                8: instruction(rnp),
+            ])
+        )
+
+        let loop = try? XCTUnwrap(analyzer.loopRegions().first)
+        XCTAssertEqual(loop?.kind, .whileLoop)
+        XCTAssertEqual(loop?.headerBlock, 0)
+        XCTAssertEqual(loop?.conditionBlock, 0)
+        XCTAssertEqual(loop?.bodyBlocks, [2, 4, 6])
+        XCTAssertEqual(loop?.continuationBlock, 8)
+        XCTAssertEqual(loop?.backEdges.count, 2)
+        XCTAssertEqual(loop?.continueEdges.count, 2)
+        XCTAssertEqual(loop?.exitEdges.count, 1)
+    }
+
+    func testIdentifiesRepeatUntilLoop() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(),
+                1: instruction(ujp, params: [4]),
+                4: instruction(fjp, params: [0]),
+                6: instruction(rnp),
+            ])
+        )
+
+        let loop = try? XCTUnwrap(analyzer.loopRegions().first)
+        XCTAssertEqual(loop?.kind, .repeatUntilLoop)
+        XCTAssertEqual(loop?.headerBlock, 0)
+        XCTAssertEqual(loop?.conditionBlock, 4)
+        XCTAssertEqual(loop?.bodyBlocks, [0])
+        XCTAssertEqual(loop?.continuationBlock, 6)
+        XCTAssertEqual(loop?.continueEdges.count, 1)
+        XCTAssertEqual(loop?.exitEdges.count, 1)
+    }
+
+    func testWhileLoopRecordsAdditionalExitEdges() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [10]),
+                2: instruction(fjp, params: [8]),
+                4: instruction(ujp, params: [0]),
+                8: instruction(ujp, params: [12]),
+                10: instruction(ujp, params: [12]),
+                12: instruction(rnp),
+            ])
+        )
+
+        let loop = try? XCTUnwrap(analyzer.loopRegions().first)
+        XCTAssertEqual(loop?.kind, .whileLoop)
+        XCTAssertEqual(loop?.bodyBlocks, [2, 4])
+        XCTAssertEqual(loop?.exitEdges.count, 2)
+        XCTAssertTrue(
+            loop?.exitEdges.contains(
+                ControlFlowEdge(
+                    source: 2,
+                    destination: 8,
+                    kind: .conditionalBranch
+                )
+            ) == true
+        )
+    }
+
+    func testLoopContainingConditionalRecoversBothRegions() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [10]),
+                2: instruction(fjp, params: [6]),
+                4: instruction(),
+                5: instruction(ujp, params: [8]),
+                6: instruction(),
+                8: instruction(ujp, params: [0]),
+                10: instruction(rnp),
+            ])
+        )
+
+        XCTAssertEqual(analyzer.loopRegions().map(\.kind), [.whileLoop])
+        XCTAssertEqual(analyzer.conditionalRegions().map(\.conditionBlock), [2])
+    }
+
+    func testConditionalContainingLoopRecoversBothRegions() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(fjp, params: [10]),
+                2: instruction(fjp, params: [8]),
+                4: instruction(),
+                6: instruction(ujp, params: [2]),
+                8: instruction(ujp, params: [12]),
+                10: instruction(),
+                11: instruction(ujp, params: [12]),
+                12: instruction(rnp),
+            ])
+        )
+
+        XCTAssertEqual(analyzer.loopRegions().map(\.headerBlock), [2])
+        let conditional = analyzer.conditionalRegion(at: 0)
+        XCTAssertEqual(conditional?.kind, .ifThenElse)
+        XCTAssertEqual(conditional?.thenBlocks, [2, 4, 8])
+        XCTAssertEqual(conditional?.elseBlocks, [10])
+    }
+
+    func testRejectsIrreducibleLoopWithSideEntry() {
+        let procedure = Procedure()
+        procedure.externalEntryPoints = [4]
+        procedure.instructions = [
+            0: instruction(fjp, params: [8]),
+            2: instruction(),
+            4: instruction(ujp, params: [0]),
+            8: instruction(rnp),
+        ]
+
+        XCTAssertTrue(
+            StructuredControlFlowAnalyzer(procedure: procedure)
+                .loopRegions().isEmpty
+        )
+    }
 }

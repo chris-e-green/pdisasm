@@ -397,15 +397,15 @@ Tasks:
 
 - [x] Identify `IF` regions.
 - [x] Identify `IF/ELSE` regions.
-- [ ] Identify pre-test `WHILE` loops.
-- [ ] Identify post-test `REPEAT/UNTIL` loops.
+- [x] Identify pre-test `WHILE` loops.
+- [x] Identify post-test `REPEAT/UNTIL` loops.
 - [ ] Identify counted `FOR` loops.
 - [ ] Identify `CASE` jump-table regions.
-- [ ] Detect loop exits and continue-like jumps.
+- [x] Detect loop exits and continue-like jumps.
 - [ ] Preserve `GOTO` for irreducible leftovers.
 - [x] Add nested control-flow tests.
-- [ ] Add tests for loops containing conditionals.
-- [ ] Add tests for conditionals containing loops.
+- [x] Add tests for loops containing conditionals.
+- [x] Add tests for conditionals containing loops.
 
 ### 5.3 Improve `FOR` loop recognition
 
