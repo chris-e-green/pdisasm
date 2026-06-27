@@ -44,29 +44,14 @@ struct StructuredPascalSourceBuilder {
                 ($0.loop.headerBlock, $0)
             }
         )
-        let caseRegions = builtAnalyzer.caseRegions()
+        let caseRegions = builtAnalyzer.caseRegions().filter {
+            $0.selectorExpression?.isEmpty == false
+        }
         self.cases = Dictionary(
             uniqueKeysWithValues: caseRegions.map { ($0.dispatchBlock, $0) }
         )
-        let caseDispatchBlocks = Set(caseRegions.map(\.dispatchBlock))
-        let detectedCaseGateways: Set<Int> = Set(
-            builtAnalyzer.graph.edges.compactMap { edge in
-                guard edge.kind == .unconditionalBranch,
-                    let destination = edge.destination,
-                    caseDispatchBlocks.contains(destination),
-                    let sourceBlock = builtAnalyzer.graph.blocks[edge.source],
-                    sourceBlock.instructionAddresses.contains(where: {
-                        let text = procedure.instructions[$0]?
-                            .pseudoCodeStatement?.renderedText
-                            ?? procedure.instructions[$0]?.pseudoCode
-                        return text?.trimmingCharacters(in: .whitespaces)
-                            .hasPrefix("CASE ") == true
-                    })
-                else {
-                    return nil
-                }
-                return edge.source
-            }
+        let detectedCaseGateways = Set(
+            caseRegions.compactMap(\.gatewayBlock)
         )
         self.caseGateways = detectedCaseGateways
 
@@ -90,7 +75,10 @@ struct StructuredPascalSourceBuilder {
     }
 
     var hasStructuredRegions: Bool {
-        !conditionals.isEmpty || !loops.isEmpty || !cases.isEmpty
+        !conditionals.isEmpty
+            || !loops.isEmpty
+            || !cases.isEmpty
+            || !fallbacksBySource.isEmpty
     }
 
     mutating func build() -> [PascalStmt] {
@@ -322,9 +310,11 @@ struct StructuredPascalSourceBuilder {
             )
         }
         return .caseStatement(
-            expression: caseExpression(for: region),
-            arms: arms,
-            defaultBody: defaultBody
+            PascalCaseStatement(
+                expression: .raw(region.selectorExpression ?? "0"),
+                arms: arms,
+                defaultBody: defaultBody
+            )
         )
     }
 
@@ -442,27 +432,6 @@ struct StructuredPascalSourceBuilder {
             }
         }
         return .raw("(* condition unavailable *) FALSE")
-    }
-
-    private func caseExpression(
-        for region: StructuredCaseRegion
-    ) -> PascalExpr {
-        let candidateBlocks = graph.predecessors(of: region.dispatchBlock)
-            .union([region.dispatchBlock])
-            .sorted(by: >)
-        for block in candidateBlocks {
-            guard let text = terminalPseudoCode(in: block),
-                let expression = contents(
-                    of: text,
-                    after: "CASE",
-                    before: "OF"
-                )
-            else {
-                continue
-            }
-            return .raw(expression)
-        }
-        return .raw("(* selector unavailable *) 0")
     }
 
     private func caseLabels(for values: Set<Int>) -> [PascalExpr] {

@@ -30,6 +30,7 @@ func simulateStackAndGeneratePseudocode(
         instruction.stackState = nil
         instruction.prePseudoCode.removeAll()
         instruction.forLoopEvidence = nil
+        instruction.caseDispatchEvidence = nil
     }
 
     let sortedInstructions = proc.instructions.sorted(by: { $0.key < $1.key })

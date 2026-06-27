@@ -404,6 +404,47 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertFalse(lines.contains("  END (* IF READY *)"))
     }
 
+    func testPascalSourceDeclaresOnlyCFGGeneratedGotoLabels() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            segmentName: "TEST",
+            procedure: 1,
+            procName: "TRANSFER"
+        )
+        let lines = pascalSourceLines(
+            for: identifier,
+            configureProcedure: { procedure in
+                procedure.instructions = [
+                    0: Instruction(
+                        opcode: ujp,
+                        mnemonic: "UJP",
+                        params: [4],
+                        pseudoCode: "GOTO LAB999"
+                    ),
+                    2: Instruction(
+                        opcode: ujp,
+                        mnemonic: "UJP",
+                        params: [4]
+                    ),
+                    4: Instruction(
+                        opcode: nop,
+                        mnemonic: "NOP",
+                        pseudoCode: "TARGET()",
+                        prePseudoCode: ["LAB999:"]
+                    ),
+                    5: Instruction(opcode: rnp, mnemonic: "RNP"),
+                ]
+            }
+        )
+
+        XCTAssertEqual(lines.filter { $0 == "  LAB4;" }.count, 1)
+        XCTAssertEqual(lines.filter { $0 == "  GOTO LAB4;" }.count, 2)
+        XCTAssertEqual(lines.filter { $0 == "  LAB4:" }.count, 1)
+        XCTAssertFalse(lines.contains("  LAB999;"))
+        XCTAssertFalse(lines.contains("  LAB999:"))
+    }
+
     func testPascalSourceRendersGroupedProcedureParameters() {
         let identifier = ProcedureIdentifier(
             isFunction: false,

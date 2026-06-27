@@ -363,6 +363,38 @@ final class StackSimulationIntegrationTests: XCTestCase {
         XCTAssertEqual(proc.instructions[14]?.prePseudoCode.last, "END (* WHILE I <= LIMIT *)")
     }
 
+    func testCaseGatewayPreservesStructuredSelectorEvidence() {
+        let proc = Procedure()
+        proc.enterIC = 0
+        proc.exitIC = 14
+        proc.instructions = [
+            0: Instruction(opcode: 1, mnemonic: "SLDC"),
+            1: Instruction(opcode: ujp, mnemonic: "UJP", params: [10]),
+            2: Instruction(opcode: nop, mnemonic: "NOP"),
+            3: Instruction(opcode: ujp, mnemonic: "UJP", params: [14]),
+            4: Instruction(opcode: nop, mnemonic: "NOP"),
+            5: Instruction(opcode: ujp, mnemonic: "UJP", params: [14]),
+            6: Instruction(opcode: nop, mnemonic: "NOP"),
+            7: Instruction(opcode: ujp, mnemonic: "UJP", params: [14]),
+            10: Instruction(
+                opcode: xjp,
+                mnemonic: "XJP",
+                params: [1, 2, 100, 6, 2, 4]
+            ),
+            14: Instruction(opcode: rnp, mnemonic: "RNP", params: [0]),
+        ]
+
+        let simulated = simulate(proc)
+
+        XCTAssertEqual(
+            simulated.instructions[10]?.caseDispatchEvidence,
+            CaseDispatchEvidence(
+                selectorExpression: "1",
+                gatewayAddress: 1
+            )
+        )
+    }
+
     func testSharedForwardUjpTargetInsideIfIsRenderedAsGotoNotElse() {
         let proc = simulate(makeIfWithSharedGotoTargetProcedure())
 

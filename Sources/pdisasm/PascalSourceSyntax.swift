@@ -261,7 +261,7 @@ indirect enum PascalStmt: Sendable {
     case whileDo(condition: PascalExpr, body: PascalStmt)
     case repeatUntil(body: [PascalStmt], condition: PascalExpr)
     case forLoop(variable: String, start: PascalExpr, limit: PascalExpr, direction: PascalForDirection, body: PascalStmt)
-    case caseStatement(expression: PascalExpr, arms: [PascalCaseArm], defaultBody: [PascalStmt]?)
+    case caseStatement(PascalCaseStatement)
     case goto(label: String)
     case label(String, PascalStmt?)
     case raw(String)
@@ -275,7 +275,13 @@ indirect enum PascalStmt: Sendable {
             return ["\(indent)\(renderPascalIdentifier(name))(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
         case .block(let statements):
             var lines = ["\(indent)BEGIN"]
-            lines.append(contentsOf: statements.flatMap { $0.rendered(indentation: indentation + 2) })
+            for statement in statements {
+                var statementLines = statement.rendered(
+                    indentation: indentation + 2
+                )
+                PascalStmt.terminateCompoundStatement(&statementLines)
+                lines.append(contentsOf: statementLines)
+            }
             lines.append("\(indent)END")
             return lines
         case .ifThen(let condition, let thenBlock):
@@ -288,15 +294,29 @@ indirect enum PascalStmt: Sendable {
             return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2) } + ["\(indent)UNTIL \(condition.rendered());"]
         case .forLoop(let variable, let start, let limit, let direction, let body):
             return ["\(indent)FOR \(renderPascalIdentifier(variable)) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2)
-        case .caseStatement(let expression, let arms, let defaultBody):
-            var lines = ["\(indent)CASE \(expression.rendered()) OF"]
-            for arm in arms {
+        case .caseStatement(let statement):
+            var lines = [
+                "\(indent)CASE \(statement.expression.rendered()) OF"
+            ]
+            for arm in statement.arms {
                 lines.append("\(indent)  \(arm.labels.map { $0.rendered() }.joined(separator: ", ")):")
-                lines.append(contentsOf: arm.body.flatMap { $0.rendered(indentation: indentation + 4) })
+                lines.append(
+                    contentsOf: PascalStmt.renderCaseBody(
+                        arm.body,
+                        indentation: indentation + 4
+                    )
+                )
             }
-            if let defaultBody {
-                lines.append("\(indent)  OTHERWISE")
-                lines.append(contentsOf: defaultBody.flatMap { $0.rendered(indentation: indentation + 4) })
+            if let defaultBody = statement.defaultBody {
+                lines.append(
+                    "\(indent)  \(statement.defaultStyle.keyword)"
+                )
+                lines.append(
+                    contentsOf: PascalStmt.renderCaseBody(
+                        defaultBody,
+                        indentation: indentation + 4
+                    )
+                )
             }
             lines.append("\(indent)END")
             return lines
@@ -319,6 +339,39 @@ indirect enum PascalStmt: Sendable {
         }
         return "\(trimmed);"
     }
+
+    private static func renderCaseBody(
+        _ statements: [PascalStmt],
+        indentation: Int
+    ) -> [String] {
+        var lines: [String]
+        if statements.count == 1, let statement = statements.first {
+            lines = statement.rendered(indentation: indentation)
+        } else {
+            lines = PascalStmt.block(statements).rendered(
+                indentation: indentation
+            )
+        }
+        terminateStatement(&lines)
+        return lines
+    }
+
+    private static func terminateCompoundStatement(_ lines: inout [String]) {
+        guard lines.last?.trimmingCharacters(in: .whitespaces) == "END"
+        else {
+            return
+        }
+        lines[lines.count - 1] += ";"
+    }
+
+    private static func terminateStatement(_ lines: inout [String]) {
+        guard let last = lines.last?.trimmingCharacters(in: .whitespaces),
+            !last.hasSuffix(";")
+        else {
+            return
+        }
+        lines[lines.count - 1] += ";"
+    }
 }
 
 enum PascalForDirection: String, Sendable {
@@ -329,6 +382,23 @@ enum PascalForDirection: String, Sendable {
 struct PascalCaseArm: Sendable {
     var labels: [PascalExpr]
     var body: [PascalStmt]
+}
+
+enum PascalCaseDefaultStyle: Sendable {
+    case otherwise
+
+    var keyword: String {
+        switch self {
+        case .otherwise: return "OTHERWISE"
+        }
+    }
+}
+
+struct PascalCaseStatement: Sendable {
+    var expression: PascalExpr
+    var arms: [PascalCaseArm]
+    var defaultBody: [PascalStmt]?
+    var defaultStyle: PascalCaseDefaultStyle = .otherwise
 }
 
 struct PascalBlock: Sendable {
