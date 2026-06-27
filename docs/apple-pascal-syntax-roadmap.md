@@ -377,17 +377,17 @@ Move beyond local jump heuristics by building a CFG for each procedure.
 
 Tasks:
 
-- [ ] Split procedures into basic blocks.
-- [ ] Record edges for conditional branches, unconditional branches, fallthrough,
+- [x] Split procedures into basic blocks.
+- [x] Record edges for conditional branches, unconditional branches, fallthrough,
       case jump tables, calls, and returns.
-- [ ] Mark entry blocks, exit blocks, and external entry points.
-- [ ] Add dominator analysis.
-- [ ] Add post-dominator analysis.
-- [ ] Add tests for simple straight-line blocks.
-- [ ] Add tests for conditional branches.
-- [ ] Add tests for loops.
-- [ ] Add tests for multiple entry points.
-- [ ] Add tests for irreducible control flow.
+- [x] Mark entry blocks, exit blocks, and external entry points.
+- [x] Add dominator analysis.
+- [x] Add post-dominator analysis.
+- [x] Add tests for simple straight-line blocks.
+- [x] Add tests for conditional branches.
+- [x] Add tests for loops.
+- [x] Add tests for multiple entry points.
+- [x] Add tests for irreducible control flow.
 
 ### 5.2 Recover structured regions
 
