@@ -267,4 +267,95 @@ final class StructuredControlFlowTests: XCTestCase {
                 .loopRegions().isEmpty
         )
     }
+
+    func testIdentifiesCaseRegionAndGroupsSharedCaseTargets() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(ujp, params: [10]),
+                2: instruction(),
+                3: instruction(ujp, params: [14]),
+                4: instruction(),
+                5: instruction(ujp, params: [14]),
+                6: instruction(),
+                7: instruction(ujp, params: [14]),
+                10: instruction(
+                    xjp,
+                    params: [1, 3, 100, 6, 2, 4, 4]
+                ),
+                14: instruction(rnp),
+            ])
+        )
+
+        let region = analyzer.caseRegion(at: 10)
+        XCTAssertEqual(region?.continuationBlock, 14)
+        XCTAssertEqual(region?.defaultEntryBlock, 6)
+        XCTAssertEqual(region?.defaultBlocks, [6])
+        XCTAssertEqual(region?.arms.count, 2)
+        XCTAssertEqual(region?.arms[0].values, [1])
+        XCTAssertEqual(region?.arms[0].entryBlock, 2)
+        XCTAssertEqual(region?.arms[0].blocks, [2])
+        XCTAssertEqual(region?.arms[1].values, [2, 3])
+        XCTAssertEqual(region?.arms[1].entryBlock, 4)
+        XCTAssertEqual(region?.arms[1].blocks, [4])
+    }
+
+    func testCaseRegionSupportsNoOpDefaultArm() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(ujp, params: [6]),
+                2: instruction(),
+                3: instruction(ujp, params: [10]),
+                6: instruction(
+                    xjp,
+                    params: [5, 5, 100, 10, 2]
+                ),
+                10: instruction(rnp),
+            ])
+        )
+
+        let region = analyzer.caseRegion(at: 6)
+        XCTAssertEqual(region?.arms.count, 1)
+        XCTAssertEqual(region?.defaultEntryBlock, 10)
+        XCTAssertEqual(region?.defaultBlocks, [])
+        XCTAssertEqual(region?.continuationBlock, 10)
+    }
+
+    func testCaseRegionRejectsExternalArmEntry() {
+        let procedure = Procedure()
+        procedure.externalEntryPoints = [2]
+        procedure.instructions = [
+            0: instruction(ujp, params: [6]),
+            2: instruction(),
+            3: instruction(ujp, params: [10]),
+            4: instruction(),
+            5: instruction(ujp, params: [10]),
+            6: instruction(
+                xjp,
+                params: [1, 1, 100, 4, 2]
+            ),
+            10: instruction(rnp),
+        ]
+
+        XCTAssertNil(
+            StructuredControlFlowAnalyzer(procedure: procedure)
+                .caseRegion(at: 6)
+        )
+    }
+
+    func testCaseRegionsFindsOnlyDispatchBlocks() {
+        let analyzer = StructuredControlFlowAnalyzer(
+            graph: graph([
+                0: instruction(ujp, params: [6]),
+                2: instruction(),
+                3: instruction(ujp, params: [10]),
+                6: instruction(
+                    xjp,
+                    params: [1, 1, 100, 10, 2]
+                ),
+                10: instruction(rnp),
+            ])
+        )
+
+        XCTAssertEqual(analyzer.caseRegions().map(\.dispatchBlock), [6])
+    }
 }

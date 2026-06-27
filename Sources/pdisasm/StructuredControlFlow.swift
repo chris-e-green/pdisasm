@@ -61,6 +61,40 @@ public struct StructuredLoopRegion: Hashable, Sendable {
     }
 }
 
+public struct StructuredCaseArm: Hashable, Sendable {
+    public let values: Set<Int>
+    public let entryBlock: Int
+    public let blocks: Set<Int>
+
+    public init(values: Set<Int>, entryBlock: Int, blocks: Set<Int>) {
+        self.values = values
+        self.entryBlock = entryBlock
+        self.blocks = blocks
+    }
+}
+
+public struct StructuredCaseRegion: Hashable, Sendable {
+    public let dispatchBlock: Int
+    public let arms: [StructuredCaseArm]
+    public let defaultEntryBlock: Int
+    public let defaultBlocks: Set<Int>
+    public let continuationBlock: Int
+
+    public init(
+        dispatchBlock: Int,
+        arms: [StructuredCaseArm],
+        defaultEntryBlock: Int,
+        defaultBlocks: Set<Int>,
+        continuationBlock: Int
+    ) {
+        self.dispatchBlock = dispatchBlock
+        self.arms = arms
+        self.defaultEntryBlock = defaultEntryBlock
+        self.defaultBlocks = defaultBlocks
+        self.continuationBlock = continuationBlock
+    }
+}
+
 public struct StructuredControlFlowAnalyzer {
     public let graph: ControlFlowGraph
 
@@ -156,6 +190,105 @@ public struct StructuredControlFlowAnalyzer {
                 }
                 return $0.conditionBlock < $1.conditionBlock
             }
+    }
+
+    public func caseRegions() -> [StructuredCaseRegion] {
+        graph.blocks.keys.sorted().compactMap(caseRegion)
+    }
+
+    public func caseRegion(at dispatchBlock: Int) -> StructuredCaseRegion? {
+        let outgoing = graph.edges.filter { $0.source == dispatchBlock }
+        let caseEdges = outgoing.compactMap {
+            edge -> (destination: Int, values: Set<Int>)? in
+            guard case let .caseBranch(values) = edge.kind,
+                let destination = edge.destination
+            else {
+                return nil
+            }
+            return (destination, values)
+        }
+        let defaultTargets = outgoing.compactMap { edge -> Int? in
+            guard edge.kind == .caseDefault else { return nil }
+            return edge.destination
+        }
+        guard !caseEdges.isEmpty,
+            defaultTargets.count == 1,
+            let continuation = graph.immediatePostDominator(of: dispatchBlock)
+        else {
+            return nil
+        }
+
+        var arms: [StructuredCaseArm] = []
+        var occupiedBlocks: Set<Int> = []
+        for edge in caseEdges {
+            guard let blocks = caseArmBlocks(
+                from: edge.destination,
+                dispatchBlock: dispatchBlock,
+                continuationBlock: continuation
+            ), occupiedBlocks.isDisjoint(with: blocks)
+            else {
+                return nil
+            }
+            occupiedBlocks.formUnion(blocks)
+            arms.append(
+                StructuredCaseArm(
+                    values: edge.values,
+                    entryBlock: edge.destination,
+                    blocks: blocks
+                )
+            )
+        }
+        arms.sort {
+            let leftValue = $0.values.min() ?? Int.max
+            let rightValue = $1.values.min() ?? Int.max
+            return leftValue == rightValue
+                ? $0.entryBlock < $1.entryBlock
+                : leftValue < rightValue
+        }
+
+        let defaultTarget = defaultTargets[0]
+        guard let defaultBlocks = caseArmBlocks(
+            from: defaultTarget,
+            dispatchBlock: dispatchBlock,
+            continuationBlock: continuation
+        ) else {
+            return nil
+        }
+        if !arms.contains(where: { $0.entryBlock == defaultTarget }),
+            !occupiedBlocks.isDisjoint(with: defaultBlocks)
+        {
+            return nil
+        }
+
+        return StructuredCaseRegion(
+            dispatchBlock: dispatchBlock,
+            arms: arms,
+            defaultEntryBlock: defaultTarget,
+            defaultBlocks: defaultBlocks,
+            continuationBlock: continuation
+        )
+    }
+
+    private func caseArmBlocks(
+        from start: Int,
+        dispatchBlock: Int,
+        continuationBlock: Int
+    ) -> Set<Int>? {
+        if start == continuationBlock {
+            return []
+        }
+        guard let blocks = armBlocks(
+            from: start,
+            conditionBlock: dispatchBlock,
+            continuationBlock: continuationBlock
+        ), validateArm(
+            blocks,
+            conditionBlock: dispatchBlock,
+            continuationBlock: continuationBlock
+        ) else {
+            return nil
+        }
+        return blocks
     }
 
     private struct NaturalLoop {

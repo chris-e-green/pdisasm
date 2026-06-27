@@ -400,7 +400,7 @@ Tasks:
 - [x] Identify pre-test `WHILE` loops.
 - [x] Identify post-test `REPEAT/UNTIL` loops.
 - [ ] Identify counted `FOR` loops.
-- [ ] Identify `CASE` jump-table regions.
+- [x] Identify `CASE` jump-table regions.
 - [x] Detect loop exits and continue-like jumps.
 - [ ] Preserve `GOTO` for irreducible leftovers.
 - [x] Add nested control-flow tests.
