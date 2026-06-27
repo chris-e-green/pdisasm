@@ -347,6 +347,63 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertLessThan(lines.firstIndex(of: "VAR")!, lines.firstIndex(of: "BEGIN")!)
     }
 
+    func testPascalSourceUsesStructuredCFGRegions() {
+        let identifier = ProcedureIdentifier(
+            isFunction: false,
+            segment: 0,
+            segmentName: "TEST",
+            procedure: 1,
+            procName: "CHOOSE"
+        )
+        let lines = pascalSourceLines(
+            for: identifier,
+            configureProcedure: { procedure in
+                procedure.instructions = [
+                    0: Instruction(
+                        opcode: fjp,
+                        mnemonic: "FJP",
+                        params: [4],
+                        pseudoCode: "IF READY THEN BEGIN"
+                    ),
+                    2: Instruction(
+                        opcode: nop,
+                        mnemonic: "NOP",
+                        pseudoCode: "SELECT_A()"
+                    ),
+                    3: Instruction(
+                        opcode: ujp,
+                        mnemonic: "UJP",
+                        params: [6],
+                        pseudoCode: "END ELSE BEGIN"
+                    ),
+                    4: Instruction(
+                        opcode: nop,
+                        mnemonic: "NOP",
+                        pseudoCode: "SELECT_B()"
+                    ),
+                    5: Instruction(
+                        opcode: ujp,
+                        mnemonic: "UJP",
+                        params: [6]
+                    ),
+                    6: Instruction(
+                        opcode: rnp,
+                        mnemonic: "RNP",
+                        prePseudoCode: ["END (* IF READY *)"]
+                    ),
+                ]
+            }
+        )
+
+        XCTAssertTrue(lines.contains("  IF READY THEN"))
+        XCTAssertTrue(lines.contains("      SELECT_A();"))
+        XCTAssertTrue(lines.contains("  ELSE"))
+        XCTAssertTrue(lines.contains("      SELECT_B();"))
+        XCTAssertFalse(lines.contains("  IF READY THEN BEGIN"))
+        XCTAssertFalse(lines.contains("  END ELSE BEGIN"))
+        XCTAssertFalse(lines.contains("  END (* IF READY *)"))
+    }
+
     func testPascalSourceRendersGroupedProcedureParameters() {
         let identifier = ProcedureIdentifier(
             isFunction: false,

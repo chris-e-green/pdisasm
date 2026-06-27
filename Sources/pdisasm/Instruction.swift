@@ -11,6 +11,7 @@ public class Instruction {
     public var isPascal: Bool = true
     public var stackState: [String]?
     public var prePseudoCode: [String]  // pseudo-code to print before instruction
+    public var forLoopEvidence: ForLoopEvidence?
     var pseudoCodeStatement: PseudoCodeStatement?
     public var pseudoCode: String?  // pseudo-code to print after instruction
 
@@ -27,7 +28,8 @@ public class Instruction {
         isPascal: Bool = true,
         stackState: [String]? = nil,
         pseudoCode: String? = nil,
-        prePseudoCode: [String] = []
+        prePseudoCode: [String] = [],
+        forLoopEvidence: ForLoopEvidence? = nil
     ) {
         self.opcode = opcode
         self.mnemonic = mnemonic
@@ -45,5 +47,34 @@ public class Instruction {
         }
         self.pseudoCode = pseudoCode
         self.prePseudoCode = prePseudoCode
+        self.forLoopEvidence = forLoopEvidence
+    }
+}
+
+public struct ForLoopEvidence: Hashable, Sendable {
+    public let direction: StructuredForDirection
+    public let variable: StructuredForVariable
+    public let startExpression: String
+    public let limitExpression: String
+    public let initializationStoreAddress: Int
+    public let setupAddresses: Set<Int>
+    public let updateStoreAddress: Int
+
+    public init(
+        direction: StructuredForDirection,
+        variable: StructuredForVariable,
+        startExpression: String,
+        limitExpression: String,
+        initializationStoreAddress: Int,
+        setupAddresses: Set<Int>,
+        updateStoreAddress: Int
+    ) {
+        self.direction = direction
+        self.variable = variable
+        self.startExpression = startExpression
+        self.limitExpression = limitExpression
+        self.initializationStoreAddress = initializationStoreAddress
+        self.setupAddresses = setupAddresses
+        self.updateStoreAddress = updateStoreAddress
     }
 }

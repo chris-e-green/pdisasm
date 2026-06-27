@@ -241,7 +241,7 @@ private func assemblerCommentText(for instruction: Instruction) -> String? {
     return comments.joined(separator: "; ")
 }
 
-private func defaultProcedureName(for procedure: ProcedureIdentifier) -> String {
+func defaultProcedureName(for procedure: ProcedureIdentifier) -> String {
     if let procName = procedure.procName, !procName.isEmpty {
         return procName
     }
@@ -1385,25 +1385,34 @@ private func renderPascalProcedureLines(
         )
     }
 
-    var statements: [PascalStmt] = []
-    for (_, instruction) in procedure.instructions.sorted(by: { $0.key < $1.key }) {
-        for pre in instruction.prePseudoCode.reversed() {
-            statements.append(.raw(pre))
-        }
-        if let pseudo = instruction.pseudoCodeStatement {
-            statements.append(pseudo.pascalSourceStatement(
-                functionResultStorage: procedure.identifier?.functionResultStorage,
-                functionName: procedure.identifier.map {
-                    $0.procName ?? defaultProcedureName(for: $0)
-                }
-            ))
-        } else if let pseudo = instruction.pseudoCode {
-            statements.append(
-                PseudoCodeStatement(
-                    renderedText: pseudo,
-                    locations: result.allLocations
-                ).pascalSourceStatement
-            )
+    var structuredBuilder = StructuredPascalSourceBuilder(
+        procedure: procedure,
+        allLocations: result.allLocations
+    )
+    var statements: [PascalStmt]
+    if structuredBuilder.hasStructuredRegions {
+        statements = structuredBuilder.build()
+    } else {
+        statements = []
+        for (_, instruction) in procedure.instructions.sorted(by: { $0.key < $1.key }) {
+            for pre in instruction.prePseudoCode.reversed() {
+                statements.append(.raw(pre))
+            }
+            if let pseudo = instruction.pseudoCodeStatement {
+                statements.append(pseudo.pascalSourceStatement(
+                    functionResultStorage: procedure.identifier?.functionResultStorage,
+                    functionName: procedure.identifier.map {
+                        $0.procName ?? defaultProcedureName(for: $0)
+                    }
+                ))
+            } else if let pseudo = instruction.pseudoCode {
+                statements.append(
+                    PseudoCodeStatement(
+                        renderedText: pseudo,
+                        locations: result.allLocations
+                    ).pascalSourceStatement
+                )
+            }
         }
     }
     let declarationLines = procedureDeclarationLines(

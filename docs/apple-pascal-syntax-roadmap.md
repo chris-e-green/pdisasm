@@ -407,6 +407,10 @@ Tasks:
 - [x] Add tests for loops containing conditionals.
 - [x] Add tests for conditionals containing loops.
 
+Source mode consumes these regions through the Pascal statement AST. Procedures
+without recognized regions retain the legacy flat conversion path, and
+unstructured transfers remain explicit `GOTO` statements.
+
 ### 5.3 Improve `FOR` loop recognition
 
 The current control-flow analyzer recognizes some loop patterns. Make this more
@@ -414,16 +418,16 @@ robust and explicit.
 
 Tasks:
 
-- [ ] Document Apple Pascal compiler p-code patterns for `FOR ... TO`.
-- [ ] Document Apple Pascal compiler p-code patterns for `FOR ... DOWNTO`.
-- [ ] Track loop variable initialization separately from loop update.
-- [ ] Track loop limit evaluation.
-- [ ] Avoid suppressing setup/update assignments unless the loop pattern is
+- [x] Document Apple Pascal compiler p-code patterns for `FOR ... TO`.
+- [x] Document Apple Pascal compiler p-code patterns for `FOR ... DOWNTO`.
+- [x] Track loop variable initialization separately from loop update.
+- [x] Track loop limit evaluation.
+- [x] Avoid suppressing setup/update assignments unless the loop pattern is
       confidently recognized.
-- [ ] Add tests for `FOR ... TO`.
-- [ ] Add tests for `FOR ... DOWNTO`.
-- [ ] Add tests for non-unit step fallbacks if encountered.
-- [ ] Add tests for nested `FOR` loops.
+- [x] Add tests for `FOR ... TO`.
+- [x] Add tests for `FOR ... DOWNTO`.
+- [x] Add tests for non-unit step fallbacks if encountered.
+- [x] Add tests for nested `FOR` loops.
 
 ### 5.4 Improve `CASE` reconstruction
 

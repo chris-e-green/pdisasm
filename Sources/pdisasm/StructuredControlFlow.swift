@@ -122,6 +122,9 @@ public struct StructuredForRegion: Hashable, Sendable {
     public let variable: StructuredForVariable
     public let loop: StructuredLoopRegion
     public let initializationStoreAddress: Int
+    public let setupAddresses: Set<Int>
+    public let startExpression: String
+    public let limitExpression: String
     public let comparisonAddress: Int
     public let updateStoreAddress: Int
 
@@ -130,6 +133,9 @@ public struct StructuredForRegion: Hashable, Sendable {
         variable: StructuredForVariable,
         loop: StructuredLoopRegion,
         initializationStoreAddress: Int,
+        setupAddresses: Set<Int>,
+        startExpression: String,
+        limitExpression: String,
         comparisonAddress: Int,
         updateStoreAddress: Int
     ) {
@@ -137,6 +143,9 @@ public struct StructuredForRegion: Hashable, Sendable {
         self.variable = variable
         self.loop = loop
         self.initializationStoreAddress = initializationStoreAddress
+        self.setupAddresses = setupAddresses
+        self.startExpression = startExpression
+        self.limitExpression = limitExpression
         self.comparisonAddress = comparisonAddress
         self.updateStoreAddress = updateStoreAddress
     }
@@ -445,21 +454,19 @@ public struct StructuredControlFlowAnalyzer {
                 in: updateBlock,
                 direction: comparison.1
             ),
+            let branchAddress = header.instructionAddresses.last,
+            let evidence = instructions[branchAddress]?.forLoopEvidence,
+            evidence.direction == comparison.1,
+            evidence.variable == StructuredForVariable(update.variable),
+            evidence.updateStoreAddress == update.storeAddress,
             header.instructionAddresses.contains(where: {
                 guard let instruction = instructions[$0] else { return false }
                 return Self.isDirectLoad(instruction.opcode)
                     && instruction.memLocation == update.variable
             }),
-            let initializationAddress = instructions.keys
-                .filter({ $0 < loop.headerBlock })
-                .sorted(by: >)
-                .first(where: {
-                    guard let instruction = instructions[$0] else {
-                        return false
-                    }
-                    return Self.isDirectStore(instruction.opcode)
-                        && instruction.memLocation == update.variable
-                })
+            evidence.initializationStoreAddress < loop.headerBlock,
+            !evidence.startExpression.isEmpty,
+            !evidence.limitExpression.isEmpty
         else {
             return nil
         }
@@ -468,7 +475,11 @@ public struct StructuredControlFlowAnalyzer {
             direction: comparison.1,
             variable: StructuredForVariable(update.variable),
             loop: loop,
-            initializationStoreAddress: initializationAddress,
+            initializationStoreAddress:
+                evidence.initializationStoreAddress,
+            setupAddresses: evidence.setupAddresses,
+            startExpression: evidence.startExpression,
+            limitExpression: evidence.limitExpression,
             comparisonAddress: comparison.0,
             updateStoreAddress: update.storeAddress
         )
