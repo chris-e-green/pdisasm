@@ -187,8 +187,14 @@ indirect enum PascalExpr: Sendable {
     case range(PascalExpr, PascalExpr)
     case raw(String)
 
-    func rendered() -> String {
-        render(parentPrecedence: 0, isRightChild: false)
+    func rendered(
+        dialect: ApplePascalDialect = .applePascal
+    ) -> String {
+        render(
+            parentPrecedence: 0,
+            isRightChild: false,
+            dialect: dialect
+        )
     }
 
     private var precedence: Int {
@@ -202,12 +208,16 @@ indirect enum PascalExpr: Sendable {
         }
     }
 
-    private func render(parentPrecedence: Int, isRightChild: Bool) -> String {
+    private func render(
+        parentPrecedence: Int,
+        isRightChild: Bool,
+        dialect: ApplePascalDialect
+    ) -> String {
         let ownPrecedence = precedence
         let text: String
         switch self {
         case .identifier(let name):
-            text = renderPascalIdentifier(name)
+            text = renderPascalIdentifier(name, dialect: dialect)
         case .integer(let value):
             text = String(value)
         case .real(let value):
@@ -221,29 +231,41 @@ indirect enum PascalExpr: Sendable {
         case .nilPointer:
             text = "NIL"
         case .unary(let op, let expr):
-            let operand = expr.render(parentPrecedence: op.precedence, isRightChild: true)
+            let operand = expr.render(
+                parentPrecedence: op.precedence,
+                isRightChild: true,
+                dialect: dialect
+            )
             switch op {
             case .negate: text = "-\(operand)"
             case .not: text = "NOT \(operand)"
             }
         case .binary(let op, let lhs, let rhs):
-            let left = lhs.render(parentPrecedence: op.precedence, isRightChild: false)
-            let right = rhs.render(parentPrecedence: op.precedence, isRightChild: true)
+            let left = lhs.render(
+                parentPrecedence: op.precedence,
+                isRightChild: false,
+                dialect: dialect
+            )
+            let right = rhs.render(
+                parentPrecedence: op.precedence,
+                isRightChild: true,
+                dialect: dialect
+            )
             text = "\(left) \(op.rawValue) \(right)"
         case .call(let name, let arguments):
-            text = "\(renderPascalIdentifier(name))(\(arguments.map { $0.rendered() }.joined(separator: ", ")))"
+            text = "\(renderPascalIdentifier(name, dialect: dialect))(\(arguments.map { $0.rendered(dialect: dialect) }.joined(separator: ", ")))"
         case .index(let base, let index):
-            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false))[\(index.rendered())]"
+            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false, dialect: dialect))[\(index.rendered(dialect: dialect))]"
         case .field(let base, let name):
-            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false)).\(renderPascalIdentifier(name))"
+            text = "\(base.render(parentPrecedence: ownPrecedence, isRightChild: false, dialect: dialect)).\(renderPascalIdentifier(name, dialect: dialect))"
         case .dereference(let expr):
-            text = "\(expr.render(parentPrecedence: ownPrecedence, isRightChild: false))^"
+            text = "\(expr.render(parentPrecedence: ownPrecedence, isRightChild: false, dialect: dialect))^"
         case .addressOf(let expr):
-            text = "@\(expr.render(parentPrecedence: ownPrecedence, isRightChild: false))"
+            text = "@\(expr.render(parentPrecedence: ownPrecedence, isRightChild: false, dialect: dialect))"
         case .setLiteral(let elements):
-            text = "[" + elements.map { $0.rendered() }.joined(separator: ", ") + "]"
+            text = "[" + elements.map { $0.rendered(dialect: dialect) }.joined(separator: ", ") + "]"
         case .range(let lower, let upper):
-            text = "\(lower.rendered())..\(upper.rendered())"
+            text = "\(lower.rendered(dialect: dialect))..\(upper.rendered(dialect: dialect))"
         case .raw(let rawText):
             text = rawText
         }
@@ -274,9 +296,9 @@ indirect enum PascalStmt: Sendable {
         let indent = String(repeating: " ", count: indentation)
         switch self {
         case .assignment(let target, let source):
-            return ["\(indent)\(target.rendered()) := \(source.rendered());"]
+            return ["\(indent)\(target.rendered(dialect: dialect)) := \(source.rendered(dialect: dialect));"]
         case .call(let name, let arguments):
-            return ["\(indent)\(renderPascalIdentifier(name, dialect: dialect))(\(arguments.map { $0.rendered() }.joined(separator: ", ")));"]
+            return ["\(indent)\(renderPascalIdentifier(name, dialect: dialect))(\(arguments.map { $0.rendered(dialect: dialect) }.joined(separator: ", ")));"]
         case .block(let statements):
             var lines = ["\(indent)BEGIN"]
             for statement in statements {
@@ -290,21 +312,21 @@ indirect enum PascalStmt: Sendable {
             lines.append("\(indent)END")
             return lines
         case .ifThen(let condition, let thenBlock):
-            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect)
         case .ifElse(let condition, let thenBlock, let elseBlock):
-            return ["\(indent)IF \(condition.rendered()) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect) + ["\(indent)ELSE"] + elseBlock.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect) + ["\(indent)ELSE"] + elseBlock.rendered(indentation: indentation + 2, dialect: dialect)
         case .whileDo(let condition, let body):
-            return ["\(indent)WHILE \(condition.rendered()) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)WHILE \(condition.rendered(dialect: dialect)) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
         case .repeatUntil(let body, let condition):
-            return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2, dialect: dialect) } + ["\(indent)UNTIL \(condition.rendered());"]
+            return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2, dialect: dialect) } + ["\(indent)UNTIL \(condition.rendered(dialect: dialect));"]
         case .forLoop(let variable, let start, let limit, let direction, let body):
-            return ["\(indent)FOR \(renderPascalIdentifier(variable, dialect: dialect)) := \(start.rendered()) \(direction.rawValue) \(limit.rendered()) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)FOR \(renderPascalIdentifier(variable, dialect: dialect)) := \(start.rendered(dialect: dialect)) \(direction.rawValue) \(limit.rendered(dialect: dialect)) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
         case .caseStatement(let statement):
             var lines = [
-                "\(indent)CASE \(statement.expression.rendered()) OF"
+                "\(indent)CASE \(statement.expression.rendered(dialect: dialect)) OF"
             ]
             for arm in statement.arms {
-                lines.append("\(indent)  \(arm.labels.map { $0.rendered() }.joined(separator: ", ")):")
+                lines.append("\(indent)  \(arm.labels.map { $0.rendered(dialect: dialect) }.joined(separator: ", ")):")
                 lines.append(
                     contentsOf: PascalStmt.renderCaseBody(
                         arm.body,

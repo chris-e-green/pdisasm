@@ -20,6 +20,29 @@ final class ApplePascalDialectTests: XCTestCase {
         XCTAssertEqual(decoded.dialect, .ucsdPSystem)
     }
 
+    func testLegacyOptionsWithoutDialectUseCompatibilityDefault() throws {
+        let legacyJSON = """
+        {
+          "verbose": false,
+          "writeMetadata": false,
+          "overwriteMetadata": false,
+          "showMarkup": true,
+          "showPCode": true,
+          "showStackState": false,
+          "showPseudoCode": true,
+          "showPascalSource": false,
+          "showDot": false
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(
+            DisassemblyOptions.self,
+            from: legacyJSON
+        )
+
+        XCTAssertEqual(decoded.dialect, .applePascal)
+    }
+
     func testAppleSegmentKeywordIsProfileSpecific() {
         XCTAssertEqual(
             renderPascalIdentifier("SEGMENT", dialect: .applePascal),
@@ -57,6 +80,18 @@ final class ApplePascalDialectTests: XCTestCase {
             ]
         )
         XCTAssertEqual(
+            PascalExpr.identifier("SEGMENT").rendered(
+                dialect: .applePascal
+            ),
+            "SEGMENT_"
+        )
+        XCTAssertEqual(
+            PascalExpr.identifier("SEGMENT").rendered(
+                dialect: .ucsdPSystem
+            ),
+            "SEGMENT"
+        )
+        XCTAssertEqual(
             PascalBlock(statements: statements).rendered(
                 dialect: .ucsdPSystem
             ),
@@ -88,5 +123,27 @@ final class ApplePascalDialectTests: XCTestCase {
             ApplePascalDialect.applePascal.policy.textFileTypeName,
             "TEXT"
         )
+        XCTAssertEqual(
+            PascalType.parse("TEXT").renderedType(for: .ucsdPSystem),
+            "TEXT"
+        )
+    }
+
+    func testServiceCarriesSelectedDialectIntoResult() throws {
+        let fixture = try XCTUnwrap(
+            Bundle.module.url(
+                forResource: "SYSTEM.LIBRARY-02-00",
+                withExtension: "bin",
+                subdirectory: "Fixtures"
+            )
+        )
+        let result = try DisassemblyService().run(
+            DisassemblyRunRequest(
+                source: .file(fixture),
+                options: DisassemblyOptions(dialect: .ucsdPSystem)
+            )
+        )
+
+        XCTAssertEqual(result.legacyResult.dialect, .ucsdPSystem)
     }
 }

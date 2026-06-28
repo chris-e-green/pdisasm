@@ -41,7 +41,7 @@ If no filename is supplied, the CLI defaults to the bundled
 ## Command-line usage
 
 ```text
-USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
+USAGE: pdisasm-cli [file ...] [--batch] [--workspace dir] [--json file] [--call-graph file] [--dialect apple-pascal|ucsd-p-system] [--verbose] [--rewrite] [--show-markup] [--show-pcode] [--show-stack-state] [--show-pseudocode] [--show-source] [--show-dot]
 ```
 
 Common examples:
@@ -136,7 +136,8 @@ docs/                     Architecture notes and ADRs
 
 See `ARCHITECTURE.md` and `docs/adr/` for more detail about current design
 boundaries and decisions.
-### Pascal dialect
+
+## Pascal dialect
 
 Source reconstruction defaults to the existing Apple Pascal behavior. Select an
 explicit profile with:

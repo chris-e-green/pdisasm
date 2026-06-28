@@ -1030,7 +1030,8 @@ private func makeDisassemblyResult(
     constants: [String: Int] = [:],
     subrangeTypes: [String: PascalSubrangeType] = [:],
     typeConflicts: [TypeConflict],
-    diagnostics: [Diagnostic] = []
+    diagnostics: [Diagnostic] = [],
+    dialect: ApplePascalDialect = .applePascal
 ) -> DisassemblyResult {
     DisassemblyResult(
         sourceFilename: sourceFilename,
@@ -1047,7 +1048,8 @@ private func makeDisassemblyResult(
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
         diagnostics: diagnostics,
-        runReport: RunReport()
+        runReport: RunReport(),
+        dialect: dialect
     )
 }
 
@@ -1113,7 +1115,8 @@ func outputResults(
     showStackState: Bool = false,
     showPseudoCode: Bool = true,
     showPascalSource: Bool = false,
-    showDot: Bool = false
+    showDot: Bool = false,
+    dialect: ApplePascalDialect = .applePascal
 ) {
     var stream = StdoutStream()
     outputResults(
@@ -1138,7 +1141,8 @@ func outputResults(
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
         showPascalSource: showPascalSource,
-        showDot: showDot
+        showDot: showDot,
+        dialect: dialect
     )
 }
 
@@ -1165,7 +1169,8 @@ func outputResults<Target: TextOutputStream>(
     showStackState: Bool = false,
     showPseudoCode: Bool = true,
     showPascalSource: Bool = false,
-    showDot: Bool = false
+    showDot: Bool = false,
+    dialect: ApplePascalDialect = .applePascal
 ) {
     if showDot {
         writeLines(renderDotLines(allCallers: allCallers), to: &stream)
@@ -1185,7 +1190,8 @@ func outputResults<Target: TextOutputStream>(
         constants: constants,
         subrangeTypes: subrangeTypes,
         typeConflicts: typeConflicts,
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        dialect: dialect
     )
 
     let lines = renderStructuredLines(

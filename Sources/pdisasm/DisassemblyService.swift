@@ -37,6 +37,19 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
     public var showDot: Bool
     public var dialect: ApplePascalDialect
 
+    enum CodingKeys: String, CodingKey {
+        case verbose
+        case writeMetadata
+        case overwriteMetadata
+        case showMarkup
+        case showPCode
+        case showStackState
+        case showPseudoCode
+        case showPascalSource
+        case showDot
+        case dialect
+    }
+
     public init(verbose: Bool = false, writeMetadata: Bool = false, overwriteMetadata: Bool = false, showMarkup: Bool = true, showPCode: Bool = true, showStackState: Bool = false, showPseudoCode: Bool = true, showPascalSource: Bool = false, showDot: Bool = false, dialect: ApplePascalDialect = .applePascal) {
         self.verbose = verbose
         self.writeMetadata = writeMetadata
@@ -48,6 +61,40 @@ public struct DisassemblyOptions: Hashable, Codable, Sendable {
         self.showPascalSource = showPascalSource
         self.showDot = showDot
         self.dialect = dialect
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            verbose: try container.decode(Bool.self, forKey: .verbose),
+            writeMetadata: try container.decode(
+                Bool.self,
+                forKey: .writeMetadata
+            ),
+            overwriteMetadata: try container.decode(
+                Bool.self,
+                forKey: .overwriteMetadata
+            ),
+            showMarkup: try container.decode(Bool.self, forKey: .showMarkup),
+            showPCode: try container.decode(Bool.self, forKey: .showPCode),
+            showStackState: try container.decode(
+                Bool.self,
+                forKey: .showStackState
+            ),
+            showPseudoCode: try container.decode(
+                Bool.self,
+                forKey: .showPseudoCode
+            ),
+            showPascalSource: try container.decode(
+                Bool.self,
+                forKey: .showPascalSource
+            ),
+            showDot: try container.decode(Bool.self, forKey: .showDot),
+            dialect: try container.decodeIfPresent(
+                ApplePascalDialect.self,
+                forKey: .dialect
+            ) ?? .applePascal
+        )
     }
 }
 

@@ -190,6 +190,15 @@ public indirect enum PascalType: Hashable, Sendable {
         }
     }
 
+    public func renderedType(
+        for dialect: ApplePascalDialect
+    ) -> String {
+        if case .file(let type) = self, type.isText {
+            return dialect.policy.textFileTypeName
+        }
+        return renderedType
+    }
+
     private func renderRecordType(_ type: PascalRecordType) -> String {
         let prefix = type.isPacked ? "PACKED RECORD" : "RECORD"
         if let rawBody = type.rawBody {
