@@ -953,7 +953,8 @@ public func renderDisassembly(
         showPCode: showPCode,
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
-        showDot: showDot
+        showDot: showDot,
+        dialect: result.dialect
     )
     return stream.text
 }
@@ -970,7 +971,8 @@ public func runPdisasm(
     showStackState: Bool = false,
     showPseudoCode: Bool = false,
     showPascalSource: Bool = false,
-    showDot: Bool = false
+    showDot: Bool = false,
+    dialect: ApplePascalDialect = .applePascal
 ) throws {
     let runResult = try DisassemblyService().run(DisassemblyRunRequest(
         source: .file(URL(fileURLWithPath: filename)),
@@ -983,7 +985,8 @@ public func runPdisasm(
             showStackState: showStackState,
             showPseudoCode: showPseudoCode,
             showPascalSource: showPascalSource,
-            showDot: showDot
+            showDot: showDot,
+            dialect: dialect
         )
     ))
     let result = runResult.legacyResult
@@ -1009,7 +1012,8 @@ public func runPdisasm(
         showStackState: showStackState,
         showPseudoCode: showPseudoCode,
         showPascalSource: showPascalSource,
-        showDot: showDot
+        showDot: showDot,
+        dialect: result.dialect
     )
 }
 
