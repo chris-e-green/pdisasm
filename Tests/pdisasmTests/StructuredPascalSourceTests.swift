@@ -73,13 +73,9 @@ final class StructuredPascalSourceTests: XCTestCase {
         XCTAssertEqual(lines, [
             "BEGIN",
             "  IF READY THEN",
-            "    BEGIN",
-            "      VALUE := 1;",
-            "    END",
+            "    VALUE := 1;",
             "  ELSE",
-            "    BEGIN",
-            "      VALUE := 2;",
-            "    END;",
+            "    VALUE := 2;",
             "END",
         ])
     }
@@ -108,16 +104,10 @@ final class StructuredPascalSourceTests: XCTestCase {
         XCTAssertEqual(lines, [
             "BEGIN",
             "  WHILE ACTIVE DO",
-            "    BEGIN",
-            "      IF READY THEN",
-            "        BEGIN",
-            "          WORK();",
-            "        END",
-            "      ELSE",
-            "        BEGIN",
-            "          WAIT();",
-            "        END;",
-            "    END;",
+            "    IF READY THEN",
+            "      WORK();",
+            "    ELSE",
+            "      WAIT();",
             "END",
         ])
     }
@@ -195,9 +185,7 @@ final class StructuredPascalSourceTests: XCTestCase {
         XCTAssertEqual(lines, [
             "BEGIN",
             "  FOR I := 1 TO 10 DO",
-            "    BEGIN",
-            "      USE(I);",
-            "    END;",
+            "    USE(I);",
             "END",
         ])
     }
@@ -210,9 +198,17 @@ final class StructuredPascalSourceTests: XCTestCase {
                     params: [10],
                     pseudoCode: "CASE LEGACY_SELECTOR OF"
                 ),
-                2: instruction(nop, pseudoCode: "ONE()"),
+                2: instruction(
+                    nop,
+                    pseudoCode: "ONE()",
+                    prePseudoCode: ["1: BEGIN"]
+                ),
                 3: instruction(ujp, params: [14]),
-                4: instruction(nop, pseudoCode: "MANY()"),
+                4: instruction(
+                    nop,
+                    pseudoCode: "MANY()",
+                    prePseudoCode: ["2..3, 7: BEGIN"]
+                ),
                 5: instruction(ujp, params: [14]),
                 6: instruction(nop, pseudoCode: "OTHER()"),
                 7: instruction(ujp, params: [14]),
@@ -385,8 +381,8 @@ final class StructuredPascalSourceTests: XCTestCase {
         )
 
         XCTAssertTrue(lines.contains("  FOR I := 1 TO 2 DO"))
-        XCTAssertTrue(lines.contains("      FOR J := 1 TO 3 DO"))
-        XCTAssertTrue(lines.contains("          USE(I, J);"))
+        XCTAssertTrue(lines.contains("    FOR J := 1 TO 3 DO"))
+        XCTAssertTrue(lines.contains("      USE(I, J);"))
     }
 
     func testNonUnitUpdateRemainsWhileWithVisibleAssignment() {

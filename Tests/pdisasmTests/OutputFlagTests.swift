@@ -317,12 +317,23 @@ final class OutputFlagTests: XCTestCase {
             name: "OTHER_LOCAL",
             type: "CHAR"
         )
+        let procedureIdentity = Location(
+            segment: 0,
+            procedure: 1,
+            lexLevel: 0
+        )
         let result = DisassemblyResult(
             sourceFilename: "test",
             segDictionary: dict,
             codeSegments: codeSegs,
             dataSegments: [],
-            allLocations: [local, temporary, parameter, otherProcedureLocal],
+            allLocations: [
+                local,
+                temporary,
+                parameter,
+                otherProcedureLocal,
+                procedureIdentity,
+            ],
             allProcedures: procs,
             allCallers: callers,
             knownRecords: [],
@@ -343,6 +354,7 @@ final class OutputFlagTests: XCTestCase {
         XCTAssertTrue(lines.contains("  TEMP1: BOOLEAN;"))
         XCTAssertFalse(lines.contains("  ARG: INTEGER;"))
         XCTAssertFalse(lines.contains("  OTHER_LOCAL: CHAR;"))
+        XCTAssertFalse(lines.contains("  S0_P1_L0: UNKNOWN;"))
         XCTAssertLessThan(lines.firstIndex(of: "LABEL")!, lines.firstIndex(of: "BEGIN")!)
         XCTAssertLessThan(lines.firstIndex(of: "VAR")!, lines.firstIndex(of: "BEGIN")!)
     }
@@ -396,9 +408,9 @@ final class OutputFlagTests: XCTestCase {
         )
 
         XCTAssertTrue(lines.contains("  IF READY THEN"))
-        XCTAssertTrue(lines.contains("      SELECT_A();"))
+        XCTAssertTrue(lines.contains("    SELECT_A();"))
         XCTAssertTrue(lines.contains("  ELSE"))
-        XCTAssertTrue(lines.contains("      SELECT_B();"))
+        XCTAssertTrue(lines.contains("    SELECT_B();"))
         XCTAssertFalse(lines.contains("  IF READY THEN BEGIN"))
         XCTAssertFalse(lines.contains("  END ELSE BEGIN"))
         XCTAssertFalse(lines.contains("  END (* IF READY *)"))

@@ -1228,6 +1228,7 @@ private func procedureDeclarationLines(
         variables = result.allLocations.filter {
             $0.segment == segmentNumber
                 && $0.procedure == procedureNumber
+                && $0.addr != nil
                 && !$0.isParam
         }.sorted()
     } else {

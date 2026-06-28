@@ -312,15 +312,41 @@ indirect enum PascalStmt: Sendable {
             lines.append("\(indent)END")
             return lines
         case .ifThen(let condition, let thenBlock):
-            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"]
+                + PascalStmt.renderControlBody(
+                    thenBlock,
+                    indentation: indentation + 2,
+                    dialect: dialect
+                )
         case .ifElse(let condition, let thenBlock, let elseBlock):
-            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"] + thenBlock.rendered(indentation: indentation + 2, dialect: dialect) + ["\(indent)ELSE"] + elseBlock.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)IF \(condition.rendered(dialect: dialect)) THEN"]
+                + PascalStmt.renderControlBody(
+                    thenBlock,
+                    indentation: indentation + 2,
+                    dialect: dialect
+                )
+                + ["\(indent)ELSE"]
+                + PascalStmt.renderControlBody(
+                    elseBlock,
+                    indentation: indentation + 2,
+                    dialect: dialect
+                )
         case .whileDo(let condition, let body):
-            return ["\(indent)WHILE \(condition.rendered(dialect: dialect)) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
+            return ["\(indent)WHILE \(condition.rendered(dialect: dialect)) DO"]
+                + PascalStmt.renderControlBody(
+                    body,
+                    indentation: indentation + 2,
+                    dialect: dialect
+                )
         case .repeatUntil(let body, let condition):
             return ["\(indent)REPEAT"] + body.flatMap { $0.rendered(indentation: indentation + 2, dialect: dialect) } + ["\(indent)UNTIL \(condition.rendered(dialect: dialect));"]
         case .forLoop(let variable, let start, let limit, let direction, let body):
-            return ["\(indent)FOR \(renderPascalIdentifier(variable, dialect: dialect)) := \(start.rendered(dialect: dialect)) \(direction.rawValue) \(limit.rendered(dialect: dialect)) DO"] + body.rendered(indentation: indentation + 2, dialect: dialect)
+            let header = "\(indent)FOR \(renderPascalIdentifier(variable, dialect: dialect)) := \(start.rendered(dialect: dialect)) \(direction.rawValue) \(limit.rendered(dialect: dialect)) DO"
+            return [header] + PascalStmt.renderControlBody(
+                body,
+                indentation: indentation + 2,
+                dialect: dialect
+            )
         case .caseStatement(let statement):
             var lines = [
                 "\(indent)CASE \(statement.expression.rendered(dialect: dialect)) OF"
@@ -367,6 +393,23 @@ indirect enum PascalStmt: Sendable {
             return trimmed
         }
         return "\(trimmed);"
+    }
+
+    private static func renderControlBody(
+        _ body: PascalStmt,
+        indentation: Int,
+        dialect: ApplePascalDialect
+    ) -> [String] {
+        if case .block(let statements) = body,
+            statements.count == 1,
+            let statement = statements.first
+        {
+            return statement.rendered(
+                indentation: indentation,
+                dialect: dialect
+            )
+        }
+        return body.rendered(indentation: indentation, dialect: dialect)
     }
 
     private static func renderCaseBody(

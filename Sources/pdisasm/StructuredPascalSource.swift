@@ -511,6 +511,10 @@ struct StructuredPascalSourceBuilder {
             || trimmed.hasPrefix("ELSE")
             || trimmed.hasPrefix("UNTIL")
             || trimmed.range(
+                of: #"^[+-]?[0-9]+(?:\.\.[+-]?[0-9]+)?(?:,\s*[+-]?[0-9]+(?:\.\.[+-]?[0-9]+)?)*:\s*BEGIN$"#,
+                options: .regularExpression
+            ) != nil
+            || trimmed.range(
                 of: #"^LAB[0-9]+:$"#,
                 options: .regularExpression
             ) != nil

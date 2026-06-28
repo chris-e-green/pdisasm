@@ -182,6 +182,84 @@ final class PascalSourceSyntaxTests: XCTestCase {
         XCTAssertEqual(statement.rendered(), ["DEST := A + 1;"])
     }
 
+    func testForRendererUnwrapsSingleStatementBlock() {
+        let statement = PascalStmt.forLoop(
+            variable: "S_IDX",
+            start: .integer(1),
+            limit: .call(name: "LENGTH", arguments: [.identifier("S_COPY")]),
+            direction: .to,
+            body: .block([
+                .raw("TURTLEGR.WCHAR(S_COPY[S_IDX])")
+            ])
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "FOR S_IDX := 1 TO LENGTH(S_COPY) DO",
+            "  TURTLEGR.WCHAR(S_COPY[S_IDX]);",
+        ])
+    }
+
+    func testForRendererKeepsMultiStatementBlock() {
+        let statement = PascalStmt.forLoop(
+            variable: "I",
+            start: .integer(1),
+            limit: .integer(2),
+            direction: .to,
+            body: .block([
+                .call(name: "FIRST", arguments: []),
+                .call(name: "SECOND", arguments: []),
+            ])
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "FOR I := 1 TO 2 DO",
+            "  BEGIN",
+            "    FIRST();",
+            "    SECOND();",
+            "  END",
+        ])
+    }
+
+    func testIfElseRendererUnwrapsSingleStatementBlocks() {
+        let statement = PascalStmt.ifElse(
+            condition: .identifier("READY"),
+            thenBlock: .block([
+                .assignment(target: .identifier("VALUE"), source: .integer(1))
+            ]),
+            elseBlock: .block([
+                .assignment(target: .identifier("VALUE"), source: .integer(0))
+            ])
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "IF READY THEN",
+            "  VALUE := 1;",
+            "ELSE",
+            "  VALUE := 0;",
+        ])
+    }
+
+    func testWhileRendererUnwrapsSingleStatementBlock() {
+        let statement = PascalStmt.whileDo(
+            condition: .identifier("READY"),
+            body: .block([
+                .assignment(
+                    target: .identifier("COUNT"),
+                    source: .binary(
+                        .add,
+                        .identifier("COUNT"),
+                        .integer(1)
+                    )
+                )
+            ])
+        )
+
+        XCTAssertEqual(statement.rendered(), [
+            "WHILE READY DO",
+            "  COUNT := COUNT + 1;",
+        ])
+    }
+
 
     func testIfElseRendererDoesNotPutSemicolonBeforeElse() {
         let statement = PascalStmt.ifElse(
