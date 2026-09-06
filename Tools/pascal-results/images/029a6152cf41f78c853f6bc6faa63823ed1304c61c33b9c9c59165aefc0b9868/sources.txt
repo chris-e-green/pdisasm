@@ -1,0 +1,5 @@
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/educational/algebra mentor.zip!Algebra Mentor Test Generator.dsk
+unzip/educational/algebra mentor/Algebra Mentor Test Generator.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Educational - [DSK] (TOSEC-v2010-06-26_CM)/Algebra Mentor Test Generator (1986)(Wadsworth)[PASCAL].zip!Algebra Mentor Test Generator (1986)(Wadsworth)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/Algebra Mentor Test Generator (1986)(Wadsworth).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Educational/Algebra Mentor Test Generator (1986)(Wadsworth).zip!Algebra Mentor Test Generator (1986)(Wadsworth).dsk

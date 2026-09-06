@@ -493,13 +493,11 @@ Tasks:
 
 - [ ] Verify CSP entries against Apple Pascal version-specific documentation.
 - [ ] Add missing standard procedures/functions where appropriate.
-- [ ] Model library functions such as `SIN`, `COS`, `LOG`, `ATAN`, `LN`, `EXP`,
-      and `SQRT` when they appear through library calls rather than CSPs.
 - [ ] Add metadata for common Apple system units.
 - [ ] Add tests for each standard procedure signature.
 - [ ] Add tests for no-argument standard functions.
 - [ ] Add tests for real-valued standard functions.
-- [ ] Add fallback rendering for unknown standard procedure numbers.
+- [x] Add fallback rendering for unknown standard procedure numbers.
 
 ### 6.3 Model Apple Pascal system units and common libraries
 
@@ -508,6 +506,8 @@ Source reconstruction can improve if known Apple unit APIs are modeled.
 Tasks:
 
 - [ ] Create metadata format for known units and exported declarations.
+- [ ] Model `SIN`, `COS`, `LOG`, `ATAN`, `LN`, `EXP`, and `SQRT` as exports
+      from the `TRANSCEND` intrinsic library, not as CSPs.
 - [ ] Add entries for common Apple Pascal system facilities.
 - [ ] Infer `USES` clauses when calls reference known unit APIs.
 - [ ] Render qualified or unqualified names according to source-mode policy.

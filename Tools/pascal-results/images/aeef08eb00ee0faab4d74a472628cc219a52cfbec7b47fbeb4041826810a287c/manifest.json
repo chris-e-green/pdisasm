@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "aeef08eb00ee0faab4d74a472628cc219a52cfbec7b47fbeb4041826810a287c",
+  "volumeName": "M042083",
+  "files": {
+    "systemPascal": {
+      "sha256": "09b1b2a8646708dc1d0556438fe77bde6239f1d0167b9791d587f34d13ab5b8a"
+    },
+    "systemLibrary": {
+      "sha256": "b7ab222051e0984eba3688852fc0fdd645e7bff6fcebaf6eba3738f3b36c20ea"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "913ac023856b41a24cf585df81a2f3a8a4ebd8ed3dd2dd86a1eef1c69d87f2fb"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "6f95245e71173839bf5f064e06c4f78de1728c77bc9a4f04be58a1a1b44dc943"
+  }
+}

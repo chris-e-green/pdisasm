@@ -1,0 +1,5 @@
+images/games/simulation/Gato v1.3.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/simulation/Gato v1.3.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/Gato (1985)(Spectrum Holobyte)[PASCAL].zip!Gato (1985)(Spectrum Holobyte)[PASCAL].dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/Gato (1985)(Spectrum Holobyte).zip!Gato (1985)(Spectrum Holobyte).dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/G/Gato (1985)(Spectrum Holobyte).zip!Gato (1985)(Spectrum Holobyte).dsk

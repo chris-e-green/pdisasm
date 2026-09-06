@@ -1,0 +1,8 @@
+images/misc/3d0g_knight_collection/189b - Stephen King's The Mist.dsk
+images/games/adventure/the_mist.dsk
+unzip/pd_collections/misc/2014.glitch.apple.collection/indexed/THE_MIST.DSK
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson][PASCAL].zip!Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson][PASCAL].dsk
+unzip/pd_collections/tosec/Apple II - Games (TOSEC-v0.24_CM)/roms/Stephen King - The Mist (1985)(Mindscape)[cr].zip!Stephen King - The Mist (1985)(Mindscape)[cr].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/game/Stephen King - The Mist (1985)(Mindscape)[cr].dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson].zip!Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson].dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/S/Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson].zip!Stephen King - The Mist (1985)(Mindscape)[cr Sean Johnson].dsk

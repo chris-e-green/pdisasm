@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "f62ac0fee73131c93828a337ea68c2b695635fe5bd2c9b963ba8b4c8e1325d8f",
+  "volumeName": "FBQUEST",
+  "files": {
+    "systemPascal": {
+      "sha256": "2dc60c5c04c061bcff0771a5742820e6815e52aa0c60246301286d61e5258009"
+    },
+    "systemLibrary": {
+      "sha256": "0b8a91c8ee254a8dca38bcce29c5543b22ea5267a6beb380802ada0fb647d6de"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "beba89aaf3558e0cec391faaee28c2ddc13b24f37a2d0a54f0190e243c540f47"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "64aea83c698310acba4697f7d4d02ea77965eac00b3b3c287bc21e23b1780e30",
+    "combinedSHA256": "1036ec5b27cbee434590c91eab6789669000c717cbda9be8c742d298f9154155"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "684125c2883053dbeddea8d30f9f6f11012526b7adfb4a655826d873684b6c7d",
+  "volumeName": "CLASMTH",
+  "files": {
+    "systemPascal": {
+      "sha256": "02f0576644c3c2d30ef8671fc8fba306a8123a3661e896eaac5393bc5a7c8a14"
+    },
+    "systemLibrary": {
+      "sha256": "8c07c18fe5803ebde4878e8bf511ce3c8969f353498a1007331fe9e322ad5cef"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "7ce54508b9f1564c47d1db921b530c9702c6e91cee177ccbf89bc40f88a1bd5f"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

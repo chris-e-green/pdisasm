@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "89b62d834ef8ff02af1a1691425c9a3e8b53b766e407137ae77a76bbc05c36dc",
+  "volumeName": "PLOT128",
+  "files": {
+    "systemPascal": {
+      "sha256": "2ec2736219293eb985f5da6faa66c76606ea981f4984aba3d1b2131fc6117f2c"
+    },
+    "systemLibrary": {
+      "sha256": "cc13458809c4664da511e3a0866abf152627e53b22aaac455eb1da123834db9c"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "63c1c07794a1ab9e0965f68393001f5fc1fff55fe3b7cc6aa7fb12bf66f35097"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

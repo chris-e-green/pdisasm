@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "6852eb58060fd48492da13ac878b394a7cabceb79042664f2f36f96d38623e2b",
+  "volumeName": "DRFTMTR",
+  "files": {
+    "systemPascal": {
+      "sha256": "2ec2736219293eb985f5da6faa66c76606ea981f4984aba3d1b2131fc6117f2c"
+    },
+    "systemLibrary": {
+      "sha256": "3144081b4ff91d7c191f7c76cad999070507733928f47cdf61edea53dd96a9a1"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "63c1c07794a1ab9e0965f68393001f5fc1fff55fe3b7cc6aa7fb12bf66f35097"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "5035225f05355cc6257b5732308f3d7677a0b784d6510fe5f3f96522204a945c",
+    "block1SHA256": "39d25d28a25fa8f5803420c0fd4c3cb2988408f0d5637d18562a17f73a950dd2",
+    "combinedSHA256": "048c089e53438cc7066a73065409827ee44a382c798ce3718897716279cfc3dc"
+  }
+}

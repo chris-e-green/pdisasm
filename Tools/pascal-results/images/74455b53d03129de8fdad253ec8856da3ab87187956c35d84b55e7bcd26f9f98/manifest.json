@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "74455b53d03129de8fdad253ec8856da3ab87187956c35d84b55e7bcd26f9f98",
+  "volumeName": "GBIVIEW",
+  "files": {
+    "systemPascal": {
+      "sha256": "02f0576644c3c2d30ef8671fc8fba306a8123a3661e896eaac5393bc5a7c8a14"
+    },
+    "systemLibrary": {
+      "sha256": "c0574a971c5a0d6085c4ea439b1c6a0ff8c95bee7f8e85475d93f5cf8434ed47"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "e8a84f243578f2ab42c72b5afb5d35b628209fa72ea9877ce8724dde4663f2d7"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

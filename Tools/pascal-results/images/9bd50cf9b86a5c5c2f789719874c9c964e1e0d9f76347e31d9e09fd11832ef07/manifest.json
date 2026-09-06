@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "9bd50cf9b86a5c5c2f789719874c9c964e1e0d9f76347e31d9e09fd11832ef07",
+  "volumeName": "MA-SII",
+  "files": {
+    "systemPascal": {
+      "sha256": "95bf9373628c08a90e967f75cd0323124d13b7d71d57e015d113b44b9633ee11"
+    },
+    "systemLibrary": {
+      "sha256": "4af3c3e8812f28539a9b783a889456a769d7f215644c30b3779a64f9ff726e22"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "2443c23e7538ebfc0227525e4a80878dfae0b96a8a445cb1c4b4332f433a8ae6"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

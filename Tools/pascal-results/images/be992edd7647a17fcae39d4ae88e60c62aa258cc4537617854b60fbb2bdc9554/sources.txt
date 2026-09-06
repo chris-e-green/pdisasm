@@ -1,0 +1,2 @@
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/basic/ApplesoftSampler.zip!IIC.LOGO.dsk
+unzip/programming/basic/ApplesoftSampler/IIC.LOGO.dsk

@@ -1,0 +1,4 @@
+images/programming/pascal/ucsd/UCSD Pascal 1.1_1.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/pascal/ucsd/UCSD Pascal 1.1_1.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/Apple II Pascal v1.1 (1980)(Apple)(Disk 2 of 4)[Boot][PASCAL].zip!Apple II Pascal v1.1 (1980)(Apple)(Disk 2 of 4)[Boot][PASCAL].dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/Apple II Pascal v1.1 (1980)(Apple)(Disk 2 of 4)[Boot].zip!Apple II Pascal v1.1 (1980)(Apple)(Disk 2 of 4)[Boot].dsk

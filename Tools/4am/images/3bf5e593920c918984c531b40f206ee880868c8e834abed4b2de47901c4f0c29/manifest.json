@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "3bf5e593920c918984c531b40f206ee880868c8e834abed4b2de47901c4f0c29",
+  "volumeName": "TOOLKIT",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "d46a993e4deb6f12c8ddece9b864f988eb0b5c2518e867dc13546cf578f36793"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "7f4b73233346ce1c7030c6ca14f2a2366a49256baa4301c280d59df8d9791efe"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "d260f1e4a2022deb70d761b8912440d0e753eeae8dc5a3339d3913c3ebf042cf",
+    "block1SHA256": "2fc17517dc52347727126fe0f101b31baa02a9c015931e2a975602ced57337fb",
+    "combinedSHA256": "802a8c6c14f2461b8132dfbcda29cbdc91d8acde288b022797765a232e32555a"
+  }
+}

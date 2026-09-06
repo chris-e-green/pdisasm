@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "85a277979c617b185bba63788b9c80184ead269a8eada9ac91163211cc66e642",
+  "volumeName": "LOGORUN",
+  "files": {
+    "systemPascal": {
+      "sha256": "e44ba3e9ef9840bec2b28407a825d29f9fb3e0cc1c84f137fa0c887489e21af6"
+    },
+    "systemLibrary": {
+      "sha256": "1a5f2ff7734b511d344cc39509867f6ef72e1f636cb69a8c53fce28ec0b528ec"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "8fb30ba2a7b54d49b55536d13db8252d192f230df14a2f0eba5a8830c9fe1c2e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

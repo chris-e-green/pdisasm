@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "cfe7fa73c34f2572587739557c1210398b318002bf8174ea300efda0419ad358",
+  "volumeName": "KBDRUN",
+  "files": {
+    "systemPascal": {
+      "sha256": "e44ba3e9ef9840bec2b28407a825d29f9fb3e0cc1c84f137fa0c887489e21af6"
+    },
+    "systemLibrary": null,
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "7df7ad195bec6bcfbc25bda7df6ca4645562ee0a5cad0fc5a08a1f56391a25c7"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

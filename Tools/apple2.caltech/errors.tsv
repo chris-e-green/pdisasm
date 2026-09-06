@@ -1,0 +1,20 @@
+source	stage	diagnostic
+appletalk/atalk.shk!MAKE.ZIP	archive	archive extraction failed
+miscinfo/internet.shk	archive	ShrinkIt extraction failed
+8bit/patches/clockdatepatch.shk	archive	ShrinkIt extraction failed
+8bit/comm/primebbs/primemanual.shk	archive	ShrinkIt extraction failed
+8bit/dev/lisa/lisamst2.shk	archive	ShrinkIt extraction failed
+8bit/dev/lisa/lisamst1.shk	archive	ShrinkIt extraction failed
+8bit/games/whiplash.shk	archive	ShrinkIt extraction failed
+addons/truetype/rothman.shk	archive	ShrinkIt extraction failed
+addons/nda/superinfo2.shk	archive	ShrinkIt extraction failed
+utils/innerdrive.shk	archive	ShrinkIt extraction failed
+shellprogs/emodula2.shk	archive	ShrinkIt extraction failed
+graphics/otherprogs/bd2.shk	archive	ShrinkIt extraction failed
+graphics/otherprogs/bd1.shk	archive	ShrinkIt extraction failed
+graphics/converters/gif3200v02.shk	archive	ShrinkIt extraction failed
+games/puyopuyo.shk	archive	ShrinkIt extraction failed
+games/ecomaniacs.shk	archive	ShrinkIt extraction failed
+demos/ipgkf93demo.shk	archive	ShrinkIt extraction failed
+demos/acsdemo.shk	archive	ShrinkIt extraction failed
+demos/gatedemo.shk	archive	ShrinkIt extraction failed

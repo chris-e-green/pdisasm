@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "2ec0fa48ba119fe0ca91f713bf19e7f5c93014ce14f43f01c90766ff58a745a0",
+  "volumeName": "KOALA",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": {
+      "sha256": "befe126440ded7bebb4165ee3aeb8ba862373b62a6065d595562e71b4bc6a512"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "93629b22a4916e1f8affaa738a0637665191940152928b5c7d876ff9d800a113"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "e730b993915d24ffa83f807625fa63387f8136be4ed259e434e2db63b9609238",
+    "combinedSHA256": "f9414a1892664e4affd035a3b3415365b74f6a69c997dd71bb29e084fb8cf0d1"
+  }
+}

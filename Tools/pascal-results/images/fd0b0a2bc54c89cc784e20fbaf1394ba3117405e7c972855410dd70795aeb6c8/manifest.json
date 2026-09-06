@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "fd0b0a2bc54c89cc784e20fbaf1394ba3117405e7c972855410dd70795aeb6c8",
+  "volumeName": "BADBEJ",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "af42d639420f62f2e270807ae58a7def43aa629843b38c0242d20263d94bae67"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49b1bbbd162e00df30a59b10aa591032e16b0fa5fec88512053827339b96383e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "6a83ca12c9f169562d0b486c85d9698c6c2b506e8ab430149733dbd93efb9b29",
+    "combinedSHA256": "f47c1d4df0e94a3ea6a9aa7c3c1f6fcca4ee91fd0990a72d35e60644962874e2"
+  }
+}

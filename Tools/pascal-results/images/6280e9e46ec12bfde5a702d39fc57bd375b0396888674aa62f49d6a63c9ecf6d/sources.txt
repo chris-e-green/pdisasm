@@ -1,0 +1,6 @@
+images/hardware/video/Le Chat Mauve Side 1.dsk
+images/productivity/graphics/misc/chatmau1.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/graphics/chatmau1.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/ZZZ-UNK-Chatmau (19xx)(-)(Side A)(fr)[b][PASCAL].zip!ZZZ-UNK-Chatmau (19xx)(-)(Side A)(fr)[b][PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/ZZZ-UNK-Chatmau (19xx)(-)(Disk 1 of 1 Side A).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/ZZZ-UNK-Chatmau (19xx)(-)(Side A)[b].zip!ZZZ-UNK-Chatmau (19xx)(-)(Side A)[b].dsk

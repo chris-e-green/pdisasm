@@ -123,13 +123,8 @@ let cspProcs: [Int: (String, [Identifier], String)] = [
     22: ("UNLOADSEGMENT", [Identifier(name: "SEGMENT", type: "INTEGER")], ""),
     23: ("TRUNC", [Identifier(name: "NUM", type: "REAL")], "INTEGER"),
     24: ("ROUND", [Identifier(name: "NUM", type: "REAL")], "INTEGER"),
-    25: ("SIN", [], ""),  // not implemented as standard procedure (library function)
-    26: ("COS", [], ""),  // not implemented as standard procedure (library function)
-    27: ("LOG", [], ""),  // not implemented as standard procedure (library function)
-    28: ("ATAN", [], ""),  // not implemented as standard procedure (library function)
-    29: ("LN", [], ""),  // not implemented as standard procedure (library function)
-    30: ("EXP", [], ""),  // not implemented as standard procedure (library function)
-    31: ("SQRT", [], ""),  // not implemented as standard procedure (library function)
+    // 25-31 are not Apple Pascal CSPs. Transcendental functions are imported
+    // from the TRANSCEND intrinsic library and use ordinary library calls.
     32: ("MARK", [Identifier(name: "NP", type: "POINTER")], ""),
     33: ("RELEASE", [Identifier(name: "NP", type: "POINTER")], ""),
     34: ("IORESULT", [], "INTEGER"),

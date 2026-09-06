@@ -129,6 +129,14 @@ final class ApplePascalDialectTests: XCTestCase {
         )
     }
 
+    func testTranscendentalFunctionsAreNotStandardProcedures() {
+        for dialect in ApplePascalDialect.allCases {
+            for procNum in 25...31 {
+                XCTAssertNil(standardProcedures(for: dialect)[procNum])
+            }
+        }
+    }
+
     func testServiceCarriesSelectedDialectIntoResult() throws {
         let fixture = try XCTUnwrap(
             Bundle.module.url(

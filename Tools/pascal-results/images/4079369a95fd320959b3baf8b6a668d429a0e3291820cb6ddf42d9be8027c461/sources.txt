@@ -1,0 +1,2 @@
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/misc/high_stakes.dsk.gz
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/adventure/high_stakes.dsk.gz

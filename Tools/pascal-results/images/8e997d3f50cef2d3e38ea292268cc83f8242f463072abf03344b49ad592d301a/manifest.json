@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "8e997d3f50cef2d3e38ea292268cc83f8242f463072abf03344b49ad592d301a",
+  "volumeName": "SMARTYP",
+  "files": {
+    "systemPascal": {
+      "sha256": "02f0576644c3c2d30ef8671fc8fba306a8123a3661e896eaac5393bc5a7c8a14"
+    },
+    "systemLibrary": {
+      "sha256": "03b45b4d533246162f4880c5c48333ba580fbc2790828e3dcd0f6b7b6a2b2710"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "7ce54508b9f1564c47d1db921b530c9702c6e91cee177ccbf89bc40f88a1bd5f"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "598920635396457b07f96a390c8ceb3fdaa255655413a157297c931809caeb13",
+    "combinedSHA256": "aa5ab02e544b1d0299568ddfaa8c7280aa2e62cfc9ca55b54ce7ec4c898221e4"
+  }
+}

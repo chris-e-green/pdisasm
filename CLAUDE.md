@@ -50,7 +50,7 @@ The test target uses Swift language mode v5; all other targets use v6. The GUI t
 
 ### Disassembly pipeline (`DisassemblyService.run`)
 
-`DisassemblyService` in `DisassemblyService.swift` orchestrates five sequential stages:
+`DisassemblyService` orchestrates five sequential stages:
 
 1. **`CodefileLoadStage`** — reads raw bytes, validates the segment dictionary header.
 2. **`MetadataMergeStage`** — loads metadata from CSV/JSON files via `MetadataRepository` and merges bundles by precedence into a `MetadataSnapshot`.
@@ -104,7 +104,7 @@ Binary fixtures live in `Tests/pdisasmTests/Fixtures/`. `BinaryFixtureSnapshotTe
 ## Testing expectations
 
 - Add or update focused XCTest coverage for behavioral changes.
-- Use existing binary fixtures; do not change golden snapshots or metadata merely
+- Use existing binary fixtures in `Tests/pdisasmTests/Fixtures/`; do not change golden snapshots or metadata merely
   to mask a regression.
 - Run the narrowest relevant test target first, then `swift test` for changes
   that affect shared core behavior, metadata, snapshots, CLI output, or GUI view

@@ -1,0 +1,2 @@
+unzip/non-english/french/apple/apple_lappleautravail_disks/LAPPLEAUTRAVAIL.dsk
+unzip/non-english/french/misc/ApplePresenteIIc/TRAVAIL.DSK

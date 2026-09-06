@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "3d8b8eee232af4a4be5b5cbfb675ea0160ddf4d65fbf81e70154f430a20c9d18",
+  "volumeName": "PROGDSK",
+  "files": {
+    "systemPascal": {
+      "sha256": "98eb236ebae21950de87485bd83256642a73bb0727aae60d2cbbaf97165c6e15"
+    },
+    "systemLibrary": {
+      "sha256": "25409191443b143e6777dde87039439d6d67616c101c5d9ee8a6d1764de09d90"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "2d9d547e62a2b566b2cb2a26f311b321ab1d95a06cf6aaa68d1e9930fdd6b40d"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

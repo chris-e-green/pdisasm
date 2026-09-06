@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "eb774b1b85622d87bc61ba593c4ea5bc8a4d9b0c1418ecd4c82a60b5e566db01",
+  "volumeName": "PICEDIT",
+  "files": {
+    "systemPascal": {
+      "sha256": "46e2096b907947368d310929303a04005b39c4a278e3a7de2225c355b4522694"
+    },
+    "systemLibrary": {
+      "sha256": "e33a428a9925dbc4c1931c7eb0a1ec975537f9a211f38fca066a916fd9fea52a"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

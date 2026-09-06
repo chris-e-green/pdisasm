@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "2325cdb9e6137a487c43d841f1496bccd60da4e9e7752d648297b29b22dbd4a5",
+  "volumeName": "MICRO.T",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "b80fa08aa0e35d8a8f92e7df7fa524616629e9de10b8f54ad7c215bc5ac26c95"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49b1bbbd162e00df30a59b10aa591032e16b0fa5fec88512053827339b96383e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "c9d9d605cd3c8eb5bf467ec0fec8bd078ebdef6824689559bbac3daaede0dd75",
+    "combinedSHA256": "25facf49800e2f4a9fd38980601b8fee8a7b2933be32315dc0afba4e286ca755"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "a64ca03a5deb3153616c4bdd67ba4cb228ebe2debf507426368bf2a831010975",
+  "volumeName": "SIDE2",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "a7a5d6d09cb95b9802a1895eea8186addd1d7509acd49e5228ead28d748dff8c"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49b1bbbd162e00df30a59b10aa591032e16b0fa5fec88512053827339b96383e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "037a5300447a45d40348a2c1acc183e370db7d3c1d6af866cfcd5517ea108741",
+    "combinedSHA256": "71a96ef2629210002ac95235d6bdd8eedce6e4f5c6fb006dad68555a1d4bca96"
+  }
+}

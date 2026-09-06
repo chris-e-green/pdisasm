@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "b210d8fb9969d786f4628e080d8497b7d1aa173de0a340274f097a0fbd4bfff0",
+  "volumeName": "FROG",
+  "files": {
+    "systemPascal": {
+      "sha256": "2dc60c5c04c061bcff0771a5742820e6815e52aa0c60246301286d61e5258009"
+    },
+    "systemLibrary": {
+      "sha256": "85a4cd902d1cb48ee224d4741cb67eaa1280971bde9150a1edb7797142db7e47"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "a2ed730a4536db130f0f789c4ca1ef00f391692d7df6af8890b1ca5c51200cec"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "4fb885752eaa4b34da59a79d5e92aa053a5edc7e1732cb96497f9cfbbda82f72",
+    "block1SHA256": "cd40871d97a463dd8446941908bb5fd978de8184f1d5bda733a849a2ecfb17d9",
+    "combinedSHA256": "782ac20eb3fd6daef71ec8ea89f2d1b08a55c01da5606e194fa4c4ece07bfc24"
+  }
+}

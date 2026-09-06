@@ -1,0 +1,6 @@
+images/games/adventure/indiana_jones_revenge_of_the_ancients.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/Indiana Jones in Revenge of the Ancients (1987)(Mindscape)[PASCAL].zip!Indiana Jones in Revenge of the Ancients (1987)(Mindscape)[PASCAL].dsk
+unzip/pd_collections/tosec/Apple II - Games (TOSEC-v0.24_CM)/roms/Indiana Jones In Revenge of The Ancients (1987)(Mindscape).zip!Indiana Jones In Revenge of The Ancients (1987)(Mindscape).dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/game/Indiana Jones In Revenge of The Ancients (1987)(Mindscape).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/Indiana Jones in Revenge of the Ancients (1987)(Mindscape).zip!Indiana Jones in Revenge of the Ancients (1987)(Mindscape).dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/I/Indiana Jones in Revenge of the Ancients (1987)(Mindscape).zip!Indiana Jones in Revenge of the Ancients (1987)(Mindscape).dsk

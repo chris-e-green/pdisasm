@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "bd9dd9b12c99f645b9354aad119dc36af7f9bb88798329b517b854caf880480e",
+  "volumeName": "EGPROG",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "05dc27c0bacfca3dd281f203f5e8415771d91790657c5a6576e1152fd92086aa"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49f00c76ef90887cb8c49cfeee8f9f804cab505ea3d5282b910d5a08e8750a2e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "018884d55fac66026c5aaa5729044c75fc855a2c76d3ccebdea27bf6daf5c25b",
+    "combinedSHA256": "187b52d6d145a848d9dcb28d20513e6ba34a3f6a039b1ea2fe3203159f1cf141"
+  }
+}

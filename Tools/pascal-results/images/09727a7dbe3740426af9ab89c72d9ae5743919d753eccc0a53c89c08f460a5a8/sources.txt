@@ -1,0 +1,6 @@
+images/productivity/finance/mousebudget1.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/Mouse Budget (1985)(Version Soft)(Side A)[cr Digital Gang][PASCAL].zip!Mouse Budget (1985)(Version Soft)(Side A)[cr Digital Gang][PASCAL].dsk
+unzip/pd_collections/tosec/Apple II - Games (TOSEC-v0.24_CM)/roms/Mouse Budget (1985)(Version Soft)[cr](Disk 1 of 1 Side A).zip!Mouse Budget (1985)(Version Soft)[cr](Disk 1 of 1 Side A).dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/game/Mouse Budget (1985)(Version Soft)[cr](Disk 1 of 1 Side A).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/Mouse Budget (1985)(Version Soft)(Side A)[cr Digital Gang].zip!Mouse Budget (1985)(Version Soft)(Side A)[cr Digital Gang].dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/M/Mouse Budget (1985)(Version Soft).zip!Mouse Budget (1985)(Version Soft)(Disk 1 of 1 Side A)[cr Digital Gang].dsk

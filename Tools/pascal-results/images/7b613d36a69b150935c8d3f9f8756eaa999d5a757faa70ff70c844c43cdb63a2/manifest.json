@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "7b613d36a69b150935c8d3f9f8756eaa999d5a757faa70ff70c844c43cdb63a2",
+  "volumeName": "BOOT",
+  "files": {
+    "systemPascal": {
+      "sha256": "2dc60c5c04c061bcff0771a5742820e6815e52aa0c60246301286d61e5258009"
+    },
+    "systemLibrary": {
+      "sha256": "e6311ada386b286b2318284da7fe7b25b005a166d53ad71ee951f821caf4f77b"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTND.APPLE",
+        "sha256": "1d5cd21aef92011d473d8403366f05bedc878ca77ec5ce855281f1109ee2f770"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "0f35a2b7b5873e10dc7de72c221a36ff166cd50b2f4897f5c3e8d5083990da99",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "2ffb04276585facf6703ba691cfbc0cbf017eddedcdff54575320595bd960ed1"
+  }
+}

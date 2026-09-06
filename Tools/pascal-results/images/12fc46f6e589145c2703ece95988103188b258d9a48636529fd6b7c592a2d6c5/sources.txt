@@ -1,0 +1,6 @@
+unzip/games/rpg/wizardry/wizardry_I/Wizardry (patched)/Wizardry-Proving-Grounds-Boot-40column.dsk
+files/images/games/collections/Wizard Replay v1.0.hdv/X/SCARLET.BROTHER/WIZARDRY1.B
+files/images/games/collections/Wizard Replay v1.0.hdv/X/EMPERORS.SEAL/WIZARDRY1.B
+files/images/games/collections/Wizard Replay v1.0.hdv/X/OCONNORS.MINE/WIZARDRY1.B
+files/images/games/collections/Wizard Replay v1.0.hdv/X/CAT.OF.VLAD/WIZARDRY1.B
+files/images/games/collections/Wizard Replay v1.0.hdv/X/NIHONBASHI/WIZARDRY1.B

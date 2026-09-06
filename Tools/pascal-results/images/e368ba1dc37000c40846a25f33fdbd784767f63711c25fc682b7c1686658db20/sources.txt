@@ -1,0 +1,5 @@
+images/masters/model_specific/Apple_Presents_the_IIe (mid 1982).dsk
+images/masters/model_specific/Apple Presents Apple - B680-0178-A.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/Apple Presents... Apple (1982)(Apple)[PASCAL].zip!Apple Presents... Apple (1982)(Apple)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/Apple Presents... Apple (19xx)(Apple).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/Apple Presents... Apple (1982)(Apple).zip!Apple Presents... Apple (1982)(Apple).dsk

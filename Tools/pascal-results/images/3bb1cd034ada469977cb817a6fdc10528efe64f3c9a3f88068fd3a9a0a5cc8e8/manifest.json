@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "3bb1cd034ada469977cb817a6fdc10528efe64f3c9a3f88068fd3a9a0a5cc8e8",
+  "volumeName": "P.SIM6",
+  "files": {
+    "systemPascal": {
+      "sha256": "efe7629a1794860c2db6919e3f0b3f6e9437c94438626e22dd78d9ac523a55eb"
+    },
+    "systemLibrary": null,
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "6ab94396865ed6942ced3b61fe998b3d043d921a7566963dee64f74c48fd876e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

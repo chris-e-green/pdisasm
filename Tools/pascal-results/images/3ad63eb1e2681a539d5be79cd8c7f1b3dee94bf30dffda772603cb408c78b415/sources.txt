@@ -1,0 +1,8 @@
+images/disk_utils/universal_file_converter.dsk
+images/disk_utils/universalfileconversion.dsk
+images/programming/pascal/UFC.Pascal.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/disk_utils/universal_file_converter.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/pascal/UFC.Pascal.DSK
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/ZZZ-UNK-Universal_file_converter (19xx)(-)[PASCAL].zip!ZZZ-UNK-Universal_file_converter (19xx)(-)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/ZZZ-UNK-Universal_file_converter (19xx)(-).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/ZZZ-UNK-Universal_file_converter (19xx)(-).zip!ZZZ-UNK-Universal_file_converter (19xx)(-).dsk

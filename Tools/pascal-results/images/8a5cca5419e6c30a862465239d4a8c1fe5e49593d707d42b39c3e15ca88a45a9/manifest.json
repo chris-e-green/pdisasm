@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "8a5cca5419e6c30a862465239d4a8c1fe5e49593d707d42b39c3e15ca88a45a9",
+  "volumeName": "WIZPLS",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": {
+      "sha256": "02c81bbb9b867a984775c71bea5eb8d149b51864cbfdfae66bde5f9d3b42bd50"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTND.APPLE",
+        "sha256": "c8fce08c8a30307d4b2bb7c3cd2534006840025b4813e0231994800a0061a606"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "0f35a2b7b5873e10dc7de72c221a36ff166cd50b2f4897f5c3e8d5083990da99",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "2ffb04276585facf6703ba691cfbc0cbf017eddedcdff54575320595bd960ed1"
+  }
+}

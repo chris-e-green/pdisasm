@@ -1,0 +1,4 @@
+images/productivity/database/Quick File II.dsk
+images/productivity/database/Quick File II Program - 680-0183-A.dsk
+images/productivity/database/Quick File Program.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/productivity/database/Quick File Program.dsk

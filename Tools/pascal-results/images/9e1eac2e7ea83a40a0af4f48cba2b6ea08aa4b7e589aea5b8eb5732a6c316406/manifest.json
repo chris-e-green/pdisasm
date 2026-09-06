@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "9e1eac2e7ea83a40a0af4f48cba2b6ea08aa4b7e589aea5b8eb5732a6c316406",
+  "volumeName": "POKER",
+  "files": {
+    "systemPascal": {
+      "sha256": "2dc60c5c04c061bcff0771a5742820e6815e52aa0c60246301286d61e5258009"
+    },
+    "systemLibrary": {
+      "sha256": "85a4cd902d1cb48ee224d4741cb67eaa1280971bde9150a1edb7797142db7e47"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "20825a7ef1aaa49f5a0a830791bb6aac7f10cfd6d7f7637a2de9e10e4d6ff238"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "6f95245e71173839bf5f064e06c4f78de1728c77bc9a4f04be58a1a1b44dc943"
+  }
+}

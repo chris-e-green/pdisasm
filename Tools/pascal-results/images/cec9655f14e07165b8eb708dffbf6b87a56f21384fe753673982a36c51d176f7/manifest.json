@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "cec9655f14e07165b8eb708dffbf6b87a56f21384fe753673982a36c51d176f7",
+  "volumeName": "LCBOOT",
+  "files": {
+    "systemPascal": {
+      "sha256": "72bbfdfc659ca1c383488507e0707df79789d1ee6ee864de76b8c0fb774090e5"
+    },
+    "systemLibrary": {
+      "sha256": "117fc75c835f79472bdf00cfc7fb2ead48128a5825cb7682e18affd0386b0f44"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "ac4e05e901516cb162870f3e725b468afe6f717e38cadc58dbc40d6c51070bc5"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "b03c99e779a68380b348189d0a89e632e2b6c2edc44040b8b21c974984d7210d",
+    "block1SHA256": "b5a85a0a6864cfeb39f45fbb5c20d0c5c4d2c5970e4db9625fe9d22fa6caf3c4",
+    "combinedSHA256": "895540e73c48071873ada2fdbcb7b2700ba972dbc343a18d941aeba6d1778a9c"
+  }
+}

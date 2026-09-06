@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "0deb65ad86c731695f86c3d917ad3aa2306bbb919fa4424b30a7fac70e5bdda2",
+  "volumeName": "RIDSHOP",
+  "files": {
+    "systemPascal": {
+      "sha256": "3189798e4f598903441f35941277fa9d412ea0cba298e662923f8e2e50003f29"
+    },
+    "systemLibrary": {
+      "sha256": "4566e64b028b2fc3907073c1547b8d4cca4d9a28e063d4b7b3d52c13488c8d2a"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "bab952813c718c879d3720572cbc5ad6be7dcb713d5bf20d4f3f77d40ac93008"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "5035225f05355cc6257b5732308f3d7677a0b784d6510fe5f3f96522204a945c",
+    "block1SHA256": "8f658e6dd827e9d42d2975e115b8d3f2401dcd1af0aa0879dfe5ed3a42863e2b",
+    "combinedSHA256": "f84b096b8460063f9d333f7e2794ef7550224eb91ed7c9dff08fbf18c41b439e"
+  }
+}

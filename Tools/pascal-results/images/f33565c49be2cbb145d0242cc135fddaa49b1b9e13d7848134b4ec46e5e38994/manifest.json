@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "f33565c49be2cbb145d0242cc135fddaa49b1b9e13d7848134b4ec46e5e38994",
+  "volumeName": "PGM",
+  "files": {
+    "systemPascal": {
+      "sha256": "c5b5133699d622de967e40d8ee8f01c14e4a657b524064593e738f4c6d21e6b0"
+    },
+    "systemLibrary": {
+      "sha256": "35fbfc6019f08760e0b31182a74fc163fe0bf774f52b4e68ebde2cf6a1a2bcb4"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "6ebeb90720fa23f20f23009bc011194f5e1612ee52783b75ce87647b390b0bad"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}
