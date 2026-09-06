@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "023f5746a14b187e2a8990e346f605c2e47d64550609c6578e34d4b0b5a38bfc",
+  "volumeName": "MML",
+  "files": {
+    "systemPascal": {
+      "sha256": "98eb236ebae21950de87485bd83256642a73bb0727aae60d2cbbaf97165c6e15"
+    },
+    "systemLibrary": {
+      "sha256": "1fffb6a8de411b6d2b405b8e2558f82405aa778f356a19164aa6e8b052359e64"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "ed6f1555b276008807fe9d23db834971dbad3b5ed928989f4f755e578bdbad9e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "5035225f05355cc6257b5732308f3d7677a0b784d6510fe5f3f96522204a945c",
+    "block1SHA256": "1e163f70de15adedb650dd0f680eb0685af834f0c27c379382891456d51b74e3",
+    "combinedSHA256": "8f968439593656e18877138ec53e978c1c4763c0d6246daca8ce67716a751092"
+  }
+}

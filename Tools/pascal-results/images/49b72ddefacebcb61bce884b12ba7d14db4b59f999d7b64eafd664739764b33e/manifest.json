@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "49b72ddefacebcb61bce884b12ba7d14db4b59f999d7b64eafd664739764b33e",
+  "volumeName": "HALFONE",
+  "files": {
+    "systemPascal": {
+      "sha256": "2ec2736219293eb985f5da6faa66c76606ea981f4984aba3d1b2131fc6117f2c"
+    },
+    "systemLibrary": {
+      "sha256": "9032266069f6a005750adcbcff6c450ac12fe192b8e7ac3d44f9a539df99640c"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "63c1c07794a1ab9e0965f68393001f5fc1fff55fe3b7cc6aa7fb12bf66f35097"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e9be1bd4eb539b21b53322fdbe2b87cc9b3a37854d14449f2b31a0e5cc2fdb97",
+    "block1SHA256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+    "combinedSHA256": "c7970cfa1e71fac107bc52d78765188371e30c0b3d66339000f73c5b72538763"
+  }
+}

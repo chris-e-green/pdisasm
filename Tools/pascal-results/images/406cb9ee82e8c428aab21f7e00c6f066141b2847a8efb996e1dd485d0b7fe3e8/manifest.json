@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "406cb9ee82e8c428aab21f7e00c6f066141b2847a8efb996e1dd485d0b7fe3e8",
+  "volumeName": "GATO",
+  "files": {
+    "systemPascal": {
+      "sha256": "fb5421152940287c0c0c49d4c5b9b50074d7f33722b5c8c5d1a44acc2d537657"
+    },
+    "systemLibrary": {
+      "sha256": "5fbfd9105449fc0f3f4f98d11ca1ee67ba39117a8d49f6b1cfebe333533cece3"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "bef424a9677dbcf5c43ff3b3b57af8564b60ce8f6815569cbca9fd7a48708207"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e8dc2858f417808139025c5b3d865f169878faa663453a44d042d4bccb096cbd",
+    "block1SHA256": "b6e3932c7b2ab67a589d35eb322850e76f0cb2eca6a655462a37156d403dbba8",
+    "combinedSHA256": "afa9d31c7b2b414f98948d92e2f37068b3376fdc16c494fd92d3c78b421b48ac"
+  }
+}

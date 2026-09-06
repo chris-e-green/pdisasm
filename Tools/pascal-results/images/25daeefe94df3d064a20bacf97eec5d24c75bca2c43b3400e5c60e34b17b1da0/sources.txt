@@ -1,0 +1,3 @@
+images/programming/pascal/ucsd/UCSD Pascal 1.2_1.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/pascal/ucsd/UCSD Pascal 1.2_1.DSK
+unzip/programming/pascal/ucsd/UCSD 1.2 utilities/UCSD/UCSD Pascal 1.2_1.DSK

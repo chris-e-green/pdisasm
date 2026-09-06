@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "3daea4a1905b0822234fc511f8c423a80b6e3594c0c09832ba156230ff62d311",
+  "volumeName": "PTIT",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "e3996bf923db8a596935df7856da745b24f8afedd8a773d4034a9e796a2446cc"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "ad0dc9d30027ceab81d1b85066e04f2e92f70b5008da62ba942ef28003f5c575"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "511b8f1841f31b01bfa70ae01d60fd1eb93fa585b23026c13c3786e8a005a687",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "b39c9a83033f04b31d95ff1fe7c86c76a34a74856b41678cbef72b5a140d1c43"
+  }
+}

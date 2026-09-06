@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "e0619bbee661f91636fdd51248b96f33d4557f38273d2875857792a2ce875529",
+  "volumeName": "JUPITER",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "5b9a1623b5d20f9b5707d5b0cd884b0b26546e1889ebb0ec9d17d4dc59de2e83"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49b1bbbd162e00df30a59b10aa591032e16b0fa5fec88512053827339b96383e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

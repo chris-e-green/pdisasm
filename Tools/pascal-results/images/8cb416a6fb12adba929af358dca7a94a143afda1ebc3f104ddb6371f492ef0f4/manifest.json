@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "8cb416a6fb12adba929af358dca7a94a143afda1ebc3f104ddb6371f492ef0f4",
+  "volumeName": "SPTY",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "ba9d6c3dad8266d93d10fd4d40bbf8b7dc4f8598725cc779dac861f7d5dcd5e7"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "44f1c3e31b9ce6300b0f8701ae75b2e261f6a1e965e69905d84a3e8e51a70ea6"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "813d2871db3e965559b31b3208f8ee4805857a608106188ac78c2c12fd5c9106",
+    "combinedSHA256": "7a377ea9fc4cdf3f0dcfd262ffd0d455297a16d54ae93e17cbc2ab58743ba10f"
+  }
+}

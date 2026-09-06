@@ -1,0 +1,4 @@
+unzip/hardware/storage/disk/corvus/Corvus.1/CORVUSDIAGNOSTICS.PAS
+unzip/hardware/storage/disk/corvus/Corvus.2/CORVUS1.DSK
+unzip/hardware/storage/disk/corvus/Corvus.3/CORVUS APDIAGS PASCAL11.DSK
+unzip/hardware/storage/disk/corvus/corvus/CORVUSDIAGNOSTICS.PAS

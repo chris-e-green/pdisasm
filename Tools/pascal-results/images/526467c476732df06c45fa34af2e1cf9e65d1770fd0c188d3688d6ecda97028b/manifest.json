@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "526467c476732df06c45fa34af2e1cf9e65d1770fd0c188d3688d6ecda97028b",
+  "volumeName": "SSD-3.3",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "c1d5eae2750668e66969aa232d5b013450ff91fcd16d608332e5d2d08acdb26d"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "2443c23e7538ebfc0227525e4a80878dfae0b96a8a445cb1c4b4332f433a8ae6"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

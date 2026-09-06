@@ -1,0 +1,2 @@
+images/misc/1984AppleComputerChristmasDemo.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/misc/1984AppleComputerChristmasDemo.dsk

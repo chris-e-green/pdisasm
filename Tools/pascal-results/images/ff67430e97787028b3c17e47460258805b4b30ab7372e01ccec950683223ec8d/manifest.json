@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "ff67430e97787028b3c17e47460258805b4b30ab7372e01ccec950683223ec8d",
+  "volumeName": "RACTER",
+  "files": {
+    "systemPascal": {
+      "sha256": "fb5421152940287c0c0c49d4c5b9b50074d7f33722b5c8c5d1a44acc2d537657"
+    },
+    "systemLibrary": {
+      "sha256": "85a4cd902d1cb48ee224d4741cb67eaa1280971bde9150a1edb7797142db7e47"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "303e6e8d16efd87b05f86214744fc4a768fe3357092eb8c41d0f5c28e1c86453"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "d260f1e4a2022deb70d761b8912440d0e753eeae8dc5a3339d3913c3ebf042cf",
+    "block1SHA256": "617d5bb585286ab2f749d99a98c29f5b4b68dbbf600024878c098d212f65eb17",
+    "combinedSHA256": "df654f133f1e6fb48268ce32d9b20a10efda92ff3f1c9f0bd66371a42830085e"
+  }
+}

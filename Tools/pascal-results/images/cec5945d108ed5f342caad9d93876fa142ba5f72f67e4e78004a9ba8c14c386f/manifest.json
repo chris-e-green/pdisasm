@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "cec5945d108ed5f342caad9d93876fa142ba5f72f67e4e78004a9ba8c14c386f",
+  "volumeName": "CRAPS",
+  "files": {
+    "systemPascal": {
+      "sha256": "3189798e4f598903441f35941277fa9d412ea0cba298e662923f8e2e50003f29"
+    },
+    "systemLibrary": {
+      "sha256": "2ce512f5b8bb7e204adbb2d0f51d5339117aa0ab404ec0d16377b312720caffe"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "67adc957afa1fc3cae9177ef42846ea1c31fd44f5a00e0694f63acafd248aed5"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

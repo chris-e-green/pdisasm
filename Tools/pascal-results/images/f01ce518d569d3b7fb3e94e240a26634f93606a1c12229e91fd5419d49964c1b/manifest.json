@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "f01ce518d569d3b7fb3e94e240a26634f93606a1c12229e91fd5419d49964c1b",
+  "volumeName": "TW",
+  "files": {
+    "systemPascal": {
+      "sha256": "97a1688dfa2c4838461f8e522b5def79124c6fb53ed022560c9bfffaed12f656"
+    },
+    "systemLibrary": null,
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "f7b541b27673739db27deb8f9b9fe4003cb25c4b5fbec905674284f58a6c1286"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

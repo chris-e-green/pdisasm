@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "9487ca78711bb8fd17585cf8615662a7d129095fe07f10f9bff08644b14044a7",
+  "volumeName": "AGPAC",
+  "files": {
+    "systemPascal": {
+      "sha256": "c5b5133699d622de967e40d8ee8f01c14e4a657b524064593e738f4c6d21e6b0"
+    },
+    "systemLibrary": {
+      "sha256": "ff69a46e19344598c45733f6d2c4f276eb03fa2d9a75dde3738f5c87b4bbb5e9"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "6ebeb90720fa23f20f23009bc011194f5e1612ee52783b75ce87647b390b0bad"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "4b75986523d91b4f42fafc010f4d54bb24d305820dc78c9bc238e8f5dafe15a9",
+    "combinedSHA256": "b254ea72f95066d62c983c06cdd075c18d79cb7af3a01f2c1c5890773cd53ffb"
+  }
+}

@@ -1,0 +1,4 @@
+images/educational/typing/typewriter.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/Typewriter (1985)(Software Publishing Corporation)[PASCAL].zip!Typewriter (1985)(Software Publishing Corporation)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/Typewriter (1985)(Software Publishing Corporation).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/Typewriter (1985)(Software Publishing Corporation).zip!Typewriter (1985)(Software Publishing Corporation).dsk

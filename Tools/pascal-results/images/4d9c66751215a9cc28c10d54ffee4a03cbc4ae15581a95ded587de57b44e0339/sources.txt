@@ -1,0 +1,4 @@
+images/educational/thinktank1.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/Think Tank v1.001 (1983)(-)(Disk 1 of 2)[PASCAL].zip!Think Tank v1.001 (1983)(-)(Disk 1 of 2)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/Think Tank v1.001 (1983)(-)(Disk 1 of 2).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/Think Tank v1.001 (1983)(-)(Disk 1 of 2).zip!Think Tank v1.001 (1983)(-)(Disk 1 of 2).dsk

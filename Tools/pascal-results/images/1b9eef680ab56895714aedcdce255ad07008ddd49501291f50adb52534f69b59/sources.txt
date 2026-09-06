@@ -1,0 +1,7 @@
+images/games/adventure/007_view_to_kill.dsk
+unzip/pd_collections/misc/2014.glitch.apple.collection/indexed/007.DSK
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/James Bond 007 - A View to a Kill (1985)(Mindscape)[cr Mr. Slick][PASCAL].zip!James Bond 007 - A View to a Kill (1985)(Mindscape)[cr Mr. Slick][PASCAL].dsk
+unzip/pd_collections/tosec/Apple II - Games (TOSEC-v0.24_CM)/roms/James Bond 007 - A View To A Kill (1985)(Mindscape)[cr].zip!James Bond 007 - A View To A Kill (1985)(Mindscape)[cr].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/game/James Bond 007 - A View To A Kill (1985)(Mindscape)[cr].dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/James Bond 007 - A View to a Kill (1985)(Mindscape)[cr Mr. Slick].zip!James Bond 007 - A View to a Kill (1985)(Mindscape)[cr Mr. Slick].dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/V/View to a Kill (1985)(Mindscape).zip!James Bond 007 - A View to a Kill (1985)(Mindscape)[cr Mr. Slick].dsk

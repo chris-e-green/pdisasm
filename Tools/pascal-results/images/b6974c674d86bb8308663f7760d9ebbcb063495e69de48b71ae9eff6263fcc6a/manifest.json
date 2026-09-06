@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "b6974c674d86bb8308663f7760d9ebbcb063495e69de48b71ae9eff6263fcc6a",
+  "volumeName": "DEMO",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": {
+      "sha256": "2978728dac0dc82d3bc55c4d3b8e1647c837bfd2b740f902e7b0cc14c1c5aef5"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTND.APPLE",
+        "sha256": "c8fce08c8a30307d4b2bb7c3cd2534006840025b4813e0231994800a0061a606"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "0f35a2b7b5873e10dc7de72c221a36ff166cd50b2f4897f5c3e8d5083990da99",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "2ffb04276585facf6703ba691cfbc0cbf017eddedcdff54575320595bd960ed1"
+  }
+}

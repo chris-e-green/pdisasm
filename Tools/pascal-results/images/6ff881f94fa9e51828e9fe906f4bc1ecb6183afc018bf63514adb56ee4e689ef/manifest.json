@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "6ff881f94fa9e51828e9fe906f4bc1ecb6183afc018bf63514adb56ee4e689ef",
+  "volumeName": "R200",
+  "files": {
+    "systemPascal": {
+      "sha256": "3189798e4f598903441f35941277fa9d412ea0cba298e662923f8e2e50003f29"
+    },
+    "systemLibrary": {
+      "sha256": "5dc4f07646efeff7432aea6401233007de893d8e5fabb2279997675fb5df8770"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "581a5c924979aed84c65add4a4400d11e312f6b7327b23d7358d497e8b687176"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "5035225f05355cc6257b5732308f3d7677a0b784d6510fe5f3f96522204a945c",
+    "block1SHA256": "962653cd97ad45013a8dd6ccdb3a171296cc17bac0daff75127b8f55226f1adb",
+    "combinedSHA256": "660b8947654a522a41aaa920ac430fdff7cdfad2fabf22fa455cf2941ffa9ee4"
+  }
+}

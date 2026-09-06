@@ -1,0 +1,6 @@
+images/games/adventure/earthly_delights/earthlydelights1.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Games - [DSK] (TOSEC-v2010-01-16_CM)/Earthly Delights (1984)(Datamost)(Side A)[PASCAL].zip!Earthly Delights (1984)(Datamost)(Side A)[PASCAL].dsk
+unzip/pd_collections/tosec/Apple II - Games (TOSEC-v0.24_CM)/roms/Earthly Delights (1983)(Roger Webster - Dan'l Leviton)(Disk 1 of 1 Side A).zip!Earthly Delights (1983)(Roger Webster - Dan'l Leviton)(Disk 1 of 1 Side A).dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/game/Earthly Delights (1983)(Roger Webster - Dan'l Leviton)(Disk 1 of 1 Side A).dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Games/Earthly Delights (1984)(Datamost)(Side A).zip!Earthly Delights (1984)(Datamost)(Side A).dsk
+unzip/games/misc/Games From Gamebase Apple2Mania/E/Earthly Delights (1983)(Roger Webster - Dan'l Leviton).zip!Earthly Delights (1983)(Roger Webster - Dan'l Leviton)(Disk 1 of 1 Side A).dsk

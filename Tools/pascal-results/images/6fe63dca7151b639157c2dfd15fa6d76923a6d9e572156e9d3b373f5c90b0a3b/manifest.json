@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "6fe63dca7151b639157c2dfd15fa6d76923a6d9e572156e9d3b373f5c90b0a3b",
+  "volumeName": "EMG",
+  "files": {
+    "systemPascal": {
+      "sha256": "c5b5133699d622de967e40d8ee8f01c14e4a657b524064593e738f4c6d21e6b0"
+    },
+    "systemLibrary": {
+      "sha256": "f4daaf23f0101710c403fe64a7c851b5cf91e33619e15733f052413bce282bd9"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "6ebeb90720fa23f20f23009bc011194f5e1612ee52783b75ce87647b390b0bad"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

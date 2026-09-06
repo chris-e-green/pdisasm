@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "58c8af6bcddc8a1ceea4cafdf3838b914eef2cda2c82bec33868512d40fa0278",
+  "volumeName": "RECOVER",
+  "files": {
+    "systemPascal": {
+      "sha256": "fb5421152940287c0c0c49d4c5b9b50074d7f33722b5c8c5d1a44acc2d537657"
+    },
+    "systemLibrary": {
+      "sha256": "85a4cd902d1cb48ee224d4741cb67eaa1280971bde9150a1edb7797142db7e47"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "6701bcee4840864e6306d744c12fa3c6d47413321eebbe15cbe1bab3d23118e9"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e9be1bd4eb539b21b53322fdbe2b87cc9b3a37854d14449f2b31a0e5cc2fdb97",
+    "block1SHA256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+    "combinedSHA256": "c7970cfa1e71fac107bc52d78765188371e30c0b3d66339000f73c5b72538763"
+  }
+}

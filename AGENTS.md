@@ -7,7 +7,7 @@ contains a core disassembly library, a command-line frontend, and macOS SwiftUI
 targets. The package has no external Swift package dependencies.
 
 `CLAUDE.md` is a companion guide for tools that load it. Keep shared guidance
-in these two files consistent; otherwise, use `docs/adr/` and
+in these two files consistent. See `docs/adr/` and
 `docs/new-architecture-verification.md` for additional architecture detail.
 
 ## Repository layout

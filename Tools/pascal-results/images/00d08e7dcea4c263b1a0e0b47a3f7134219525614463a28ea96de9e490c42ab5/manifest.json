@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "00d08e7dcea4c263b1a0e0b47a3f7134219525614463a28ea96de9e490c42ab5",
+  "volumeName": "G1",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "c2182744860e3cb1a2057518596223ed0b4f8abea36fa174f1608d823d609ac9"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "b0d6ae9829da793cf605ae4cfc09b229f8130cd46a53db451eed226d8a986873"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "d260f1e4a2022deb70d761b8912440d0e753eeae8dc5a3339d3913c3ebf042cf",
+    "block1SHA256": "0964ae4be0739fe83e9526942f90bac83344a70645f5134cbc756ba58966038f",
+    "combinedSHA256": "a5046ff58df4641d177e82ea64ed985e372620ab02a063ccc7fe94b3350fa131"
+  }
+}

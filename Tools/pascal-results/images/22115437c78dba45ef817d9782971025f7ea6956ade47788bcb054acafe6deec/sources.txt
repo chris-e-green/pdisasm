@@ -1,0 +1,4 @@
+images/productivity/database/quickfile][.dsk
+unzip/pd_collections/tosec/Apple_2_TOSEC_2012_04_23/Apple 2 [TOSEC v2012-04-23]/Apple II - Applications - [DSK] (TOSEC-v2010-01-16_CM)/Quick File II (1982)(Apple)[PASCAL].zip!Quick File II (1982)(Apple)[PASCAL].dsk
+unzip/pd_collections/tosec/TOSEC-Apple II/app/ZZZ-UNK-Quick File II.dsk
+unzip/pd_collections/tosec/Apple II TOSEC (2009-10-31)/Apple II TOSEC (2009-10-31)/Applications/ZZZ-UNK-Quick File II.zip!ZZZ-UNK-Quick File II.dsk

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "bdb6d083032c1c5faf99c53b49d4f2902c59d1e99c155c754d62e5b8ba48268a",
+  "volumeName": "MEGAWTR",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "20c00a6006ce546f87f61c1ef4b20d93bc7ae67ffb6d8da2a975c89d0d501444"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "47ffb6efa0d0047b8f37b5cb814eca7772af2ddec3e6e6522332992ef4aec70b"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

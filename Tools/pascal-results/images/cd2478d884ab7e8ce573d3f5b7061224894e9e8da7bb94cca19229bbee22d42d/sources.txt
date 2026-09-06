@@ -1,0 +1,2 @@
+images/communications/SMARTCOM.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/communications/SMARTCOM.DSK

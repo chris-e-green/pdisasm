@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "d6f95737412c6183f48f9e5b2e51b342ba9b3f613befc944e5b479b512f3bfce",
+  "volumeName": "MIDWEST",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": {
+      "sha256": "246f1cf18556de0a981cbddb3926abe73349d0558df58422cf1cc173eceb600d"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "93629b22a4916e1f8affaa738a0637665191940152928b5c7d876ff9d800a113"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "91bdae54883090d4f9a62262758f82be0faee3746ba8a5daefce6ba3281ab854",
+    "combinedSHA256": "2aab718c9e2386ca1a718e09b02b4f0cf257abe0d4ca6d3ebb3f43e41a4a8e64"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "a31c72e4426c650288816fd10e9e547e7621dd63104a54e069d4993f2714aaed",
+  "volumeName": "GRAFM",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "73b1dc2c8b31f43fa61b657f169f662cefb17143adc5d85f862872c9859b8e00"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "49f00c76ef90887cb8c49cfeee8f9f804cab505ea3d5282b910d5a08e8750a2e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "ab32351c75b9961b4e31b8bcc6256a32d0988b37a6038a4071a6153cd60d571f",
+    "combinedSHA256": "b97ab98130f6bea6adcc9cacee96fc4ec31fbd8fa41479dad2eba0ebb7f88803"
+  }
+}

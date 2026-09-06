@@ -1,0 +1,4 @@
+images/non-english/german/Einfuehrung in die Apple Logo v2.1.dsk
+unzip/misc/a2util2/EINFLOGO.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/misc/a2util2.zip!EINFLOGO.DSK
+unzip/non-english/german/Apple2cDisksGerman/ADT-Images/Apple_2c_LOGOintro_DE.dsk

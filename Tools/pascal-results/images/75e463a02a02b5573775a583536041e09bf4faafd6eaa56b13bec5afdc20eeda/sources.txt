@@ -1,0 +1,2 @@
+images/games/adventure/ForbiddenQuest.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/adventure/ForbiddenQuest.dsk

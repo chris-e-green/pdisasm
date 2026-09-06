@@ -1,0 +1,2 @@
+images/games/board/VegasVideoPoker.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/board/VegasVideoPoker.dsk

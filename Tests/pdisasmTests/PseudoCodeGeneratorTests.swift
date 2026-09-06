@@ -2028,11 +2028,28 @@ final class PseudoCodeGeneratorTests: XCTestCase {
         XCTAssertTrue(result!.contains("5"))
     }
 
-    func testCSPUnknownProcReturnsNil() {
+    func testCSPUnknownProcUsesNumberedFallback() {
         var stack = StackSimulator()
         let inst = Instruction(opcode: csp, mnemonic: "CSP", params: [255])  // nonexistent
         var gen = makeGenerator()
         let result = gen.generateForInstruction(inst, stack: &stack, loc: nil)
-        XCTAssertNil(result)
+        XCTAssertEqual(result, "CSP_255()")
+    }
+
+    func testTranscendentalFunctionsAreNotMisidentifiedAsCSPs() {
+        for procNum in 25...31 {
+            var stack = StackSimulator()
+            let inst = Instruction(
+                opcode: csp,
+                mnemonic: "CSP",
+                params: [procNum]
+            )
+            var gen = makeGenerator()
+
+            XCTAssertEqual(
+                gen.generateForInstruction(inst, stack: &stack, loc: nil),
+                "CSP_\(procNum)()"
+            )
+        }
     }
 }

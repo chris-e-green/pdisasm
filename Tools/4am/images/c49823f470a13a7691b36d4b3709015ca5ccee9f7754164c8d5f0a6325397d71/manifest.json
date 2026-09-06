@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "c49823f470a13a7691b36d4b3709015ca5ccee9f7754164c8d5f0a6325397d71",
+  "volumeName": "TEXT",
+  "files": {
+    "systemPascal": {
+      "sha256": "1e1f49d81a10939c89b0ceb20f4f619853c83c0c77c85774e991fd1119db6f69"
+    },
+    "systemLibrary": {
+      "sha256": "85a4cd902d1cb48ee224d4741cb67eaa1280971bde9150a1edb7797142db7e47"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "b0d6ae9829da793cf605ae4cfc09b229f8130cd46a53db451eed226d8a986873"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "d260f1e4a2022deb70d761b8912440d0e753eeae8dc5a3339d3913c3ebf042cf",
+    "block1SHA256": "2fc17517dc52347727126fe0f101b31baa02a9c015931e2a975602ced57337fb",
+    "combinedSHA256": "802a8c6c14f2461b8132dfbcda29cbdc91d8acde288b022797765a232e32555a"
+  }
+}

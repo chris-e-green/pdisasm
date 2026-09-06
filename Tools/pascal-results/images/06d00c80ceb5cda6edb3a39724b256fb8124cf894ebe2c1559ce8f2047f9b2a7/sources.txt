@@ -1,0 +1,2 @@
+images/games/adventure/scott_adams/VoodooIsland.dsk
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/adventure/VoodooIsland.dsk

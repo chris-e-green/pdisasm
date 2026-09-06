@@ -1,0 +1,2 @@
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/basic/ApplesoftSampler.zip!IIC.WORK2.dsk
+unzip/programming/basic/ApplesoftSampler/IIC.WORK2.dsk

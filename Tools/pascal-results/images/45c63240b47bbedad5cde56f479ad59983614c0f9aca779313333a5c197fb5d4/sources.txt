@@ -1,0 +1,4 @@
+images/non-english/german/Die Appleworks Auswahl v1.0 (German).DSK
+unzip/misc/a2util2/APPLEWXD.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/misc/a2util2.zip!APPLEWXD.DSK
+unzip/non-english/german/Apple2cDisksGerman/ADT-Images/Apple_2c_AWdemo80_DE.dsk

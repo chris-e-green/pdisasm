@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "891a5b6c35925f301a866de9ca5a5c1df1276b89459b1e1d44bc87ec9b2546c6",
+  "volumeName": "SIDER",
+  "files": {
+    "systemPascal": {
+      "sha256": "a8535382d7df95766093a6c734fe4feeade6fb4ce60fc065dc65c785308f8859"
+    },
+    "systemLibrary": {
+      "sha256": "1f4ab0662f085269e76c315b2cd1ddea6fba56b84da34249f0eed97af3ffc7f6"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "4bd6b2c862305be0fa11356ca2154cc27130c7f83eee673c3ba88422748553e9"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "5035225f05355cc6257b5732308f3d7677a0b784d6510fe5f3f96522204a945c",
+    "block1SHA256": "39d25d28a25fa8f5803420c0fd4c3cb2988408f0d5637d18562a17f73a950dd2",
+    "combinedSHA256": "048c089e53438cc7066a73065409827ee44a382c798ce3718897716279cfc3dc"
+  }
+}

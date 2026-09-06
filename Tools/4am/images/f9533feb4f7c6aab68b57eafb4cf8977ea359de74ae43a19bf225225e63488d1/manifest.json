@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "f9533feb4f7c6aab68b57eafb4cf8977ea359de74ae43a19bf225225e63488d1",
+  "volumeName": "REPA00",
+  "files": {
+    "systemPascal": {
+      "sha256": "026ff5c4f657cb8b0610d9dfbc1c1a1920a5c48628013edda04d9c59e3a23902"
+    },
+    "systemLibrary": {
+      "sha256": "e3996bf923db8a596935df7856da745b24f8afedd8a773d4034a9e796a2446cc"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "2443c23e7538ebfc0227525e4a80878dfae0b96a8a445cb1c4b4332f433a8ae6"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

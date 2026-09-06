@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "4dfeabafdfe0ef18d42343aac25045f531467f18497382c023a1038d6c759356",
+  "volumeName": "INVADER",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": null,
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "16b484364f0a0467b9cc359d87c65d15e1130cff2d53ee0e92b7fba367b69961"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "6f95245e71173839bf5f064e06c4f78de1728c77bc9a4f04be58a1a1b44dc943"
+  }
+}

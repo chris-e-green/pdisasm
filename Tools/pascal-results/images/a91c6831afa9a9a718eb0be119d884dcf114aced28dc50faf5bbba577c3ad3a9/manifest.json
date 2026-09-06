@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "a91c6831afa9a9a718eb0be119d884dcf114aced28dc50faf5bbba577c3ad3a9",
+  "volumeName": "LESSONS",
+  "files": {
+    "systemPascal": {
+      "sha256": "6dc9c38c6d99a5ea509b6d977b9729648e17bebf810eb9ef79bee1fcc07e7d01"
+    },
+    "systemLibrary": {
+      "sha256": "6e03d304fe44a9492d92bf1fced61bde6f000f10a851f9a9d06dde11048de69c"
+    },
+    "interpreters": [
+      {
+        "name": "RT0006.APPLE",
+        "sha256": "94eb6d37113cf3b9a8e2fa93aadafa08bac16fdcc578138fd9ace5848fd45a73"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "429ceac006b028da8bf920b89561413cd264c4c8ddfc63d60f770cd9aece8c94",
+    "block1SHA256": "6fbfbc39ece6d53e3c5f9bd2db16bc060332bbc6376e21a1ce553a98fbb66ecd",
+    "combinedSHA256": "72cd81575a7dfd00093d4636232f662ac486851600c5ffc0b029de7a0d613b06"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "3195b9b8c24e3b9ef51fbc6def10d86a7105165a4753b56cd8b396fa461f1efe",
+  "volumeName": "WS",
+  "files": {
+    "systemPascal": {
+      "sha256": "ef890517c1eb403c6029ac1063aac4c197ca4617995f7eaa964f8bcc9e688844"
+    },
+    "systemLibrary": {
+      "sha256": "849fd458c412a5a8d64b50b33482f92ebade2106505ba1938c10f3c18659dc02"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "47ffb6efa0d0047b8f37b5cb814eca7772af2ddec3e6e6522332992ef4aec70b"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "ee8ca837124f99d67cd5c3a7999f8e356282ec17a23093cfe2ae7d2b61a9757d",
+    "combinedSHA256": "52238ff9bc504b92f140bb9f29bdc8bfdc2bf4e1a8783fdeda1408a4dee0b44a"
+  }
+}

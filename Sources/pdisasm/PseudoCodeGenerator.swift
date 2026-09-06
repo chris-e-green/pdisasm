@@ -658,7 +658,7 @@ struct PseudoCodeGenerator {
                     return callStr
                 }
             }
-            return nil
+            return "CSP_\(procNum)()"
 
         default:
             return nil

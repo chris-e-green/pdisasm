@@ -1,0 +1,3 @@
+unzip/misc/a2util2/EINF2C.DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/misc/a2util2.zip!EINF2C.DSK
+unzip/non-english/german/Apple2cDisksGerman/ADT-Images/Apple_2c_Intro_DE.dsk

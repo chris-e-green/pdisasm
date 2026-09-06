@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "fed88179afd4e16674f6ab83a0f518afc70195faf7ea9266702967a6123a262b",
+  "volumeName": "CNC",
+  "files": {
+    "systemPascal": {
+      "sha256": "4412d9a3858af777da0b8f4a352799a11ba230602df39305df345eeac613fdbc"
+    },
+    "systemLibrary": {
+      "sha256": "eae3e236d5f5eaef7acf9dc2e0b6530c048ea6e9c2318810ad983a61af174fe9"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "2443c23e7538ebfc0227525e4a80878dfae0b96a8a445cb1c4b4332f433a8ae6"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

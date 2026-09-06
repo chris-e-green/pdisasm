@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "cddb8909fa8319486c27bc489131bd757eb011f7082255bef7e80d289bff9c41",
+  "volumeName": "LGRUNGY",
+  "files": {
+    "systemPascal": {
+      "sha256": "e44ba3e9ef9840bec2b28407a825d29f9fb3e0cc1c84f137fa0c887489e21af6"
+    },
+    "systemLibrary": {
+      "sha256": "8d6a3313dca77ea0c4f55c284ca33c09742276601b59de2188715a6b3bc38983"
+    },
+    "interpreters": [
+      {
+        "name": "SYSTEM.APPLE",
+        "sha256": "8fb30ba2a7b54d49b55536d13db8252d192f230df14a2f0eba5a8830c9fe1c2e"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "e276e1a31d4b3cbdcd6b0e75ef46dbfea81eed4b2bda7295a407ef916108b660",
+    "block1SHA256": "2b9696286e8964f54434a4be330dff7ce411cb6f2b1e155b51929c178a15daa6",
+    "combinedSHA256": "190f9410ae628d485d58a0b0ae1cc761c88233d916afdc9abb54443a80891003"
+  }
+}

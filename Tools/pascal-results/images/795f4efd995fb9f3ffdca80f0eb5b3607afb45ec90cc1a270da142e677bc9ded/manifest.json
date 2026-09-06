@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "795f4efd995fb9f3ffdca80f0eb5b3607afb45ec90cc1a270da142e677bc9ded",
+  "volumeName": "HDLBOOT",
+  "files": {
+    "systemPascal": {
+      "sha256": "5ff8411ab81cdd3127ddc981a0e7a0f49657076d383e400ba0cfd666e9331b9b"
+    },
+    "systemLibrary": {
+      "sha256": "142a5d66ddb22698804f2629e1b6e71e4e7720e4b7cf8ac82dd773702e36a3af"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "20825a7ef1aaa49f5a0a830791bb6aac7f10cfd6d7f7637a2de9e10e4d6ff238"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "6f95245e71173839bf5f064e06c4f78de1728c77bc9a4f04be58a1a1b44dc943"
+  }
+}

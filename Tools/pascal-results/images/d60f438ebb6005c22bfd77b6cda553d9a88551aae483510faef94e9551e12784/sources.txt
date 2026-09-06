@@ -1,0 +1,2 @@
+unzip/hardware/storage/disk/misc/xcomp_PHD_HDA/xcomp_PHD_HDA/PHD-Disk3.DSK
+unzip/hardware/storage/disk/misc/xcomp_PHD_HDA/xcomp_PHD_HDA/PHD-Disk5.DSK

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "imageSHA256": "a46e5d064d46e460f132b3ed06d28424180f8d6700c26dcbafbe365eb73a4d25",
+  "volumeName": "WBV3.0",
+  "files": {
+    "systemPascal": {
+      "sha256": "aaa96b0c5648f67d1217e6cbbba76e5447531a0cfed515a49adcc6148e7b6220"
+    },
+    "systemLibrary": {
+      "sha256": "00aac73bdb87d47fcd83483ef29c6b36d75397d56cd721edbad885473e29d20c"
+    },
+    "interpreters": [
+      {
+        "name": "RTSTRP.APPLE",
+        "sha256": "933a22cdeaa6a9859b559129a43f8675c44ccd377a1826f511f6c4b58e4a4d8c"
+      }
+    ]
+  },
+  "boot": {
+    "block0SHA256": "20306318631e54ea59adc8879acd9e540b7f6f98f62542cd8421e6765d807055",
+    "block1SHA256": "57dcddc8b03b9e96a0ede6a080b3a4e77720da9af5186244184e2a9e8061bda9",
+    "combinedSHA256": "6f95245e71173839bf5f064e06c4f78de1728c77bc9a4f04be58a1a1b44dc943"
+  }
+}

@@ -1,0 +1,2 @@
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/disk_utils/UNIVERSAL.FILE.CONVERT.SDK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/programming/pascal/UFC.Pascal.SDK

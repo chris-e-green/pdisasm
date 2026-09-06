@@ -1,0 +1,6 @@
+images/misc/dk_collection/353a - Apple Presents The IIc - Exploring Apple Logo.dsk
+images/misc/3d0g_knight_collection/426a - Exploring Apple Logo.dsk
+images/masters/model_specific/Apple IIc - Exploring Apple Logo.dsk
+images/masters/model_specific/Apple Presents The IIc - Exploring Apple Logo 691-0015-A (Apple-1984).DSK
+images/masters/model_specific/Apple Presents the IIc - Exploring Apple Logo.dsk
+unzip/pd_collections/misc/2014.glitch.apple.collection/indexed/EXAPLOGO.DSK

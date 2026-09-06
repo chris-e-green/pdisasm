@@ -1,0 +1,3 @@
+images/non-english/german/Eine Enfuhrung in den Apple II Computer (German-1982).DSK
+unzip/misc/Apple II Disk Images/APPLE-II-DISK-IMAGES/games/misc/games1.zip!Apple Presents (German) Demo2.dsk
+unzip/games/misc/games1/Apple Presents (German) Demo2.dsk
